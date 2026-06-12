@@ -1,0 +1,5 @@
+# SDX: данные активных сессий не версионируются
+.claude/sessions/
+
+# Локальные настройки Claude Code
+.claude/settings.local.json

@@ -1,5 +1,8 @@
 # SDX: данные активных сессий не версионируются
 .claude/sessions/
 
+# SDX: переносимые бандлы import/export (транспортные артефакты)
+.sdx/bundles/
+
 # Локальные настройки Claude Code
 .claude/settings.local.json

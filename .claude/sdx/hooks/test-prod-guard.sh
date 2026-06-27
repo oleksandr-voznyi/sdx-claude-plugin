@@ -96,6 +96,32 @@ else
 fi
 cleanup
 
+# ---- Scenario 5: jq missing -> fail-closed deny (R-1/FND-1) ----
+echo "[5] jq absent from PATH -> fail-closed permissionDecision:deny"
+setup_proj
+printf 'deploy.*(prod|production)\n' > "$TMPPROJ/.claude/sdx/prod-guard.conf"
+# Build a PATH dir with the tools the hook needs EXCEPT jq.
+NOJQ_BIN="$(mktemp -d)"
+for t in bash cat grep printf; do
+  src="$(command -v "$t" 2>/dev/null)" && ln -s "$src" "$NOJQ_BIN/$t" 2>/dev/null || true
+done
+RUN_EC=0
+RUN_OUT="$(printf '{"tool_input":{"command":"deploy.sh production"}}' \
+           | PATH="$NOJQ_BIN" CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK")" || RUN_EC=$?
+rm -rf "$NOJQ_BIN"
+if [ "$RUN_EC" -eq 0 ] && printf '%s' "$RUN_OUT" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny emitted with jq absent (fail-closed)"
+else
+  fail "Expected fail-closed deny" "ec=$RUN_EC out=$RUN_OUT"
+fi
+# The emitted JSON must still be valid (validated with the outer, available jq).
+if printf '%s' "$RUN_OUT" | jq . >/dev/null 2>&1; then
+  pass "fail-closed deny output is valid JSON"
+else
+  fail "fail-closed deny output is not valid JSON" "out=$RUN_OUT"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

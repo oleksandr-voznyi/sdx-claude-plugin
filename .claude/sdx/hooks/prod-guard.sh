@@ -13,6 +13,15 @@ deny() {
   exit 0
 }
 
+# Fail-closed (R-1/FND-1): this layer's only job is to keep the agent out of prod.
+# If jq is missing we cannot parse the command -> block rather than silently pass.
+# NB: deny() itself relies on jq to escape its reason, so emit a static, already
+# valid JSON string here (the reason text contains no characters needing escaping).
+if ! command -v jq >/dev/null 2>&1; then
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SDX prod-guard: jq недоступен — блокирую команду из осторожности (fail-closed). Установите jq."}}'
+  exit 0
+fi
+
 # Extract the shell command from the hook input JSON.
 cmd="$(cat | jq -r '.tool_input.command // empty')"
 [ -z "$cmd" ] && exit 0   # no command in input -> nothing to gate

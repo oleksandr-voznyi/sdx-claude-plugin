@@ -109,6 +109,24 @@ else
 fi
 cleanup
 
+# ---- Scenario 5: green run -> exit 0 and loop-guard counter reset ----
+echo "[5] Green verify run exits 0 and clears the loop-guard counter"
+setup_stop_repo "sdx/test-stop" "Verification"
+mkdir -p "$TMPPROJ/.claude/sdx"
+# A verify command that passes.
+printf '#!/bin/bash\nexit 0\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+# Pre-seed a stale loop-guard counter to prove the green run clears it.
+guard_file="$TMPPROJ/.claude/sessions/test-stop/.stopgate.count"
+echo 2 > "$guard_file"
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ ! -f "$guard_file" ]; then
+  pass "exit 0 on green run and counter file removed"
+else
+  fail "Green path" "exit=$RUN_EC, counter present=$([ -f "$guard_file" ] && echo yes || echo no)"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

@@ -25,19 +25,10 @@ if [ "${SDX_STOP_GATE:-0}" != "1" ]; then
   esac
 fi
 
-# Loop-guard: after 3 consecutive red runs, hand control back to the human.
-# Counter is incremented on every gate invocation (green run clears it below).
-guard="$proj/.claude/sessions/${sid}/.stopgate.count"
-n=$(( $(cat "$guard" 2>/dev/null || echo 0) + 1 ))
-echo "$n" > "$guard"
-if [ "$n" -gt 3 ]; then
-  echo "SDX stop-gate: тесты всё ещё красные после $((n-1)) попыток — нужно вмешательство человека." >&2
-  rm -f "$guard"
-  exit 0
-fi
-
-# Resolve the verify command.
+# Resolve the verify command BEFORE touching the loop-guard counter.
 # Priority: per-project executable script, then common project manager autodetect.
+# Doing this first keeps the no-op path (no test command) from mutating the
+# counter and emitting a spurious "human intervention" message every 4th turn.
 cmd=""
 if [ -x "$proj/.claude/sdx/verify-cmd.sh" ]; then
   cmd="$proj/.claude/sdx/verify-cmd.sh"
@@ -51,6 +42,17 @@ fi
 
 # No known test command -> no-op (required behaviour for SDX meta-project, ADR-4).
 [ -z "$cmd" ] && exit 0
+
+# Loop-guard: after 3 consecutive red runs, hand control back to the human.
+# Counter is incremented only once a real verify command exists (green run clears it below).
+guard="$proj/.claude/sessions/${sid}/.stopgate.count"
+n=$(( $(cat "$guard" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$guard"
+if [ "$n" -gt 3 ]; then
+  echo "SDX stop-gate: тесты всё ещё красные после $((n-1)) попыток — нужно вмешательство человека." >&2
+  rm -f "$guard"
+  exit 0
+fi
 
 # Run the verify command; capture output for tail on failure.
 if ( cd "$proj" && eval "$cmd" >/tmp/sdx-stopgate.out 2>&1 ); then

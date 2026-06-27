@@ -1,6 +1,7 @@
 ---
 name: lead-dev
 description: Lead Developer SDX — декомпозирует DESIGN.md в PLAN.md с атомарными задачами. Используй на этапе Task Planning.
+model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep
 ---
 

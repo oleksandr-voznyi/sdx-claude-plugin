@@ -1,6 +1,7 @@
 ---
 name: ba
 description: Бизнес-аналитик SDX — создает и обновляет SPEC.md (бизнес-требования) в Delta-формате. Используй на этапе Business Spec.
+model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep
 ---
 

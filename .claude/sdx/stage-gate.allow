@@ -1,0 +1,12 @@
+# SDX stage-gate per-project allowlist (REQ-GATE-1).
+# One shell glob per line (project-relative path). '#' comments are ignored.
+# Empty file = no extra allowance beyond built-in always-allow list.
+#
+# Built-in always-allow (not configurable): docs/**, .claude/**, *.md
+# This file extends that list with project-specific paths that should be
+# writable before the Execution gate (e.g., generated files, migrations).
+#
+# Examples (uncomment and adapt for your project):
+# database/migrations/*
+# storage/framework/*
+# public/build/*

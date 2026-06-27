@@ -1,6 +1,7 @@
 ---
 name: qa
 description: QA-инженер SDX — пишет интеграционные тесты, инструкции ручного тестирования и проводит финальную верификацию. Используй на этапе Verification.
+model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 

@@ -71,6 +71,27 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STAGE_CHANGE] [Execution] -> Verification"
 ## Гейты (Gates)
 Перед переходом на следующий **активный** этап трека проверяется наличие необходимых артефактов (`SPEC.md`, `DESIGN.md`, `PLAN.md`, `change_note.md` и т.д.) — см. `/sdx:next`. Гейт также включает scope-check: оркестратор оценивает, не вышла ли задача за рамки текущего трека, и при необходимости предлагает `/sdx:retrack`.
 
+## Enforcement-слой (хуки)
+Инварианты, обязанные выполняться всегда, вынесены из прозы в детерминированные хуки
+(`.claude/sdx/hooks/`), проводка — `.claude/settings.json`. Все хуки активны только в
+SDX-ветке `sdx/<id>` и деградируют в no-op при отсутствии сессии/конфига (safe-by-default).
+Механизм блокировки PreToolUse: JSON `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"<причина>"}}` на stdout, exit 0 (НЕ exit 2 — подтверждено на бинарнике Claude Code 2.1.195).
+
+- **stage-gate** (PreToolUse `Write|Edit|MultiEdit`): запись в код заморожена до гейта
+  Execution; `docs/**`, `.claude/**`, `*.md` открыты всегда (артефакты планирования).
+  Блокировка — JSON `permissionDecision:"deny"`. Plan mode НЕ используется намеренно — он
+  заблокировал бы и `.md`-артефакты Spec/Design/Plan.
+- **stop-gate** (Stop): тест-прогон как пол под Verification; ход не завершается на красном
+  (скоуп Execution/Verification или `SDX_STOP_GATE=1`). После 3 красных подряд — возврат
+  человеку. Привязан к `Stop` (не `SubagentStop`), чтобы не воевать с TDD red-green developer'а.
+  Деградирует в no-op без известной тест-команды (`verify-cmd.sh` — per-project, ADR-4).
+- **prod-guard** (PreToolUse `Bash`): прод-команды по `prod-guard.conf` блокируются; пустой
+  или отсутствующий conf = нет защиты (opt-in per-project). Прод-деплой — только явное
+  действие человека, не агента.
+- **archive-verify** (вызов из `/sdx:archive` после мёржа): Closeout-инварианты 1/5/6
+  enforced скриптом `.claude/sdx/hooks/archive-verify.sh`. Деструктивные действия (удаление
+  каталога сессии, ветки) выполняются только после доказанной чистоты дерева и слияния.
+
 ## Верификация (этап Verification)
 Этап верификации структурирован по **трём осям** и сочетает корректность-исполнением с независимым fresh-eyes ревью. Команда — `/sdx:verify`, артефакт — `verification_report.md` в папке сессии.
 

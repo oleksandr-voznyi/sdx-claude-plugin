@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Per-project verify command template for stop-gate (REQ-GATE-2).
+#
+# HOW TO ACTIVATE:
+#   cp .claude/sdx/verify-cmd.sh.template .claude/sdx/verify-cmd.sh
+#   chmod +x .claude/sdx/verify-cmd.sh
+#
+# Until chmod +x is applied, stop-gate treats this file as non-executable
+# and falls back to autodetect (composer/npm/phpunit). If autodetect also
+# finds nothing, stop-gate exits 0 (no-op) — safe default for meta-projects.
+#
+# Tip: use --fast for a quick unit-only subset under stop-gate; save the full
+# suite for CI. stop-gate is most effective when the run is < ~30 seconds.
+set -uo pipefail
+
+case "${1:-}" in
+  --fast)
+    # Quick unit-only subset (PHP example):
+    exec ./vendor/bin/phpunit --testsuite=unit
+    # Node example: exec npm run test:unit
+    ;;
+  *)
+    # Full suite:
+    exec ./vendor/bin/phpunit
+    # Node example: exec npm test
+    ;;
+esac

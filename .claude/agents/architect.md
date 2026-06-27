@@ -1,6 +1,7 @@
 ---
 name: architect
 description: Системный архитектор SDX — исследует кодовую базу (context_report.md) и проектирует DESIGN.md. Используй на этапах Discovery и Technical Design.
+model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 

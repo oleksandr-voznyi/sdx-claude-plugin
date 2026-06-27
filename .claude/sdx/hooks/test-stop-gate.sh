@@ -127,6 +127,22 @@ else
 fi
 cleanup
 
+# ---- Scenario 6: hung runner is killed by timeout and treated as red (R-2/FND-2) ----
+echo "[6] Hung verify runner -> timeout -> exit 2 (treated as red)"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+# A verify command that hangs far longer than the timeout.
+printf '#!/bin/bash\nsleep 30\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+RUN_EC=0
+SDX_VERIFY_TIMEOUT=1 CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK" >/dev/null 2>/dev/null || RUN_EC=$?
+if [ "$RUN_EC" -eq 2 ]; then
+  pass "exit 2 after timeout (hung runner does not pass)"
+else
+  fail "Expected exit 2 from timeout" "got exit $RUN_EC"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

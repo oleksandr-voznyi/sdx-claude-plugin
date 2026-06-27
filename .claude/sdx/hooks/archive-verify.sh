@@ -17,13 +17,20 @@ if [ -n "$(git -C "$proj" status --porcelain)" ]; then
   fail=1
 fi
 
-# Invariant 5: if branch sdx/<id> still exists, it must be merged into main.
-# (Branch may have been deleted by a prior partial run; that is acceptable.)
+# Invariant 5: branch sdx/<id> must be provably merged into main before any
+# destructive action (R-5/FND-5).
 if git -C "$proj" rev-parse --verify "sdx/$sid" >/dev/null 2>&1; then
-  if ! git -C "$proj" branch --merged main | grep -q "sdx/$sid"; then
+  # Exact name match (-qx): avoid matching sdx/<id>-suffix branches.
+  if ! git -C "$proj" branch --merged main --format='%(refname:short)' | grep -qx "sdx/$sid"; then
     echo "[FAIL] ветка sdx/$sid не слита в main." >&2
     fail=1
   fi
+elif [ "${SDX_ARCHIVE_NO_BRANCH_OK:-0}" != "1" ]; then
+  # Branch absent: merge is UNPROVABLE. A branch deleted while unmerged would lose
+  # the only trace of the session, so refuse to delete without explicit operator
+  # confirmation (set SDX_ARCHIVE_NO_BRANCH_OK=1 to override in /sdx:archive).
+  echo "[FAIL] ветка sdx/$sid отсутствует — слияние недоказуемо; деструктив отменён. Подтвердите вручную (SDX_ARCHIVE_NO_BRANCH_OK=1), если ветка была удалена после слияния." >&2
+  fail=1
 fi
 
 # Abort before any destructive action if invariants 1 or 5 are violated.

@@ -54,12 +54,17 @@ if [ "$n" -gt 3 ]; then
   exit 0
 fi
 
-# Run the verify command; capture output for tail on failure.
-if ( cd "$proj" && eval "$cmd" >/tmp/sdx-stopgate.out 2>&1 ); then
+# Per-session temp file (R-3/FND-3): worktree-safe, avoids cross-session clobber.
+outfile="$proj/.claude/sessions/${sid}/.stopgate.out"
+
+# Run the verify command under a timeout (R-2/FND-2): a hung/watch-mode runner must
+# not block turn-end indefinitely. timeout's non-zero rc is treated as red (block);
+# the loop-guard above still returns control to the human after 3 attempts.
+if ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash -c "$cmd" >"$outfile" 2>&1 ); then
   rm -f "$guard"   # green run: reset loop-guard counter
   exit 0
 else
   echo "SDX stop-gate: тест-прогон ('$cmd') красный — ход не завершён. Исправьте и повторите. Хвост:" >&2
-  tail -20 /tmp/sdx-stopgate.out >&2
+  tail -20 "$outfile" >&2
   exit 2
 fi

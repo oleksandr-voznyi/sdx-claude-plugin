@@ -1,7 +1,7 @@
 ---
 name: developer
 description: Разработчик SDX — реализует задачи из PLAN.md по циклу TDD, пишет код и unit-тесты. Используй на этапе Execution.
-model: claude-sonnet-4-6
+model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 

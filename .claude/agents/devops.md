@@ -1,7 +1,7 @@
 ---
 name: devops
 description: DevOps-инженер SDX — конфиги, Docker, CI/CD, миграции БД и деплой. Используй на этапе Deployment и для инфраструктурных задач.
-model: claude-sonnet-4-6
+model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 

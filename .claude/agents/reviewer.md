@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Fresh-eyes ревьюер SDX — независимая верификация поставки по трём осям (полнота, корректность, когерентность) на основе только артефактов и diff, без истории решений. Используй на этапе Verification через /sdx:verify.
-model: claude-opus-4-8
+model: opus
 tools: Read, Write, Glob, Grep, Bash
 ---
 

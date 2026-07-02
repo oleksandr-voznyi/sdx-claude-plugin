@@ -1,7 +1,7 @@
 ---
 name: tech-writer
 description: Технический писатель SDX — обновляет README, CHANGELOG, OpenAPI и пользовательские руководства. Используй на этапе Documentation.
-model: claude-haiku-4-5
+model: haiku
 tools: Read, Write, Edit, Glob, Grep
 ---
 

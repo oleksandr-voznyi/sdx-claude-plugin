@@ -226,6 +226,64 @@ else
 fi
 cleanup
 
+# ---- Scenario 10: SDX_STOP_GATE=1 bypasses the cache; green force still updates .stopgate.ok (A4) ----
+echo "[10] SDX_STOP_GATE=1: cache bypassed on read, but green force still writes .stopgate.ok"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+runcount_file="$TMPPROJ/.claude/sdx/runcount"
+cat > "$TMPPROJ/.claude/sdx/verify-cmd.sh" <<EOF
+#!/bin/bash
+echo run >> "$runcount_file"
+exit 0
+EOF
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+okfile="$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok"
+# First green run (normal) seeds the cache.
+run_hook
+# Forced run on the SAME unchanged tree must bypass the cache and re-run verify.
+SDX_STOP_GATE=1 CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK" >/dev/null 2>/dev/null || true
+forced_runs="$(wc -l < "$runcount_file" 2>/dev/null || echo 0)"
+if [ "$forced_runs" -eq 2 ] && [ -f "$okfile" ]; then
+  pass "forced run bypassed cache (verify re-ran) and .stopgate.ok still present"
+else
+  fail "Forced bypass" "forced_runs=$forced_runs (expected 2), okfile present=$([ -f "$okfile" ] && echo yes || echo no)"
+fi
+cleanup
+
+# ---- Scenario 11: red run does NOT write .stopgate.ok (A4) ----
+echo "[11] Red verify run leaves no .stopgate.ok cache entry"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+printf '#!/bin/bash\nexit 1\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+okfile="$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok"
+run_hook
+if [ "$RUN_EC" -eq 2 ] && [ ! -f "$okfile" ]; then
+  pass "red run exits 2 and writes no .stopgate.ok"
+else
+  fail "Red-run cache" "exit=$RUN_EC (expected 2), okfile present=$([ -f "$okfile" ] && echo yes || echo no)"
+fi
+cleanup
+
+# ---- Scenario 12: cache-hit does NOT touch the loop-guard counter (A4) ----
+echo "[12] Cache-hit on unchanged tree leaves the loop-guard counter untouched"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+printf '#!/bin/bash\nexit 0\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+guard_file="$TMPPROJ/.claude/sessions/test-stop/.stopgate.count"
+# First green run seeds the cache and clears any counter.
+run_hook
+# Second Stop on the unchanged tree is a cache-hit BEFORE the guard increment,
+# so no counter file must be created.
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ ! -f "$guard_file" ]; then
+  pass "cache-hit short-circuits before loop-guard (no counter file created)"
+else
+  fail "Cache-hit vs loop-guard" "exit=$RUN_EC, counter present=$([ -f "$guard_file" ] && echo yes || echo no)"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

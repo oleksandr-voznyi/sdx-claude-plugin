@@ -122,6 +122,44 @@ else
 fi
 cleanup
 
+# ---- Scenario 6: jq missing + no conf -> no-op (A2) ----
+echo "[6] jq absent + no prod-guard.conf -> no-op (not fail-closed)"
+setup_proj
+# No conf file created; only .claude/sdx/ dir exists.
+NOJQ_BIN="$(mktemp -d)"
+for t in bash cat grep printf; do
+  src="$(command -v "$t" 2>/dev/null)" && ln -s "$src" "$NOJQ_BIN/$t" 2>/dev/null || true
+done
+RUN_EC=0
+RUN_OUT="$(printf '{"tool_input":{"command":"ls -la"}}' \
+           | PATH="$NOJQ_BIN" CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK")" || RUN_EC=$?
+rm -rf "$NOJQ_BIN"
+if [ "$RUN_EC" -eq 0 ] && [ -z "$RUN_OUT" ]; then
+  pass "exit 0, stdout empty (no protection configured -> jq not required)"
+else
+  fail "Expected exit 0 + empty stdout" "ec=$RUN_EC out='$RUN_OUT'"
+fi
+cleanup
+
+# ---- Scenario 7: jq missing + comment-only conf -> no-op (A2) ----
+echo "[7] jq absent + comment-only conf -> no-op (no active pattern)"
+setup_proj
+printf '# no active patterns\n# ssh.*prod\n' > "$TMPPROJ/.claude/sdx/prod-guard.conf"
+NOJQ_BIN="$(mktemp -d)"
+for t in bash cat grep printf; do
+  src="$(command -v "$t" 2>/dev/null)" && ln -s "$src" "$NOJQ_BIN/$t" 2>/dev/null || true
+done
+RUN_EC=0
+RUN_OUT="$(printf '{"tool_input":{"command":"ls -la"}}' \
+           | PATH="$NOJQ_BIN" CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK")" || RUN_EC=$?
+rm -rf "$NOJQ_BIN"
+if [ "$RUN_EC" -eq 0 ] && [ -z "$RUN_OUT" ]; then
+  pass "exit 0, stdout empty (comment-only conf -> jq not required)"
+else
+  fail "Expected exit 0 + empty stdout" "ec=$RUN_EC out='$RUN_OUT'"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

@@ -40,6 +40,17 @@ esac
 # Compute a project-relative path for allow-list matching.
 rel="${target#"$proj"/}"
 
+# During Verification the qa agent writes integration tests (its declared role,
+# see /sdx:verify step 2). Test directories are open on Verification; code (non-test)
+# stays frozen — fixes for FAIL findings go back via /sdx:backtrack --to Execution.
+# Co-located tests (e.g. Go foo_test.go next to source) are NOT covered here by
+# design — use the per-project stage-gate.allow for those.
+if [ "$stage" = "Verification" ]; then
+  case "$rel" in
+    tests/*|test/*|spec/*|*/tests/*|*/test/*|*/spec/*) exit 0 ;;
+  esac
+fi
+
 # Always-allowed paths: docs artifacts, framework config, any markdown file.
 case "$rel" in
   docs/*|.claude/*|*.md) exit 0 ;;

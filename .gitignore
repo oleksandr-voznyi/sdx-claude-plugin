@@ -1,8 +1,13 @@
-# SDX: данные активных сессий не версионируются
-.claude/sessions/
+# SDX: worktree-каталоги сессий (git-checkout'ы веток sdx/<id>) — никогда не трекаются
+#      в основной ветке; предотвращает самовложенность worktree в рабочее дерево.
+.sdx/worktrees/
 
-# SDX: переносимые бандлы import/export (транспортные артефакты)
+# SDX: эфемерные scratch-файлы enforcement-слоя (loop-guard, буфер верификации).
+#      НЕ версионируются ни при каких условиях (REQ-SESS-2).
+.claude/sessions/*/.stopgate.*
+
+# SDX: переносимые бандлы import/export (транспортные артефакты).
 .sdx/bundles/
 
-# Локальные настройки Claude Code
+# Локальные настройки Claude Code.
 .claude/settings.local.json

@@ -109,6 +109,10 @@ SDX-ветке `sdx/<id>` и деградируют в no-op при отсутс
   (скоуп Execution/Verification или `SDX_STOP_GATE=1`). После 3 красных подряд — возврат
   человеку. Привязан к `Stop` (не `SubagentStop`), чтобы не воевать с TDD red-green developer'а.
   Деградирует в no-op без известной тест-команды (`verify-cmd.sh` — per-project, ADR-4).
+  **Green-run cache (ADR-011):** отпечаток дерева (`HEAD` + хэш `git status --porcelain`)
+  последнего зелёного прогона хранится в `.stopgate.ok`; при неизменном дереве повторный `Stop`
+  пропускается без перезапуска verify (кэш-хит до инкремента loop-guard). `SDX_STOP_GATE=1`
+  кэш обходит; красный прогон кэш не пишет.
 - **prod-guard** (PreToolUse `Bash`): прод-команды по `prod-guard.conf` блокируются; пустой
   или отсутствующий conf (нет ни одной активной строки-паттерна) = нет защиты (opt-in
   per-project) — проверка conf выполняется **раньше** проверки `jq`. Прод-деплой — только явное

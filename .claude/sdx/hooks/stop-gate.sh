@@ -43,6 +43,20 @@ fi
 # No known test command -> no-op (required behaviour for SDX meta-project, ADR-4).
 [ -z "$cmd" ] && exit 0
 
+# Green-run cache (A4): if the working tree's fingerprint matches the last known-green
+# fingerprint, skip re-running verify entirely. Fingerprint = HEAD commit + hash of the
+# porcelain status (covers both committed and uncommitted changes). Bypassed by
+# SDX_STOP_GATE=1 (forced/headless runs must always be honest).
+okfile="$proj/.claude/sessions/${sid}/.stopgate.ok"
+if [ "${SDX_STOP_GATE:-0}" != "1" ]; then
+  head_rev="$(git -C "$proj" rev-parse HEAD 2>/dev/null || true)"
+  tree_status="$(git -C "$proj" status --porcelain 2>/dev/null || true)"
+  fingerprint="${head_rev}:$(printf '%s' "$tree_status" | md5sum | cut -d' ' -f1)"
+  if [ -f "$okfile" ] && [ "$(cat "$okfile" 2>/dev/null)" = "$fingerprint" ]; then
+    exit 0   # cache hit: tree unchanged since the last green run
+  fi
+fi
+
 # Loop-guard: after 3 consecutive red runs, hand control back to the human.
 # Counter is incremented only once a real verify command exists (green run clears it below).
 guard="$proj/.claude/sessions/${sid}/.stopgate.count"
@@ -62,6 +76,12 @@ outfile="$proj/.claude/sessions/${sid}/.stopgate.out"
 # the loop-guard above still returns control to the human after 3 attempts.
 if ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash -c "$cmd" >"$outfile" 2>&1 ); then
   rm -f "$guard"   # green run: reset loop-guard counter
+  # Cache the tree fingerprint at the moment verify went green (A4), so the next
+  # Stop on an unchanged tree can skip re-running verify. Recompute post-run to
+  # capture the tree exactly as it stood for this (successful) verification.
+  green_head_rev="$(git -C "$proj" rev-parse HEAD 2>/dev/null || true)"
+  green_tree_status="$(git -C "$proj" status --porcelain 2>/dev/null || true)"
+  printf '%s' "${green_head_rev}:$(printf '%s' "$green_tree_status" | md5sum | cut -d' ' -f1)" > "$okfile"
   exit 0
 else
   echo "SDX stop-gate: тест-прогон ('$cmd') красный — ход не завершён. Исправьте и повторите. Хвост:" >&2

@@ -79,3 +79,19 @@
 **Примечание:** Эта сессия — **последняя в старой (не-worktree) модели**: велась в основном дереве, каталог был gitignored до этой правки. Closeout выполнен по гибридной процедуре (`closeout_prep.md`): `git worktree remove` = n/a, удаление каталога — обычным `git rm`. Начиная со следующей сессии действует worktree-модель.
 
 **Ветка:** `sdx/fw-session-worktree-20260703` → слита в `main`.
+
+---
+
+## 2026-07-03 — fw-econ-a4d1-20260703 (refactor, трек standard)
+
+**Цель:** Две находки аудита: A4 (stop-gate гоняет полный тест-сьют на каждом `Stop`, даже без изменений кода) и D1 (полный `@protocol.md` инжектится каждой командой — лишние токены). Первая сессия под worktree-моделью (ADR-009).
+
+**Сделано:**
+- **A4 — green-run cache в stop-gate (ADR-011).** `stop-gate.sh` сверяет отпечаток рабочего дерева (`git rev-parse HEAD` + md5 от `git status --porcelain`) с отпечатком последнего зелёного прогона в `.stopgate.ok`; при неизменном дереве повторный `Stop` пропускается без перезапуска verify. Проверка размещена после резолва verify-команды и до инкремента loop-guard (кэш-хит не крутит `.stopgate.count`). Запись только при зелёном прогоне; красный кэш не пишет. `SDX_STOP_GATE=1` обходит чтение кэша, но зелёный форс обновляет `.stopgate.ok`. Семантика гейта (пол под красным) сохранена.
+- **D1 — тонкие команды ссылаются на протокол текстом.** Снят `@`-инжект `protocol.md` у `status`, `checkpoint`, `switch`, `backtrack` (заменён текстовой ссылкой); `@`-инжект сохранён у `start`, `next`, `archive`, `verify`, `retrack`, `export`, `import`, `manual`.
+
+**Верификация:** PASS. Корректность-исполнением (`qa`) + fresh-eyes (`reviewer`, контракт изоляции): 0 FAIL. Первичные 3 WARN (пробелы покрытия граничных веток A4) закрыты по решению пользователя дополнительными тестами `[10]`–`[12]` (bypass `SDX_STOP_GATE=1` + запись форсом, отсутствие `.stopgate.ok` под красным, кэш-хит не трогает loop-guard). Юнит-сьют `test-stop-gate.sh`: **13 passed, 0 failed**.
+
+**Затронутые документы:** `docs/DECISIONS.md` (ADR-011), `docs/designs/phase1-enforcement-routing.md` (контракт stop-gate + green-run cache), `docs/specs/phase1-enforcement-routing.md` (REQ-GATE-2 критерий), `.claude/sdx/protocol.md` (Enforcement-слой, stop-gate), `docs/audit-2026-07-01-recommendations.md` (A4/D1 → закрыто). Код: `.claude/sdx/hooks/stop-gate.sh`, `.claude/sdx/hooks/test-stop-gate.sh`, `.claude/commands/sdx/{status,checkpoint,switch,backtrack}.md`.
+
+**Ветка:** `sdx/fw-econ-a4d1-20260703` → слита в `main`.

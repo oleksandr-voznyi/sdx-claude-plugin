@@ -143,6 +143,39 @@ else
 fi
 cleanup
 
+# ---- Scenario 7: .stopgate.* files stay invisible to `git status` under the new
+#                   targeted .gitignore (REQ-SESS-2, косвенная зависимость от T3) ----
+echo "[7] .stopgate.count/.stopgate.out do not appear in 'git status --porcelain' (targeted .gitignore)"
+setup_stop_repo "sdx/test-stop" "Execution"
+# Install the ACTUAL targeted .gitignore (ADR-009, T3) — no widescale ignore of
+# .claude/sessions/, only the stopgate ephemera pattern.
+cat > "$TMPPROJ/.gitignore" <<'EOF'
+.sdx/worktrees/
+.claude/sessions/*/.stopgate.*
+.sdx/bundles/
+.claude/settings.local.json
+EOF
+git -C "$TMPPROJ" add .gitignore
+git -C "$TMPPROJ" commit -q -m "add targeted .gitignore"
+mkdir -p "$TMPPROJ/.claude/sdx"
+# A verify command that always fails -> stop-gate writes .stopgate.count/.stopgate.out.
+printf '#!/bin/bash\nexit 1\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+status_output="$(git -C "$TMPPROJ" status --porcelain)"
+if [ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.count" ] \
+   && [ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.out" ]; then
+  pass "stopgate scratch files were created"
+else
+  fail "Expected .stopgate.count and .stopgate.out to exist" ""
+fi
+if printf '%s' "$status_output" | grep -q "stopgate"; then
+  fail "stopgate scratch files leaked into git status --porcelain" "status='$status_output'"
+else
+  pass "git status --porcelain does not mention .stopgate.* (ignored by targeted .gitignore)"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

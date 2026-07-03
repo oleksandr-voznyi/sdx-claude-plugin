@@ -132,6 +132,30 @@ else
 fi
 cleanup
 
+# ---- Scenario 7: allow test path on Verification (A1) ----
+echo "[7] Allow test path (tests/api.test.js) when stage=Verification"
+setup_sdx_repo "sdx/test-sg" "Verification"
+out="$(run_hook "{\"tool_input\":{\"file_path\":\"$TMPPROJ/tests/api.test.js\"}}")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (qa writes integration tests on Verification)"
+else
+  fail "Expected empty stdout + exit 0" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 8: still block non-test code on Verification (A1 boundary) ----
+echo "[8] Block non-test code (src/app.js) when stage=Verification"
+setup_sdx_repo "sdx/test-sg" "Verification"
+out="$(run_hook "{\"tool_input\":{\"file_path\":\"$TMPPROJ/src/app.js\"}}")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON + exit 0 (code frozen; fixes via /sdx:backtrack --to Execution)"
+else
+  fail "Expected deny JSON + exit 0" "ec=$ec out=$out"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

@@ -8,3 +8,4 @@
 [2026-07-03 21:45:17] [STAGE_CHANGE] [Documentation] Documentation -> Verification
 [2026-07-03 22:00:48] [STAGE_CHANGE] [Verification] Verification -> Execution (backtrack: правка WARN-1/WARN-2)
 [2026-07-03 22:02:56] [STAGE_CHANGE] [Execution] Execution -> Verification (WARN-1/2 устранены, гейт пройден)
+[2026-07-03 22:09:13] [STAGE_CHANGE] [Verification] Verification -> Deployment (n/a: инфраструктурного деплоя нет)

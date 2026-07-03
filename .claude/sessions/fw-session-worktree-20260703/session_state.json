@@ -2,7 +2,7 @@
   "session_id": "fw-session-worktree-20260703",
   "type": "refactor",
   "track": "full",
-  "stage": "Verification",
-  "status": "approved",
+  "stage": "Deployment",
+  "status": "executing",
   "git_branch": "sdx/fw-session-worktree-20260703"
 }

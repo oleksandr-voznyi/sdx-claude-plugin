@@ -176,6 +176,56 @@ else
 fi
 cleanup
 
+# ---- Scenario 8: green-run cache — unchanged tree short-circuits the next Stop (A4) ----
+echo "[8] Green-run cache: unchanged tree -> second Stop is a no-op (verify not re-run)"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+runcount_file="$TMPPROJ/.claude/sdx/runcount"
+# A verify command that appends a marker line each time it actually executes, then passes.
+cat > "$TMPPROJ/.claude/sdx/verify-cmd.sh" <<EOF
+#!/bin/bash
+echo run >> "$runcount_file"
+exit 0
+EOF
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+first_ec="$RUN_EC"
+first_runs="$(wc -l < "$runcount_file" 2>/dev/null || echo 0)"
+run_hook
+second_ec="$RUN_EC"
+second_runs="$(wc -l < "$runcount_file" 2>/dev/null || echo 0)"
+if [ "$first_ec" -eq 0 ] && [ "$second_ec" -eq 0 ] && [ "$first_runs" -eq 1 ] && [ "$second_runs" -eq 1 ]; then
+  pass "second Stop on unchanged tree is a cache-hit no-op (verify ran once)"
+else
+  fail "Cache-hit expected" "first_ec=$first_ec second_ec=$second_ec first_runs=$first_runs second_runs=$second_runs"
+fi
+cleanup
+
+# ---- Scenario 9: green-run cache — changed tree invalidates the cache (A4) ----
+echo "[9] Green-run cache: changed tree -> next Stop re-runs verify"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+runcount_file="$TMPPROJ/.claude/sdx/runcount"
+cat > "$TMPPROJ/.claude/sdx/verify-cmd.sh" <<EOF
+#!/bin/bash
+echo run >> "$runcount_file"
+exit 0
+EOF
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+first_ec="$RUN_EC"
+# Mutate the working tree so the fingerprint changes.
+echo "change" > "$TMPPROJ/some-file.txt"
+run_hook
+second_ec="$RUN_EC"
+second_runs="$(wc -l < "$runcount_file" 2>/dev/null || echo 0)"
+if [ "$first_ec" -eq 0 ] && [ "$second_ec" -eq 0 ] && [ "$second_runs" -eq 2 ]; then
+  pass "changed tree invalidates cache (verify re-ran)"
+else
+  fail "Cache invalidation expected" "first_ec=$first_ec second_ec=$second_ec second_runs=$second_runs"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

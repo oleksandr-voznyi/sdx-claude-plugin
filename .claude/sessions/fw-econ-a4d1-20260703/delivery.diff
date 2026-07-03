@@ -1,0 +1,139 @@
+diff --git a/.claude/commands/sdx/backtrack.md b/.claude/commands/sdx/backtrack.md
+index bd10f00..a37a81d 100644
+--- a/.claude/commands/sdx/backtrack.md
++++ b/.claude/commands/sdx/backtrack.md
+@@ -16,4 +16,4 @@ description: Возврат на предыдущий этап SDX для вне
+ 5. Если возврат идет к этапам проектирования, обнули `PLAN.md`.
+ 6. Сообщи пользователю, какие файлы требуют актуализации.
+ 
+-Протокол сессий: @.claude/sdx/protocol.md
++Протокол сессий (прочитай `.claude/sdx/protocol.md` при необходимости).
+diff --git a/.claude/commands/sdx/checkpoint.md b/.claude/commands/sdx/checkpoint.md
+index 39e9cd2..323e23d 100644
+--- a/.claude/commands/sdx/checkpoint.md
++++ b/.claude/commands/sdx/checkpoint.md
+@@ -14,4 +14,4 @@ description: Фиксация состояния сессии в checkpoint.md 
+ 
+ Важно: ты не можешь изменить системный промпт или очистить контекст самостоятельно — восстановление выполняется только через файлы сессии.
+ 
+-Протокол сессий: @.claude/sdx/protocol.md
++Протокол сессий (прочитай `.claude/sdx/protocol.md` при необходимости).
+diff --git a/.claude/commands/sdx/status.md b/.claude/commands/sdx/status.md
+index ebfee22..6e6e13f 100644
+--- a/.claude/commands/sdx/status.md
++++ b/.claude/commands/sdx/status.md
+@@ -13,4 +13,4 @@ description: Просмотр статуса текущей активной с
+    - **Progress**: % выполнения из `PLAN.md` (греп чек-боксов `- [ ]`/`- [x]`), если он есть.
+ 4. **(факультативно) Активные сессии.** Дополнительно выведи листинг всех активных сессий в проекте через `git worktree list` — каждая запись `.sdx/worktrees/<id>` (ветка `sdx/<id>`) соответствует отдельной активной сессии. Это чисто читающий шаг, не влияющий на текущую сессию.
+ 
+-Протокол сессий: @.claude/sdx/protocol.md
++Протокол сессий (прочитай `.claude/sdx/protocol.md` при необходимости).
+diff --git a/.claude/commands/sdx/switch.md b/.claude/commands/sdx/switch.md
+index 9fa1a6e..42ecb2c 100644
+--- a/.claude/commands/sdx/switch.md
++++ b/.claude/commands/sdx/switch.md
+@@ -17,4 +17,4 @@ description: Переключение между активными SDX сесс
+ 4. Инструкция пользователю: «Откройте/запустите CLI в каталоге `<путь-из-шага-1>` — это и есть переключение на сессию `$1`. Текущее рабочее дерево не затрагивается.»
+ 5. Подтверди пользователю найденный путь и трек/этап сессии (по `session_state.json` внутри найденного каталога, если нужно предпросмотреть, — операция чтения, без `git checkout`).
+ 
+-Протокол сессий: @.claude/sdx/protocol.md
++Протокол сессий (прочитай `.claude/sdx/protocol.md` при необходимости).
+diff --git a/.claude/sdx/hooks/stop-gate.sh b/.claude/sdx/hooks/stop-gate.sh
+index 75caa20..6083843 100755
+--- a/.claude/sdx/hooks/stop-gate.sh
++++ b/.claude/sdx/hooks/stop-gate.sh
+@@ -43,6 +43,20 @@ fi
+ # No known test command -> no-op (required behaviour for SDX meta-project, ADR-4).
+ [ -z "$cmd" ] && exit 0
+ 
++# Green-run cache (A4): if the working tree's fingerprint matches the last known-green
++# fingerprint, skip re-running verify entirely. Fingerprint = HEAD commit + hash of the
++# porcelain status (covers both committed and uncommitted changes). Bypassed by
++# SDX_STOP_GATE=1 (forced/headless runs must always be honest).
++okfile="$proj/.claude/sessions/${sid}/.stopgate.ok"
++if [ "${SDX_STOP_GATE:-0}" != "1" ]; then
++  head_rev="$(git -C "$proj" rev-parse HEAD 2>/dev/null || true)"
++  tree_status="$(git -C "$proj" status --porcelain 2>/dev/null || true)"
++  fingerprint="${head_rev}:$(printf '%s' "$tree_status" | md5sum | cut -d' ' -f1)"
++  if [ -f "$okfile" ] && [ "$(cat "$okfile" 2>/dev/null)" = "$fingerprint" ]; then
++    exit 0   # cache hit: tree unchanged since the last green run
++  fi
++fi
++
+ # Loop-guard: after 3 consecutive red runs, hand control back to the human.
+ # Counter is incremented only once a real verify command exists (green run clears it below).
+ guard="$proj/.claude/sessions/${sid}/.stopgate.count"
+@@ -62,6 +76,12 @@ outfile="$proj/.claude/sessions/${sid}/.stopgate.out"
+ # the loop-guard above still returns control to the human after 3 attempts.
+ if ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash -c "$cmd" >"$outfile" 2>&1 ); then
+   rm -f "$guard"   # green run: reset loop-guard counter
++  # Cache the tree fingerprint at the moment verify went green (A4), so the next
++  # Stop on an unchanged tree can skip re-running verify. Recompute post-run to
++  # capture the tree exactly as it stood for this (successful) verification.
++  green_head_rev="$(git -C "$proj" rev-parse HEAD 2>/dev/null || true)"
++  green_tree_status="$(git -C "$proj" status --porcelain 2>/dev/null || true)"
++  printf '%s' "${green_head_rev}:$(printf '%s' "$green_tree_status" | md5sum | cut -d' ' -f1)" > "$okfile"
+   exit 0
+ else
+   echo "SDX stop-gate: тест-прогон ('$cmd') красный — ход не завершён. Исправьте и повторите. Хвост:" >&2
+diff --git a/.claude/sdx/hooks/test-stop-gate.sh b/.claude/sdx/hooks/test-stop-gate.sh
+index 9eb17a6..5550938 100644
+--- a/.claude/sdx/hooks/test-stop-gate.sh
++++ b/.claude/sdx/hooks/test-stop-gate.sh
+@@ -176,6 +176,56 @@ else
+ fi
+ cleanup
+ 
++# ---- Scenario 8: green-run cache — unchanged tree short-circuits the next Stop (A4) ----
++echo "[8] Green-run cache: unchanged tree -> second Stop is a no-op (verify not re-run)"
++setup_stop_repo "sdx/test-stop" "Execution"
++mkdir -p "$TMPPROJ/.claude/sdx"
++runcount_file="$TMPPROJ/.claude/sdx/runcount"
++# A verify command that appends a marker line each time it actually executes, then passes.
++cat > "$TMPPROJ/.claude/sdx/verify-cmd.sh" <<EOF
++#!/bin/bash
++echo run >> "$runcount_file"
++exit 0
++EOF
++chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
++run_hook
++first_ec="$RUN_EC"
++first_runs="$(wc -l < "$runcount_file" 2>/dev/null || echo 0)"
++run_hook
++second_ec="$RUN_EC"
++second_runs="$(wc -l < "$runcount_file" 2>/dev/null || echo 0)"
++if [ "$first_ec" -eq 0 ] && [ "$second_ec" -eq 0 ] && [ "$first_runs" -eq 1 ] && [ "$second_runs" -eq 1 ]; then
++  pass "second Stop on unchanged tree is a cache-hit no-op (verify ran once)"
++else
++  fail "Cache-hit expected" "first_ec=$first_ec second_ec=$second_ec first_runs=$first_runs second_runs=$second_runs"
++fi
++cleanup
++
++# ---- Scenario 9: green-run cache — changed tree invalidates the cache (A4) ----
++echo "[9] Green-run cache: changed tree -> next Stop re-runs verify"
++setup_stop_repo "sdx/test-stop" "Execution"
++mkdir -p "$TMPPROJ/.claude/sdx"
++runcount_file="$TMPPROJ/.claude/sdx/runcount"
++cat > "$TMPPROJ/.claude/sdx/verify-cmd.sh" <<EOF
++#!/bin/bash
++echo run >> "$runcount_file"
++exit 0
++EOF
++chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
++run_hook
++first_ec="$RUN_EC"
++# Mutate the working tree so the fingerprint changes.
++echo "change" > "$TMPPROJ/some-file.txt"
++run_hook
++second_ec="$RUN_EC"
++second_runs="$(wc -l < "$runcount_file" 2>/dev/null || echo 0)"
++if [ "$first_ec" -eq 0 ] && [ "$second_ec" -eq 0 ] && [ "$second_runs" -eq 2 ]; then
++  pass "changed tree invalidates cache (verify re-ran)"
++else
++  fail "Cache invalidation expected" "first_ec=$first_ec second_ec=$second_ec second_runs=$second_runs"
++fi
++cleanup
++
+ echo ""
+ echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
+ if [ "$FAIL_COUNT" -eq 0 ]; then

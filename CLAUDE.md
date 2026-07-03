@@ -69,7 +69,7 @@
 - `.claude/agents/`: Инструкции для специализированных агентов (с YAML frontmatter: `name`, `description`, `tools`).
 - `.claude/commands/sdx/`: Слэш-команды SDX (`/sdx:start`, `/sdx:next` и т.д.).
 - `.claude/sdx/`: Протокол сессий (формат состояния и логов).
-- `.claude/sessions/`: (Игнорируется git через `.gitignore`) Данные активных сессий.
+- `.claude/sessions/<id>/`: Данные активной сессии, физически изолированные в отдельном git worktree на ветке `sdx/<id>` (`.sdx/worktrees/<id>/`, каталог worktree — gitignored) и версионируемые (tracked) инкрементальными коммитами на этой ветке; только эфемерные `.stopgate.*`-файлы игнорируются точечным паттерном (ADR-009).
 - `docs/specs/`: Постоянное хранилище бизнес-спецификаций.
 - `docs/designs/`: Постоянное хранилище технических дизайнов.
 - `docs/history/plans/`: Архив выполненных планов реализации.

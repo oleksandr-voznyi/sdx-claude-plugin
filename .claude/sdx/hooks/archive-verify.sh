@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # SDX archive-verify (REQ-CLOSEOUT-1): enforce Closeout invariants 1, 5, 6
-# under the worktree + tracked-artifacts model (ADR-009) and dynamic default
-# branch (ADR-010). Called from /sdx:archive AFTER the session branch has been
-# merged into the default branch. Run with CLAUDE_PROJECT_DIR = MAIN worktree root.
+# under the in-place branch + tracked-artifacts model (ADR-012) and dynamic
+# default branch (ADR-010). Called from /sdx:archive AFTER the session branch
+# has been merged into the default branch, from the repo root CLI. The
+# conditional worktree-removal block below is legacy compat for pre-ADR-012
+# sessions that still live in a separate worktree.
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 proj="${CLAUDE_PROJECT_DIR:-.}"

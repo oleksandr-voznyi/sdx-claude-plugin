@@ -2,7 +2,7 @@
   "session_id": "fw-session-inplace-20260705",
   "type": "refactor",
   "track": "standard",
-  "stage": "Change",
+  "stage": "Execution",
   "status": "executing",
   "git_branch": "sdx/fw-session-inplace-20260705",
   "artifacts": ["change_note.md"],

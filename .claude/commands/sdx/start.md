@@ -17,25 +17,24 @@ description: Запуск новой сессии разработки SDX (Feat
    - **standard** — малая фича или рефактор, локализованные в нескольких компонентах.
    - **full** — крупная задача, затрагивающая контракты, схемы данных или архитектуру.
    Если по формулировке масштаб неочевиден — задай уточняющий вопрос пользователю перед выбором трека. Помни: трек адаптивен и может быть изменён позже через `/sdx:retrack`.
-3. Создай изолированный worktree сессии на новой ветке (REQ-WT-1), выполнив из ОСНОВНОГО CLI (`proj` = корень репозитория, текущая ветка = основная):
+3. Проверь, что рабочее дерево чистое (`git status --porcelain` пуст). Если нет — остановись и попроси пользователя закоммитить/стэшнуть изменения: сессия должна стартовать с чистой точки основной ветки.
+4. Создай ветку сессии в ТЕКУЩЕМ рабочем дереве (ADR-012, без worktree и без смены CLI):
    ```bash
-   git worktree add .sdx/worktrees/<session_id> -b sdx/<session_id>
-   mkdir -p .sdx/worktrees/<session_id>/.claude/sessions/<session_id>
+   git checkout -b sdx/<session_id>
+   mkdir -p .claude/sessions/<session_id>
    ```
-   (`.sdx/worktrees/` уже в `.gitignore` — новый worktree не тянется в индекс основной ветки.)
-4. Ветка `sdx/<session_id>` создана предыдущим шагом (`-b`) — отдельного шага `git checkout -b` не требуется.
-5. Инициализируй `session_state.json` (поля `type`, `track`, стартовый `stage`: для `patch` — `Execution`, для `standard`/`full` — `Discovery`; `git_branch=sdx/<session_id>`) и seed `session.log` — оба файла пиши В КАТАЛОГЕ WORKTREE: `.sdx/worktrees/<session_id>/.claude/sessions/<session_id>/`.
+5. Инициализируй `session_state.json` (поля `type`, `track`, стартовый `stage`: для `patch` — `Execution`, для `standard`/`full` — `Discovery`; `git_branch=sdx/<session_id>`) и seed `session.log` в `.claude/sessions/<session_id>/`.
 6. Закоммить seed-состояние на ветку сессии (REQ-SESS-1):
    ```bash
-   git -C .sdx/worktrees/<session_id> add .claude/sessions/<session_id>
-   git -C .sdx/worktrees/<session_id> commit -m "sdx(<session_id>): init session state"
+   git add .claude/sessions/<session_id>
+   git commit -m "sdx(<session_id>): init session state"
    ```
-7. Запиши в лог (уже внутри `session.log` worktree, до/вместе с коммитом шага 6): `[START] Инициализация сессии <session_id> (трек: <track>)`.
+7. Запиши в лог (до/вместе с коммитом шага 6): `[START] Инициализация сессии <session_id> (трек: <track>)`.
 8. Запусти первый активный этап трека:
    - **patch**: сразу переходи к Execution. Заведи `change_note.md` (что/зачем менялось, затронутые файлы, ссылка на коммит — заполняется по ходу). Реализуй правку в основной сессии или через субагента `developer` (режим прямой задачи, без `PLAN.md`).
    - **standard**: выполни лёгкий Discovery инлайн (без субагента `architect`), затем перейди к этапу Change — фиксируй бизнес- и технические решения слитно в `change_note.md`.
    - **full**: вызови субагента `architect` (инструмент Task) для `context_report.md`, затем переключись на `Business Spec` и вызови субагента `ba`.
 9. При смене этапа запиши одну строку `[STAGE_CHANGE]` (батчем со временем). Создание артефактов в лог НЕ пиши — вместо этого коммить созданные файлы сессии в ветку инкрементально (их история и состав выводятся из git).
-10. **ХЕНДОФФ.** Сообщи пользователю: «Продолжите сессию из CLI, запущенного в каталоге `.sdx/worktrees/<session_id>/` — enforcement-хуки резолвят активную сессию через `$CLAUDE_PROJECT_DIR`, который фиксируется на каталоге запуска CLI (см. protocol.md, «Модель сессии = worktree = ветка»). Откройте/запустите новый CLI-инстанс в этом каталоге и продолжайте оттуда.» Дальнейшие `/sdx:next|checkpoint|verify` выполняются из CLI сессии (`proj` = worktree).
+10. Продолжай работу в ЭТОМ ЖЕ CLI — никакого хендоффа нет (ADR-012): ветка `sdx/<session_id>` checkout'нута в основном дереве, enforcement-хуки резолвят активную сессию по имени текущей ветки. Дальнейшие `/sdx:next|checkpoint|verify|archive` выполняются здесь же.
 
 Протокол сессий, профили флоу и контракт закрытия: @.claude/sdx/protocol.md

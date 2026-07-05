@@ -95,3 +95,19 @@
 **Затронутые документы:** `docs/DECISIONS.md` (ADR-011), `docs/designs/phase1-enforcement-routing.md` (контракт stop-gate + green-run cache), `docs/specs/phase1-enforcement-routing.md` (REQ-GATE-2 критерий), `.claude/sdx/protocol.md` (Enforcement-слой, stop-gate), `docs/audit-2026-07-01-recommendations.md` (A4/D1 → закрыто). Код: `.claude/sdx/hooks/stop-gate.sh`, `.claude/sdx/hooks/test-stop-gate.sh`, `.claude/commands/sdx/{status,checkpoint,switch,backtrack}.md`.
 
 **Ветка:** `sdx/fw-econ-a4d1-20260703` → слита в `main`.
+
+## 2026-07-05 — fw-session-inplace-20260705 (refactor, трек standard)
+
+**Цель:** Запрос пользователя — worktree-модель (ADR-009) операционно тяжела (хендофф на отдельный CLI при старте, два CLI на Closeout); упростить до непрерывной работы в одном CLI, сохранив «данные сессии на ветке, но не в main».
+
+**Сделано:**
+- Новая модель «сессия = ветка `sdx/<id>` в основном рабочем дереве, один CLI на весь цикл» (**ADR-012**): `/sdx:start` = `checkout -b` без хендоффа; `/sdx:switch` = `checkout` с гардом чистого дерева (без авто-коммита); `/sdx:archive` — однофазный чек-лист в одном CLI.
+- Сохранено из ADR-009: версионирование артефактов на ветке (REQ-SESS-1..4), вариант A (`git rm -r` до мёржа), инварианты archive-verify 1/5/6, ADR-010. Снято: REQ-WT-1/3/4/5.
+- Хуки: ноль правок логики (резолв сессии по имени ветки уже был); в `archive-verify.sh` — только комментарий, условный `worktree remove` оставлен как legacy compat.
+- Текстовые дельты: `protocol.md` (модель, Closeout), `start/switch/archive/status/init/verify.md`, `CLAUDE.md` §6, баннеры пересмотра в `docs/specs|designs/session-worktree-model.md`.
+
+**Верификация:** GATE PASS (fresh-eyes, 0 FAIL, 1 WARN — дрейф постоянных SPEC/DESIGN, закрыт баннерами на Closeout). Тесты хуков: 18+13+8+6 — все зелёные. Сессия сама прошла весь цикл в одном CLI (догфуд новой модели).
+
+**Затронутые документы:** `docs/specs/session-inplace-model.md` (новый), `docs/DECISIONS.md` (ADR-012), баннеры в `session-worktree-model.md` (spec+design).
+
+**Ветка:** `sdx/fw-session-inplace-20260705` → слита в `main`.

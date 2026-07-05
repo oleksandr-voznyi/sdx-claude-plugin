@@ -2,3 +2,4 @@
 [2026-07-05 19:00:32] [STAGE_CHANGE] [Change] Discovery (инлайн) -> Change
 [2026-07-05 19:02:05] [STAGE_CHANGE] [Execution] Change -> Execution
 [2026-07-05 19:08:37] [STAGE_CHANGE] [Verification] Execution -> Verification
+[2026-07-05 19:14:37] [STAGE_CHANGE] [Closeout] Verification -> Closeout (GATE PASS, 0 FAIL / 1 WARN квитирован баннерами)

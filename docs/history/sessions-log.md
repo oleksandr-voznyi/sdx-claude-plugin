@@ -128,3 +128,13 @@
 **Затронутые документы:** `docs/DECISIONS.md` (ADR-013), `docs/specs/plugin-distribution.md` (новый), `docs/designs/plugin-distribution.md` (новый), `README.md` (новый), `CLAUDE.md` (§1/2/3/6), `sdx/protocol.md` (§Enforcement — проводка/пути).
 
 **Ветка:** `sdx/fw-plugin-20260719` → слита в `main`.
+
+## 2026-07-19 — fw-migrate-20260719 (feature, трек patch)
+
+**Цель:** Перевод дистрибуции на GitHub и автоматизация раскатки: репо `sdx-claude-plugin` (private, `git@github.com:oleksandr-voznyi/sdx-claude-plugin.git`), скрипт массовой миграции серверов/проектов.
+
+**Сделано:** папка разработки переименована в `sdx-claude-plugin`, репо создано и запушено; добавлен идемпотентный `scripts/sdx-migrate.sh` (jq → marketplace из GitHub → install user-scope → `extraKnownMarketplaces.sdx` c `autoUpdate: true` + `enabledPlugins` в `~/.claude/settings.json` → миграция проекта: удаление vendored-файлов, снятие legacy hook-проводки с сохранением кастомных хуков, объявление зависимости в project settings; без авто-коммита). README: установка с GitHub, раздел миграции, правило бампа `version`. Версия плагина 1.0.0 → 1.0.1.
+
+**Верификация:** прогон на фикстурном legacy-проекте — legacy удалён, кастомный агент/хук и per-project слой сохранены, settings корректно трансформированы; машинная часть выполнила реальную чистую установку с GitHub (scope user, autoUpdate включён).
+
+**Ветка:** `sdx/fw-migrate-20260719` → слита в `main`.

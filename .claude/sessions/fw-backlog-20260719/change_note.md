@@ -69,10 +69,12 @@ roadmap в gitignored-бандле): нет ID, трассировки, кома
 | E3 | PROC-004 | proc | open | normal | — | — |
 | E4 | PROC-005 | proc | closed | — | — | fw-auto-gates-20260719 |
 
-## Затронутые файлы (заполняется по ходу Execution)
-- `docs/backlog/` — 23 записи + `README.md` (индекс)
-- `commands/backlog.md` — новая команда
-- `sdx/protocol.md`, `commands/archive.md` — Closeout п.4
-- `commands/init.md`, `CLAUDE.md` — структура `docs/backlog/`
+## Затронутые файлы
+- `docs/backlog/` — 23 записи + `README.md` (индекс) — миграция субагентом developer
+- `commands/backlog.md` — новая команда (список/фильтры/деталь/add)
+- `sdx/protocol.md`, `commands/archive.md` — расширение п.4 Closeout-чек-листа
+- `commands/init.md` — создание `docs/backlog/` при инициализации
+- `sdx/templates/backlog-readme.md` — шаблон пустого индекса для `/sdx:init`
+- `CLAUDE.md` §6 — `docs/backlog/` в per-project слое
 - `docs/DECISIONS.md` — ADR-015
-- `docs/audit-2026-07-01-recommendations.md` — баннер миграции
+- `docs/audit-2026-07-01-recommendations.md` — баннер миграции (исторический снапшот)

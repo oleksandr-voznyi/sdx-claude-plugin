@@ -2,3 +2,4 @@
 [2026-07-19 23:40:09] [STAGE_CHANGE] [Change] Discovery -> Change: решения зафиксированы в change_note.md
 [2026-07-19 23:40:09] [STAGE_CHANGE] [Execution] Change -> Execution (гейт принят авторежимом, дефолты в auto_decisions.md)
 [2026-07-19 23:46:49] [STAGE_CHANGE] [Verification] Execution -> Verification (гейт принят авторежимом)
+[2026-07-20 00:40:14] [STAGE_CHANGE] [Closeout] Verification -> Closeout (дисклоуз подтверждён пользователем)

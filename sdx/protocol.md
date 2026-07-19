@@ -95,8 +95,11 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STAGE_CHANGE] [Execution] -> Verification"
 Перед переходом на следующий **активный** этап трека проверяется наличие необходимых артефактов (`SPEC.md`, `DESIGN.md`, `PLAN.md`, `change_note.md` и т.д.) — см. `/sdx:next`. Гейт также включает scope-check: оркестратор оценивает, не вышла ли задача за рамки текущего трека, и при необходимости предлагает `/sdx:retrack`.
 
 ## Enforcement-слой (хуки)
-Инварианты, обязанные выполняться всегда, вынесены из прозы в детерминированные хуки
-(`.claude/sdx/hooks/`), проводка — `.claude/settings.json`. Все хуки активны только в
+Инварианты, обязанные выполняться всегда, вынесены из прозы в детерминированные хуки.
+Скрипты поставляются плагином (`${CLAUDE_PLUGIN_ROOT}/sdx/hooks/`), проводка — `hooks/hooks.json`
+плагина. Per-project конфиги слоя (`prod-guard.conf`, `stage-gate.allow`, `verify-cmd.sh`)
+живут в `.claude/sdx/` целевого проекта и разворачиваются `/sdx:init` из шаблонов
+`${CLAUDE_PLUGIN_ROOT}/sdx/templates/`. Все хуки активны только в
 SDX-ветке `sdx/<id>` и деградируют в no-op при отсутствии сессии/конфига (safe-by-default).
 Механизм блокировки PreToolUse: JSON `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"<причина>"}}` на stdout, exit 0 (НЕ exit 2 — подтверждено на бинарнике Claude Code 2.1.195).
 

@@ -19,4 +19,4 @@ description: Импорт функциональности из SDX-бандла
 4. **Мёрж контракта.** Перенеси `spec.delta.md`/`design.slice.md` в `SPEC.md`/`DESIGN.md` цели через Delta-формат, адаптированно под целевую архитектуру. Любая коллизия триады `SPEC ↔ DESIGN ↔ Codebase` → стоп и решение пользователя.
 5. **Дальнейший цикл.** Переходи по `full`-треку: Task Planning (задачи `transplant` + `reimplement` из `import_map.md`) → Execution → Verification → Closeout. Тесты из бандла переноси и адаптируй — они проверяют сохранность поведения. Недостающие зависимости из `deps.yaml` добавь в цель (при необходимости — субагент `devops`). На Verification `reviewer` сверяет diff с мёрженым контрактом.
 
-Протокол сессий, формат бандла и поток import: @.claude/sdx/protocol.md
+Протокол сессий, формат бандла и поток import: прочитай (Read) `${CLAUDE_PLUGIN_ROOT}/sdx/protocol.md`

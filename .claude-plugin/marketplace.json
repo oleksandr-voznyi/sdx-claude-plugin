@@ -1,0 +1,13 @@
+{
+  "name": "sdx",
+  "owner": {
+    "name": "Oleksandr Voznyi"
+  },
+  "plugins": [
+    {
+      "name": "sdx",
+      "source": "./",
+      "description": "Spec-Driven Development framework for Claude Code: /sdx:* lifecycle commands, role subagents and enforcement hooks."
+    }
+  ]
+}

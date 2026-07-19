@@ -27,7 +27,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
-| PROC-003 | proc | in-progress | high | null | [Формализация бэклога: структура, префиксы, команды, волны](PROC-003-backlog-formalization.md) |
 | DEBT-008 | debt | open | high | 2 | [Roadmap Фаз 2–4 живёт в gitignored-файле — риск потери](DEBT-008-roadmap-gitignored-risk.md) |
 | DEBT-001 | debt | open | high | 7 | [Весь enforcement держится на самодекларируемом поле `stage`](DEBT-001-self-declared-stage-field.md) |
 | DEBT-004 | debt | open | normal | 4 | [Мета-проект имеет тест-сьют, но не «доедает свой корм»](DEBT-004-meta-project-no-dogfood-tests.md) |
@@ -54,4 +53,5 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-006 | [Раскладка моделей продублирована в трёх местах](DEBT-006-model-layout-duplicated.md) | `fw-model-aliases-20260702` |
 | DEBT-012 | [`@protocol.md` инжектится каждой командой](DEBT-012-protocol-injected-every-command.md) | `fw-econ-a4d1-20260703` |
 | PROC-001 | [У patch-трека нет ни одного слоя проверки по умолчанию](PROC-001-patch-track-no-default-verification.md) | `fw-auto-gates-20260719` |
+| PROC-003 | [Формализация бэклога: структура, префиксы, команды, волны](PROC-003-backlog-formalization.md) | `fw-backlog-20260719` |
 | PROC-005 | [Авторежим: смягчение пользовательских гейтов по запросу (фидбек 2026-07-19)](PROC-005-auto-mode-gate-softening.md) | `fw-auto-gates-20260719` |

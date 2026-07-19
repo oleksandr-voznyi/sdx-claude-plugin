@@ -2,7 +2,7 @@
   "session_id": "fw-roadmap-20260720",
   "type": "refactor",
   "track": "patch",
-  "stage": "Verification",
+  "stage": "Closeout",
   "status": "executing",
   "gate_mode": "auto",
   "git_branch": "sdx/fw-roadmap-20260720",

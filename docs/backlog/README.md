@@ -27,7 +27,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
-| DEBT-008 | debt | open | high | 2 | [Roadmap Фаз 2–4 живёт в gitignored-файле — риск потери](DEBT-008-roadmap-gitignored-risk.md) |
 | DEBT-001 | debt | open | high | 7 | [Весь enforcement держится на самодекларируемом поле `stage`](DEBT-001-self-declared-stage-field.md) |
 | DEBT-004 | debt | open | normal | 4 | [Мета-проект имеет тест-сьют, но не «доедает свой корм»](DEBT-004-meta-project-no-dogfood-tests.md) |
 | BUG-004 | bug | open | normal | 5 | [Противоречие verify.md ↔ reviewer.md: кто вычисляет diff](BUG-004-diff-computation-mismatch.md) |
@@ -56,6 +55,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-002 | [Stop-gate гоняет полный тест-сьют на каждом завершении хода](DEBT-002-stop-gate-full-suite-per-stop.md) | `fw-econ-a4d1-20260703` |
 | DEBT-005 | [Сработало обязательство обновить раскладку моделей на новое поколение](DEBT-005-model-generation-upgrade-obligation.md) | `fw-model-aliases-20260702` |
 | DEBT-006 | [Раскладка моделей продублирована в трёх местах](DEBT-006-model-layout-duplicated.md) | `fw-model-aliases-20260702` |
+| DEBT-008 | [Roadmap Фаз 2–4 живёт в gitignored-файле — риск потери](DEBT-008-roadmap-gitignored-risk.md) | `fw-roadmap-20260720` |
 | DEBT-012 | [`@protocol.md` инжектится каждой командой](DEBT-012-protocol-injected-every-command.md) | `fw-econ-a4d1-20260703` |
 | PROC-001 | [У patch-трека нет ни одного слоя проверки по умолчанию](PROC-001-patch-track-no-default-verification.md) | `fw-auto-gates-20260719` |
 | PROC-003 | [Формализация бэклога: структура, префиксы, команды, волны](PROC-003-backlog-formalization.md) | `fw-backlog-20260719` |

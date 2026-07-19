@@ -1,0 +1,13 @@
+{
+  "session_id": "fw-readme-en-20260720",
+  "type": "feature",
+  "track": "patch",
+  "stage": "Execution",
+  "status": "executing",
+  "gate_mode": "auto",
+  "git_branch": "sdx/fw-readme-en-20260720",
+  "artifacts": ["auto_decisions.md", "change_note.md"],
+  "history": [
+    "2026-07-20: start (англоязычная документация для GitHub: README.en.md + About + EN в релизах; бэклог-запись на мультиязычность), трек patch, gate_mode auto"
+  ]
+}

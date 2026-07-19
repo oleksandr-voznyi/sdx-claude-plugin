@@ -19,13 +19,13 @@
 # Usage:
 #   sdx-migrate.sh              # machine setup; project part only if legacy detected in CWD
 #   sdx-migrate.sh --project    # machine setup + force project part for CWD
-#   SDX_REPO_URL=git@github.com:me/fork.git sdx-migrate.sh   # override source repo
+#   SDX_REPO_URL=https://github.com/me/fork.git sdx-migrate.sh   # override source repo
 #
 # Idempotent: safe to re-run. Nothing is committed to git automatically.
 set -uo pipefail
 
 REPO_SLUG="${SDX_REPO_SLUG:-oleksandr-voznyi/sdx-claude-plugin}"
-REPO_URL="${SDX_REPO_URL:-git@github.com:${REPO_SLUG}.git}"
+REPO_URL="${SDX_REPO_URL:-https://github.com/${REPO_SLUG}.git}"
 MP_NAME="sdx"
 PLUGIN_ID="sdx@sdx"
 USER_SETTINGS="$HOME/.claude/settings.json"
@@ -61,7 +61,7 @@ if claude plugin marketplace list 2>/dev/null | grep -Eq "(^|[[:space:]])❯?[[:
   ok "marketplace '${MP_NAME}' уже зарегистрирован"
 else
   claude plugin marketplace add "$REPO_URL" \
-    || die "не удалось добавить marketplace из $REPO_URL (проверьте git-доступ: ssh-ключ / deploy key)."
+    || die "не удалось добавить marketplace из $REPO_URL (проверьте сетевой доступ к GitHub)."
   ok "marketplace '${MP_NAME}' добавлен из $REPO_URL"
 fi
 
@@ -93,7 +93,7 @@ ok "extraKnownMarketplaces.${MP_NAME} (autoUpdate: true) + enabledPlugins.${PLUG
 # Pull the freshest plugin right now (session-start auto-update covers the future).
 claude plugin marketplace update "$MP_NAME" >/dev/null 2>&1 \
   && ok "marketplace обновлён до актуального состояния" \
-  || warn "marketplace update не прошёл — проверьте git-доступ (для private-репо нужен ssh-ключ/креденшалы)."
+  || warn "marketplace update не прошёл — проверьте сетевой доступ к GitHub."
 
 # --- 5-7. Project migration ---------------------------------------------------------
 LEGACY=0

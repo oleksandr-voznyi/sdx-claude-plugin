@@ -31,7 +31,7 @@ tools: Read, Write, Edit, Glob, Grep
 ```
 
 ## Контекст трека
-`PLAN.md` создаётся **только в треке `full`** (этап Task Planning). В треках `patch` и `standard` декомпозиция в `PLAN.md` не выполняется — `developer` работает по `change_note.md` в режиме прямой задачи, и тебя на этих треках не вызывают. Если задача эскалирована до `full`, опирайся на актуальные `DESIGN.md`/`SPEC.md`. См. `.claude/sdx/protocol.md`.
+`PLAN.md` создаётся **только в треке `full`** (этап Task Planning). В треках `patch` и `standard` декомпозиция в `PLAN.md` не выполняется — `developer` работает по `change_note.md` в режиме прямой задачи, и тебя на этих треках не вызывают. Если задача эскалирована до `full`, опирайся на актуальные `DESIGN.md`/`SPEC.md`. См. `${CLAUDE_PLUGIN_ROOT}/sdx/protocol.md`.
 
 ## Инструкции
 1. Изучи `DESIGN.md`.

@@ -16,4 +16,4 @@ description: Переключение между активными SDX сесс
 3. Переключись: `git checkout sdx/$1`.
 4. Прочитай `.claude/sessions/$1/session_state.json`, подтверди пользователю трек/этап, запиши в `session.log` строку `[START] Переключение на сессию $1`.
 
-Протокол сессий (прочитай `.claude/sdx/protocol.md` при необходимости).
+Протокол сессий (прочитай `${CLAUDE_PLUGIN_ROOT}/sdx/protocol.md` при необходимости).

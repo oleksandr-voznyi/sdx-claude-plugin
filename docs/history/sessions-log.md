@@ -111,3 +111,20 @@
 **Затронутые документы:** `docs/specs/session-inplace-model.md` (новый), `docs/DECISIONS.md` (ADR-012), баннеры в `session-worktree-model.md` (spec+design).
 
 **Ветка:** `sdx/fw-session-inplace-20260705` → слита в `main`.
+
+## 2026-07-19 — fw-plugin-20260719 (refactor, трек standard)
+
+**Цель:** Запрос пользователя — собрать SDX в виде плагина Claude Code, чтобы вести SDD в разных проектах на одном сервере без тиражирования фреймворка.
+
+**Сделано:**
+- Root-as-plugin (**ADR-013**): корень репо = плагин `sdx` + локальный marketplace (`.claude-plugin/{plugin,marketplace}.json`); установка `/plugin marketplace add <репо>` → `/plugin install sdx@sdx --scope user`.
+- Перенос из `.claude/` в корень: `commands/` (13), `agents/` (8), `hooks/hooks.json` (проводка вместо `.claude/settings.json`), `sdx/{protocol.md, hooks/**, templates/}`. Пути фреймворка в контенте — `${CLAUDE_PLUGIN_ROOT}/sdx/...`; ссылки на протокол — текстовым Read вместо `@`-инжекта.
+- `/sdx:init` переписан под per-project слой: структура `docs/`+`.claude/`, targeted-`.gitignore`, раскладка шаблонов конфигов enforcement, детект legacy-копий фреймворка, опциональный SDX-блок в CLAUDE.md проекта (`sdx/templates/claude-md-snippet.md`).
+- Новые доки: `README.md` (установка/состав), `docs/specs/plugin-distribution.md` (REQ-PLUGIN-1..6), `docs/designs/plugin-distribution.md`; CLAUDE.md §6 переписан под плагинную модель.
+- Плагин установлен на машину (scope user) и проверен вживую.
+
+**Верификация:** GATE PASS (fresh-eyes `reviewer`: 0 FAIL, 2 WARN — оба закрыты: подстановка `${CLAUDE_PLUGIN_ROOT}` подтверждена эмпирически headless-прогоном `/sdx:status` в постороннем проекте; README-косметика исправлена). Тесты хуков после релокации: 6+8+9+13+18 = **54 passed, 0 failed**. Stage-gate из hooks.json плагина вживую заблокировал запись в код на стадии Verification.
+
+**Затронутые документы:** `docs/DECISIONS.md` (ADR-013), `docs/specs/plugin-distribution.md` (новый), `docs/designs/plugin-distribution.md` (новый), `README.md` (новый), `CLAUDE.md` (§1/2/3/6), `sdx/protocol.md` (§Enforcement — проводка/пути).
+
+**Ветка:** `sdx/fw-plugin-20260719` → слита в `main`.

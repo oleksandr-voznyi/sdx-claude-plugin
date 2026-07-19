@@ -2,6 +2,8 @@
 
 [![Release](https://img.shields.io/github/v/release/oleksandr-voznyi/sdx-claude-plugin?label=%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F)](https://github.com/oleksandr-voznyi/sdx-claude-plugin/releases)
 
+🇬🇧 [English version](README.en.md)
+
 SDX — фреймворк Spec-Driven Development (SDD) для Claude Code, упакованный как **плагин**: жизненный цикл сессий (`/sdx:start` → … → `/sdx:archive`), ролевые субагенты, адаптивные треки церемонии и детерминированный enforcement-слой на хуках. Один установленный плагин обслуживает все проекты на машине — тиражировать файлы фреймворка по проектам не нужно.
 
 ## Установка
@@ -34,7 +36,7 @@ claude plugin install sdx@sdx --scope user
 
 В целевом проекте выполните `/sdx:init` (для существующей кодовой базы — `/sdx:init --existing`). Команда разворачивает **per-project слой** — единственное, что живёт в самом проекте:
 
-- `docs/specs/`, `docs/designs/`, `docs/history/plans/` — постоянные документы триады;
+- `docs/specs/`, `docs/designs/`, `docs/history/plans/`, `docs/backlog/` — постоянные документы триады и трекаемый бэклог;
 - `.claude/sessions/<id>/` — артефакты активных сессий (версионируются на ветке `sdx/<id>`);
 - `.claude/sdx/` — конфиги enforcement-слоя: `prod-guard.conf` (блок-паттерны прод-команд), `stage-gate.allow` (доп. allowlist записи до гейта Execution), `verify-cmd.sh` (тест-команда для stop-gate);
 - targeted-паттерны в `.gitignore` и (по желанию) SDX-блок в CLAUDE.md проекта.
@@ -43,7 +45,7 @@ claude plugin install sdx@sdx --scope user
 
 | Путь | Содержимое |
 |------|------------|
-| `commands/` | 13 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import) |
+| `commands/` | 14 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import, backlog) |
 | `agents/` | 8 субагентов: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops` |
 | `hooks/hooks.json` | Проводка enforcement-слоя (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Протокол сессий: состояние, треки, гейты, Closeout, import/export |

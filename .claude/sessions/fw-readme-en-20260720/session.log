@@ -1,3 +1,0 @@
-[2026-07-20 01:29:40] [START] [Execution] Инициализация сессии fw-readme-en-20260720 (англ. документация для GitHub; трек: patch, gate_mode: auto)
-[2026-07-20 01:32:23] [STAGE_CHANGE] [Verification] Execution -> Verification (гейт принят авторежимом)
-[2026-07-20 01:38:28] [STAGE_CHANGE] [Closeout] Verification -> Closeout (дисклоуз подтверждён пользователем)

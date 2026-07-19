@@ -2,9 +2,11 @@
   "session_id": "fw-plugin-20260719",
   "type": "refactor",
   "track": "standard",
-  "stage": "Discovery",
+  "stage": "Execution",
   "status": "executing",
   "git_branch": "sdx/fw-plugin-20260719",
-  "artifacts": [],
+  "artifacts": [
+    "change_note.md"
+  ],
   "history": []
 }

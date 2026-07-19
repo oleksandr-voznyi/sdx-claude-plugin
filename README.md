@@ -1,5 +1,7 @@
 # SDX — Spec-Driven X для Claude Code
 
+[![Release](https://img.shields.io/github/v/release/oleksandr-voznyi/sdx-claude-plugin?label=%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F)](https://github.com/oleksandr-voznyi/sdx-claude-plugin/releases)
+
 SDX — фреймворк Spec-Driven Development (SDD) для Claude Code, упакованный как **плагин**: жизненный цикл сессий (`/sdx:start` → … → `/sdx:archive`), ролевые субагенты, адаптивные треки церемонии и детерминированный enforcement-слой на хуках. Один установленный плагин обслуживает все проекты на машине — тиражировать файлы фреймворка по проектам не нужно.
 
 ## Установка
@@ -22,7 +24,7 @@ claude plugin install sdx@sdx --scope user
 # автообновление при старте сессии: extraKnownMarketplaces.sdx.autoUpdate=true в ~/.claude/settings.json
 ```
 
-Обновления подтягиваются автоматически при старте сессии (`autoUpdate: true`); форс — `/plugin marketplace update sdx`. У потребителей обновление плагина срабатывает по бампу `version` в `plugin.json` — поднимайте его при каждом значимом релизе.
+Обновления подтягиваются автоматически при старте сессии (`autoUpdate: true`); форс — `/plugin marketplace update sdx`. У потребителей обновление плагина срабатывает по бампу `version` в `plugin.json` — поднимайте его при каждом значимом релизе. Каждый бамп сопровождается тегом `vX.Y.Z` на коммите бампа и GitHub-релизом (`gh release create vX.Y.Z --title … --notes …`) — история версий видна на [странице релизов](https://github.com/oleksandr-voznyi/sdx-claude-plugin/releases).
 
 ## Миграция проекта со старой (vendored) версии SDX
 

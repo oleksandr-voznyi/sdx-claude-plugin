@@ -1,0 +1,13 @@
+{
+  "session_id": "fw-backlog-20260719",
+  "type": "feature",
+  "track": "standard",
+  "stage": "Discovery",
+  "status": "executing",
+  "gate_mode": "auto",
+  "git_branch": "sdx/fw-backlog-20260719",
+  "artifacts": ["auto_decisions.md"],
+  "history": [
+    "2026-07-19: start (E2 — формализация бэклога), трек standard, gate_mode auto"
+  ]
+}

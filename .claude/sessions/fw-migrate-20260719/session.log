@@ -1,1 +1,2 @@
 [2026-07-19 16:15:03] [START] [Execution] Инициализация сессии fw-migrate-20260719 (трек: patch) — миграционный скрипт + README под GitHub-дистрибуцию
+[2026-07-19 16:18:22] [STAGE_CHANGE] [Closeout] Execution -> Closeout (verify: фикстура + реальная установка OK)

@@ -2,9 +2,11 @@
   "session_id": "fw-migrate-20260719",
   "type": "feature",
   "track": "patch",
-  "stage": "Execution",
+  "stage": "Closeout",
   "status": "executing",
   "git_branch": "sdx/fw-migrate-20260719",
-  "artifacts": ["change_note.md"],
+  "artifacts": [
+    "change_note.md"
+  ],
   "history": []
 }

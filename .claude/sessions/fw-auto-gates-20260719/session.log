@@ -2,3 +2,4 @@
 [2026-07-19 22:41:26] [STAGE_CHANGE] [Change] Discovery -> Change: развилки согласованы (C3 всегда на patch; WARN авто-квит+дисклоуз), решения зафиксированы в change_note.md
 [2026-07-19 22:45:58] [STAGE_CHANGE] [Execution] Change -> Execution: контракт change_note утверждён пользователем (/sdx:next)
 [2026-07-19 23:07:06] [STAGE_CHANGE] [Verification] Execution -> Verification
+[2026-07-19 23:14:37] [STAGE_CHANGE] [Closeout] Verification -> Closeout (гейт входа: report без FAIL, дисклоуз n/a — interactive)

@@ -1,12 +1,12 @@
 ---
-argument-hint: <type> <goal>
+argument-hint: <type> <goal> [--auto]
 description: Запуск новой сессии разработки SDX (Feature, Bug, Refactor).
 ---
 
 Ты выполняешь роль Session Manager в рамках SDX фреймворка (оркестрация в основной сессии). Твоя задача — запустить новую изолированную сессию и выбрать подходящий трек.
 
 Аргументы: $ARGUMENTS
-(Ожидается: <type> <goal>, например: bug "Исправить падение при пустом вводе")
+(Ожидается: <type> <goal>, например: bug "Исправить падение при пустом вводе". Опциональный флаг `--auto` включает авторежим гейтов с самого старта — см. «Авторежим гейтов» в протоколе, ADR-014.)
 
 Примечание: сессии типа `import` создаются отдельной командой `/sdx:import <bundle-path>` (нужен бандл, а не текстовая цель), а не через `/sdx:start`.
 
@@ -23,7 +23,7 @@ description: Запуск новой сессии разработки SDX (Feat
    git checkout -b sdx/<session_id>
    mkdir -p .claude/sessions/<session_id>
    ```
-5. Инициализируй `session_state.json` (поля `type`, `track`, стартовый `stage`: для `patch` — `Execution`, для `standard`/`full` — `Discovery`; `git_branch=sdx/<session_id>`) и seed `session.log` в `.claude/sessions/<session_id>/`.
+5. Инициализируй `session_state.json` (поля `type`, `track`, стартовый `stage`: для `patch` — `Execution`, для `standard`/`full` — `Discovery`; `gate_mode`: `"auto"` при флаге `--auto`, иначе `"interactive"`; `git_branch=sdx/<session_id>`) и seed `session.log` в `.claude/sessions/<session_id>/`. При `--auto` заведи пустой `auto_decisions.md` и напомни пользователю правила авторежима одной строкой (дефолты по ходу + дисклоуз перед закрытием; стоп-рубрика протокола действует).
 6. Закоммить seed-состояние на ветку сессии (REQ-SESS-1):
    ```bash
    git add .claude/sessions/<session_id>

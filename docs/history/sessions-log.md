@@ -173,3 +173,18 @@
 **Затронутые документы:** `docs/backlog/` (новый, 23 записи + индекс), `docs/specs/backlog-formalization.md` (новый, REQ-BL-1..6), `docs/DECISIONS.md` (ADR-015), `commands/backlog.md` (новая), `commands/{archive,init}.md`, `sdx/protocol.md`, `sdx/templates/backlog-readme.md` (новый), `CLAUDE.md`, `docs/audit-2026-07-01-recommendations.md` (баннер миграции).
 
 **Ветка:** `sdx/fw-backlog-20260719` → слита в `main`.
+
+## 2026-07-20 — fw-roadmap-20260720 (refactor, трек patch, gate_mode auto)
+
+**Цель:** DEBT-008 (бывш. C1) — roadmap Фаз 2–4 жил только в gitignored-бандле `.sdx/bundles/upgrade_2026-06-27/` — один `rm`/clone уничтожал единственную полную спецификацию отложенных требований.
+
+**Сделано:**
+- **`docs/specs/phases-2-4-deferred.md`** (новый): полные формулировки REQ-LANE-1, REQ-CACHE-1, REQ-LOOP-1, REQ-CHECKPOINT-1, REQ-LEAN-1 и escalate-тира + их дизайн-срезы из бандла (§2.6–2.11), анти-требования (NOOP-PLANMODE/NOOP-TEAMS), критерии приёмки; раздел «Примечания актуализации» помечает устаревшее (model ID → алиасы ADR-008, пути хуков → плагин ADR-013, снапшот биллинга/TTL).
+- **IDEA-002…IDEA-006** в `docs/backlog/` — трекинг-записи на каждое отложенное требование (все `deferred`); `IDEA-001` перелинкована на спеку; спека Фазы 1 ссылается на новую (раздел «Отложено»).
+- Бандл остаётся локальным справочным артефактом (gitignored) — риск потери снят промоутом.
+
+**Верификация (лёгкая обязательная, ADR-014):** GATE PASS (fresh-eyes `reviewer`: change_note + diff 294 строки): 0 FAIL, 1 WARN (разнобой статусов IDEA `open`/`deferred`) — устранена до гейта унификацией в `deferred`; сверка «перенос, не пересказ» с первоисточником подтверждена. Тесты хуков 5/5.
+
+**Затронутые документы:** `docs/specs/phases-2-4-deferred.md` (новый), `docs/backlog/` (IDEA-002…006 новые; IDEA-001, DEBT-008, README), `docs/specs/phase1-enforcement-routing.md`.
+
+**Ветка:** `sdx/fw-roadmap-20260720` → слита в `main`.

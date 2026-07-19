@@ -1,7 +1,7 @@
 ---
 id: IDEA-006
 type: idea
-status: open
+status: deferred
 priority: low
 wave: null
 source: bundle sdx-efficiency-automation-2026 (§2.7, часть REQ-NOOP-TEAMS)
@@ -21,3 +21,8 @@ links: [DEBT-008]
 ревью хендоффов человеком — см. `docs/specs/phases-2-4-deferred.md` (раздел escalate-тир).
 Учесть, что ADR-012 отказался от worktree для сессий — для параллельного тира решение
 о механизме изоляции принимать заново (новый ADR).
+
+## Резолюция
+Отложено (roadmap) — создано промоутом roadmap Фаз 2–4 из gitignored-бандла
+(сессия `fw-roadmap-20260720`, закрытие DEBT-008); в работу — при планировании
+соответствующей фазы.

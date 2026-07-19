@@ -27,4 +27,5 @@ REQ-CACHE-1, REQ-LEAN-1, REQ-CHECKPOINT-1, escalate-тир) жила в gitignor
 - `docs/specs/phase1-enforcement-routing.md` (ссылка в «Отложено»)
 
 ## Коммиты
-- (заполнено при верификации) основная поставка — один коммит на ветке `sdx/fw-roadmap-20260720`
+- 18d56ed — основная поставка (спека + IDEA-записи + перелинковка)
+- (этот) — верификация: статусы IDEA → deferred, verification_report

@@ -1,7 +1,7 @@
 ---
 id: IDEA-005
 type: idea
-status: open
+status: deferred
 priority: normal
 wave: null
 source: bundle sdx-efficiency-automation-2026 (REQ-LEAN-1, Фаза 3)
@@ -20,3 +20,8 @@ links: [DEBT-008]
 ## Рекомендация
 Реализовать в Фазе 3 по дизайн-срезу — см. `docs/specs/phases-2-4-deferred.md`
 (раздел REQ-LEAN-1); процедура абляции — бандл §4.D.
+
+## Резолюция
+Отложено (roadmap) — создано промоутом roadmap Фаз 2–4 из gitignored-бандла
+(сессия `fw-roadmap-20260720`, закрытие DEBT-008); в работу — при планировании
+соответствующей фазы.

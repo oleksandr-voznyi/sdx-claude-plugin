@@ -40,11 +40,11 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-011 | debt | open | normal | 10 | [`/sdx:backtrack` недоспецифицирован](DEBT-011-backtrack-underspecified.md) |
 | PROC-002 | proc | open | normal | null | [Груминг / ретроспектива / постмортем как типы сессий](PROC-002-grooming-retro-postmortem-session-types.md) |
 | PROC-004 | proc | open | normal | null | [Режим экстремального прототипирования (vibe)](PROC-004-vibe-prototyping-mode.md) |
-| IDEA-002 | idea | open | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
-| IDEA-003 | idea | open | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
-| IDEA-004 | idea | open | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
-| IDEA-005 | idea | open | normal | null | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
-| IDEA-006 | idea | open | low | null | [Опциональный escalate-тир параллельного Execution](IDEA-006-parallel-escalate-tier.md) |
+| IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
+| IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
+| IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
+| IDEA-005 | idea | deferred | normal | null | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
+| IDEA-006 | idea | deferred | low | null | [Опциональный escalate-тир параллельного Execution](IDEA-006-parallel-escalate-tier.md) |
 | IDEA-001 | idea | deferred | low | null | [REQ-CACHE-1 (Фаза 2) остаётся актуальным](IDEA-001-req-cache-1-deterministic-context-order.md) |
 
 ## Закрытые

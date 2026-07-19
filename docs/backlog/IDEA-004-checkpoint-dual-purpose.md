@@ -1,7 +1,7 @@
 ---
 id: IDEA-004
 type: idea
-status: open
+status: deferred
 priority: normal
 wave: null
 source: bundle sdx-efficiency-automation-2026 (REQ-CHECKPOINT-1, Фаза 3)
@@ -20,3 +20,8 @@ links: [DEBT-008]
 Реализовать в Фазе 3: оставить checkpoint как durable-state, убрать роль
 anti-overflow-клапана; правка §5 `CLAUDE.md` и раздела checkpoint в `protocol.md` —
 см. `docs/specs/phases-2-4-deferred.md` (раздел REQ-CHECKPOINT-1).
+
+## Резолюция
+Отложено (roadmap) — создано промоутом roadmap Фаз 2–4 из gitignored-бандла
+(сессия `fw-roadmap-20260720`, закрытие DEBT-008); в работу — при планировании
+соответствующей фазы.

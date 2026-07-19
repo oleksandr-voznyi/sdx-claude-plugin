@@ -8,7 +8,7 @@ SDX — фреймворк Spec-Driven Development (SDD) для Claude Code, у�
 
 ```
 /plugin marketplace add /path/to/sdx.cld     # или git-URL репозитория
-/plugin install sdx@sdx                      # scope user — доступен во всех проектах
+/plugin install sdx@sdx                      # в диалоге выберите scope user — доступен во всех проектах
 ```
 
 или из CLI:

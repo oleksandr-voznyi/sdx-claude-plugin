@@ -156,3 +156,20 @@
 **Замечено (догфуд):** stage-gate корректно заблокировал бамп версии `plugin.json` на стадии Closeout (json ≠ always-allow) — бамп 1.0.1→1.1.0 выполнен post-merge отдельным chore-коммитом; обход через Bash сознательно не использован (граница A5).
 
 **Ветка:** `sdx/fw-auto-gates-20260719` → слита в `main`.
+
+## 2026-07-19 — fw-backlog-20260719 (feature, трек standard, gate_mode auto)
+
+**Цель:** Бэклог E2 — формализация бэклога: структура, префиксы, команды, волны.
+
+**Сделано:**
+- **Трекаемый бэклог (ADR-015):** каталог `docs/backlog/` — файл-на-запись с машиночитаемым YAML frontmatter (`id`, `type`, `status`, `priority`, `wave`, `source`, `session`, `links`; интеграционная точка будущего плагина портфельного управления), префиксы ID `FEAT-`/`BUG-`/`DEBT-`/`IDEA-`/`PROC-`, статусы `open|in-progress|closed|deferred`, индекс `README.md` (таблицы «Открытые»/«Закрытые»).
+- **Команда `/sdx:backlog`** (`commands/backlog.md`): список / фильтры `--status/--type/--wave` / деталь `<ID>` / `add` (интервью, автономер, обновление индекса); сессии не требует.
+- **Closeout-интеграция:** п.4 чек-листа (`sdx/protocol.md`, `commands/archive.md`) расширен актуализацией бэклога (закрытые записи → `closed`+`session`; отложенное и неквитированные WARN → новые `DEBT-`/`IDEA-`записи). Нумерация пунктов/инвариантов 1/5/6 сознательно не менялась.
+- **Миграция:** все 23 находки A*–E* аудита 2026-07-01 перенесены с сохранением статусов (маппинг в поле `source`); файл аудита — исторический снапшот с баннером. `/sdx:init` создаёт `docs/backlog/` из нового шаблона `sdx/templates/backlog-readme.md`; `CLAUDE.md` §3/§6 актуализированы.
+- Первая сессия, пройденная в `gate_mode: auto` от `/sdx:start --auto` до дисклоуза: 8 дефолтов в `auto_decisions.md`, одна остановка (дисклоуз перед Closeout) — механизм ADR-014 отработал штатно.
+
+**Верификация:** GATE PASS (fresh-eyes `reviewer`, контракт изоляции: change_note + diff 960 строк): 0 FAIL, 2 WARN, 5 INFO; маппинг 23/23 сверен пофайлово. Обе WARN устранены до гейта (Closeout-нарратив `CLAUDE.md` §3; дублированное тело IDEA-001) — отложенного квитирования не потребовалось. Регрессия хуков: 5/5 сьютов зелёные (enforcement не затрагивался).
+
+**Затронутые документы:** `docs/backlog/` (новый, 23 записи + индекс), `docs/specs/backlog-formalization.md` (новый, REQ-BL-1..6), `docs/DECISIONS.md` (ADR-015), `commands/backlog.md` (новая), `commands/{archive,init}.md`, `sdx/protocol.md`, `sdx/templates/backlog-readme.md` (новый), `CLAUDE.md`, `docs/audit-2026-07-01-recommendations.md` (баннер миграции).
+
+**Ветка:** `sdx/fw-backlog-20260719` → слита в `main`.

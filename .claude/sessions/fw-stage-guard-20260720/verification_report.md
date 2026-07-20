@@ -1,3 +1,5 @@
+<!-- SDX-OUTDATED: устарело откатом /sdx:backtrack --to "Execution" (2026-07-20 08:39:17). Актуализируйте перед продолжением; история версии — `git log -p -- ./.claude/sessions/fw-stage-guard-20260720/verification_report.md`. -->
+
 # Verification Report: fw-stage-guard-20260720
 
 ## Сводка

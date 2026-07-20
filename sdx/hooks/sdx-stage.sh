@@ -277,7 +277,9 @@ cmd_next() {
 # bound ("этапы после новой точки"): an artifact from a stage later than "current" can
 # legitimately exist on disk (e.g. a leftover verification_report.md from a prior
 # Verification cycle while `stage` has since been reset earlier by another backtrack) and
-# must be marked too, otherwise a stale artifact silently keeps passing forward gates. The
+# must be marked too, otherwise a reader (human or agent) mistakes stale content for
+# current. The banner is a signal only: a marked artifact still counts as gate evidence
+# for both `next` and `retrack` — see "Границы доказательности" in sdx/protocol.md. The
 # target's own artifact is left untouched (it becomes the thing being revisited, not
 # something stale).
 cmd_backtrack() {

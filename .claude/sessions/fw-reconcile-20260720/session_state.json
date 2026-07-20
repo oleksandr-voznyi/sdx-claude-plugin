@@ -1,0 +1,10 @@
+{
+  "session_id": "fw-reconcile-20260720",
+  "type": "feature",
+  "track": "standard",
+  "stage": "Discovery",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/fw-reconcile-20260720",
+  "artifacts": [],
+  "history": []
+}

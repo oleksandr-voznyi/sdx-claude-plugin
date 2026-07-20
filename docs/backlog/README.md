@@ -50,6 +50,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-018 | debt | open | low | null | [Столбец «Типы сессий» в README стирает жёсткость привязки типа к треку `doc`](DEBT-018-readme-track-type-binding-blurred.md) |
 | DEBT-019 | debt | open | low | null | [doc-специфика пп. 2/3 Closeout не продублирована в `archive.md`](DEBT-019-archive-checklist-doc-specifics-partial.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
+| DEBT-021 | debt | open | low | null | [Уже мигрированные вручную источники не помечены `SDX-MIGRATED`](DEBT-021-migrated-sources-unmarked.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
 | IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |

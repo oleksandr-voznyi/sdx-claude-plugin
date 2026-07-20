@@ -38,14 +38,14 @@ claude plugin install sdx@sdx --scope user
 
 - `docs/specs/`, `docs/designs/`, `docs/history/plans/`, `docs/backlog/` — постоянные документы триады и трекаемый бэклог;
 - `.claude/sessions/<id>/` — артефакты активных сессий (версионируются на ветке `sdx/<id>`);
-- `.claude/sdx/` — конфиги enforcement-слоя: `prod-guard.conf` (блок-паттерны прод-команд), `stage-gate.allow` (доп. allowlist записи до гейта Execution), `verify-cmd.sh` (тест-команда для stop-gate);
+- `.claude/sdx/` — конфиги enforcement-слоя: `prod-guard.conf` (блок-паттерны прод-команд), `stage-gate.allow` (доп. allowlist записи до гейта Execution), `verify-cmd.sh` (тест-команда для stop-gate), `sdx-version` (маркер версии плагина, на которой проект последний раз сверен — пишет исключительно `/sdx:reconcile`, сверяет `/sdx:start`);
 - targeted-паттерны в `.gitignore` и (по желанию) SDX-блок в CLAUDE.md проекта.
 
 ## Состав плагина
 
 | Путь | Содержимое |
 |------|------------|
-| `commands/` | 14 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import, backlog) |
+| `commands/` | 15 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import, backlog, reconcile) |
 | `agents/` | 8 субагентов: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops` |
 | `hooks/hooks.json` | Проводка enforcement-слоя (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Протокол сессий: состояние, треки, гейты, Closeout, import/export |

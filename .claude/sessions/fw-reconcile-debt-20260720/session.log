@@ -2,3 +2,4 @@
 [2026-07-20 21:56:02] [STAGE_CHANGE] Переход на этап Change
 [2026-07-20 22:00:28] [STAGE_CHANGE] Переход на этап Execution
 [2026-07-20 22:05:06] [STAGE_CHANGE] Переход на этап Verification
+[2026-07-20 22:11:14] [STAGE_CHANGE] Возврат на этап Execution

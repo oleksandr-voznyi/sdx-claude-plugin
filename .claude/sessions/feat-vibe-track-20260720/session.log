@@ -1,1 +1,5 @@
 [2026-07-20 23:19:37] [START] Инициализация сессии feat-vibe-track-20260720 (трек: full)
+[2026-07-20 23:34:54] [STAGE_CHANGE] Переход на этап Business Spec
+[2026-07-20 23:48:29] [STAGE_CHANGE] Переход на этап Technical Design
+[2026-07-21 00:11:29] [STAGE_CHANGE] Переход на этап Task Planning
+[2026-07-21 00:21:28] [STAGE_CHANGE] Переход на этап Execution

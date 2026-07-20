@@ -777,10 +777,10 @@ else
 fi
 cleanup
 
-# ---- Scenario 34: sanity cross-check — ALL FOUR tracks, order-sensitive (W-5) ----
+# ---- Scenario 34: sanity cross-check — ALL FIVE tracks, order-sensitive (W-5) ----
 # Previously this only checked the 'full' row, as an unordered SET (both sorted before
 # comparison) — a swap of two stages in either document, or a drift in 'patch'/'standard',
-# would go undetected. Now checks all four tracks in the exact row order (no sorting), so
+# would go undetected. Now checks all five tracks in the exact row order (no sorting), so
 # reordering is caught too. NOTE: protocol.md's chain cells may carry trailing parenthetical
 # annotations on a stage name (e.g. "Discovery (лёгкий, инлайн)", "Verification (лёгкая,
 # обязательная — ADR-014)") — stripped before comparison, they annotate, not rename, the
@@ -789,11 +789,11 @@ cleanup
 # (U+2014, bytes E2 80 94) used inside the patch-row annotation — byte-wise `tr` corrupts
 # that annotation text. sed/awk match the multi-byte separator as a whole string, so they
 # don't have this problem.
-echo "[34] sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch/doc, in order"
+echo "[34] sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch/doc/vibe, in order"
 proto="$SCRIPT_DIR/../protocol.md"
 sanity_all_ok=1
 sanity_detail=""
-for track in full standard patch doc; do
+for track in full standard patch doc vibe; do
   proto_row="$(grep "^| \*\*$track\*\*" "$proto")"
   proto_chain="$(printf '%s' "$proto_row" | awk -F'|' '{print $4}')"
   proto_stages="$(printf '%s\n' "$proto_chain" \
@@ -808,9 +808,9 @@ for track in full standard patch doc; do
   fi
 done
 if [ "$sanity_all_ok" -eq 1 ]; then
-  pass "protocol.md matches SDX_STAGE_MATRIX for full/standard/patch/doc, order included"
+  pass "protocol.md matches SDX_STAGE_MATRIX for full/standard/patch/doc/vibe, order included"
 else
-  fail "Expected matching ordered stage chains for all 4 tracks" "$sanity_detail"
+  fail "Expected matching ordered stage chains for all 5 tracks" "$sanity_detail"
 fi
 
 # ---- Scenario 35: sanity — SDX_CANON_ORDER (the old rank-based ceiling, F-1's root cause)

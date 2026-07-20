@@ -182,6 +182,30 @@ else
 fi
 cleanup
 
+# ---- Scenario 11: allow code write on Prototype stage (vibe track) ----
+echo "[11] Allow code write when stage=Prototype"
+setup_sdx_repo "sdx/test-sg" "Prototype"
+out="$(run_hook "{\"tool_input\":{\"file_path\":\"$TMPPROJ/src/app.js\"}}")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (code writes are legitimate on vibe|Prototype)"
+else
+  fail "Expected empty stdout + exit 0" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 12: block code write on Prototyp (near-miss, no widening) ----
+echo "[12] Block code write when stage=Prototyp (near-miss typo, not a prefix match)"
+setup_sdx_repo "sdx/test-sg" "Prototyp"
+out="$(run_hook "{\"tool_input\":{\"file_path\":\"$TMPPROJ/src/app.js\"}}")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON + exit 0 (case branch is exact, not a prefix/substring match)"
+else
+  fail "Expected deny JSON + exit 0" "ec=$ec out=$out"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

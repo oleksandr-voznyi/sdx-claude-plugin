@@ -38,9 +38,9 @@ state="$proj/.claude/sessions/${sid}/session_state.json"
 stage="$(jq -r '.stage // empty' "$state" 2>/dev/null || echo '')"
 [ -z "$stage" ] && exit 0
 
-# Code writes are legitimate during Execution and Deployment stages.
+# Code writes are legitimate during Execution, Deployment and Prototype stages.
 case "$stage" in
-  Execution|Deployment) exit 0 ;;
+  Execution|Deployment|Prototype) exit 0 ;;
 esac
 
 # Compute a project-relative path for allow-list matching.

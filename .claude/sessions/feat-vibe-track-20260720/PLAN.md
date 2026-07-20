@@ -2,13 +2,13 @@
 
 ## Статус реализации
 
-**0% (0/32 задач)** — план сформирован, реализация не начата.
+**16% (5/32 задач)** — волна 1 выполнена (T1, T2, T7, T8, T9).
 
 ## Чек-лист задач
 
 ### Блок A — `SDX_STAGE_MATRIX` и `sdx/hooks/test-sdx-stage.sh` (TDD, парный цикл RED → GREEN)
 
-- [ ] **[TEST] T1. `test-sdx-stage.sh` — обобщить sanity-сценарий 34 на трек `vibe`**
+- [x] **[TEST] T1. `test-sdx-stage.sh` — обобщить sanity-сценарий 34 на трек `vibe`**
   Изменить цикл `for track in full standard patch doc` → `... doc vibe` (DESIGN «Тест-стратегия»,
   строки 692-697). На момент коммита теста матрица ещё не содержит `vibe` → сценарий 34 должен
   упасть (RED), доказывая, что тест реально проверяет добавляемую строку, а не проходит
@@ -16,7 +16,7 @@
   Критерий готовности: `bash sdx/hooks/test-sdx-stage.sh` — сценарий 34 явно FAIL с сообщением
   об отсутствующем треке `vibe` в `sdx/protocol.md`/матрице; остальные сценарии не задеты.
 
-- [ ] **[CODE] T2. `sdx/hooks/sdx-stage.sh` — добавить строку `vibe|Prototype|-|no` в `SDX_STAGE_MATRIX`**
+- [x] **[CODE] T2. `sdx/hooks/sdx-stage.sh` — добавить строку `vibe|Prototype|-|no` в `SDX_STAGE_MATRIX`**
   Ровно одна строка после блока `doc` (`sdx-stage.sh:38-60`, DESIGN «Решение 1», строки 13-42 и
   «Схема данных/API» строки 279-288). Процедурный код (`cmd_init`/`cmd_next`/`cmd_backtrack`/
   `cmd_retrack`/`matrix_*`/`stage_artifact_ok`) НЕ трогается — ни одной строки логики.
@@ -66,7 +66,7 @@
 
 ### Блок B — `sdx/hooks/stage-gate.sh` и `test-stage-gate.sh` (TDD)
 
-- [ ] **[TEST] T7. `test-stage-gate.sh` — сценарии [11]-[12]: запись кода на `Prototype`**
+- [x] **[TEST] T7. `test-stage-gate.sh` — сценарии [11]-[12]: запись кода на `Prototype`**
   [11] позитив (RED до T8): `setup_sdx_repo "sdx/test-sg" "Prototype"`, запись в
   `$TMPPROJ/src/app.js` → ожидание пустой stdout, exit 0 — на некоправленном коде должен
   провалиться (deny). [12] негатив (near-miss): стадия `Prototyp` (опечатка) не должна открывать
@@ -74,7 +74,7 @@
   exit 0 (остаётся зелёным до и после T8). DESIGN строки 740-745. REQ-VIBE-3.
   Критерий готовности: [12] GREEN сразу; [11] явно FAIL до T8 (RED), фиксируя причину.
 
-- [ ] **[CODE] T8. `sdx/hooks/stage-gate.sh` — открыть запись кода на `Prototype`**
+- [x] **[CODE] T8. `sdx/hooks/stage-gate.sh` — открыть запись кода на `Prototype`**
   Две строки: комментарий `:41` →
   `# Code writes are legitimate during Execution, Deployment and Prototype stages.`; case `:43`
   `Execution|Deployment) exit 0 ;;` → `Execution|Deployment|Prototype) exit 0 ;;`. Сообщение deny
@@ -84,7 +84,7 @@
 
 ### Блок C — `sdx/hooks/test-stop-gate.sh`: регрессия намеренного НЕ-изменения
 
-- [ ] **[TEST] T9. `test-stop-gate.sh` — сценарий [13]: `Prototype` прозрачен, код `stop-gate.sh` НЕ меняется**
+- [x] **[TEST] T9. `test-stop-gate.sh` — сценарий [13]: `Prototype` прозрачен, код `stop-gate.sh` НЕ меняется**
   Зеркало существующего сценария [2] («Transparent outside Execution/Verification»), но с
   настроенным `verify-cmd.sh`, который **упал бы**, если бы хук его реально запустил на
   `Prototype`. Это регрессионный тест на осознанное `[UNCHANGED, НАМЕРЕННО]`-решение (DESIGN

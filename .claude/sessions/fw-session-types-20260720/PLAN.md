@@ -2,19 +2,19 @@
 
 ## Статус реализации
 
-0% — план создан на этапе Task Planning, Execution не начат.
+~27% (6/22 задач) — Блок A (T-1..T-6, `SDX_STAGE_MATRIX` + тесты) завершён. Остальные блоки (B-J, T-7..T-22) не начаты.
 
 ## Чек-лист задач
 
 ### Блок A — `SDX_STAGE_MATRIX` и её тесты (TDD, парный цикл RED → GREEN)
 
-- [ ] **[TEST] T-1. `test-sdx-stage.sh` — сценарий 34: добавить `doc` в цикл треков**
+- [x] **[TEST] T-1. `test-sdx-stage.sh` — сценарий 34: добавить `doc` в цикл треков**
   - Файлы: `sdx/hooks/test-sdx-stage.sh`.
   - Правка: `for track in full standard patch` → `for track in full standard patch doc`. Ни одной другой строки сценария не менять — цикл уже параметричен.
   - Критерий готовности: прогон `bash sdx/hooks/test-sdx-stage.sh` показывает сценарий `[34]` **RED** (ожидаемо — ни `SDX_STAGE_MATRIX`, ни таблица `protocol.md` ещё не знают про `doc`), все остальные сценарии по-прежнему PASS. Это осознанный промежуточный красный прогон, не баг.
   - REQ: REQ-DOC-6.
 
-- [ ] **[CODE] T-2. `SDX_STAGE_MATRIX` +4 строки `doc` и синхронная строка в таблице `protocol.md`**
+- [x] **[CODE] T-2. `SDX_STAGE_MATRIX` +4 строки `doc` и синхронная строка в таблице `protocol.md`**
   - Файлы: `sdx/hooks/sdx-stage.sh` (только данные — 4 строки), `sdx/protocol.md` (таблица «Профили флоу», ТОЛЬКО столбцы «Активные этапы»/«Артефакты дельт» строки `doc` — машиночитаемая часть, которую проверяет сценарий 34; столбец «Назначение» с перечислением 4 типов — отдельно, T-7).
   - Содержимое строк (дословно из DESIGN.md, раздел «Схема данных / API»):
     ```
@@ -27,25 +27,25 @@
   - Критерий готовности: прогон `test-sdx-stage.sh` — сценарий `[34]` из T-1 теперь **GREEN**, все остальные сценарии по-прежнему PASS. Дополнительно вручную подтвердить критерий приёмки #13 из DESIGN.md («Тестовая стратегия»): временно рассинхронизировать одну из двух сторон (например, закомментировать строку `doc` в таблице `protocol.md`, оставив матрицу) и убедиться, что сценарий 34 падает; затем вернуть синхронизацию. Это разовая ручная проверка при реализации, не отдельный автоматический сценарий (design это явно оговаривает) — фиксировать не нужно, только подтвердить и откатить.
   - REQ: REQ-DOC-6, REQ-DOC-9.
 
-- [ ] **[TEST] T-3. `test-sdx-stage.sh` — сценарии `init` для `track=doc`**
+- [x] **[TEST] T-3. `test-sdx-stage.sh` — сценарии `init` для `track=doc`**
   - Файлы: `sdx/hooks/test-sdx-stage.sh`.
   - Новые сценарии (по образцу [1]/[2], для 4-этапного трека `doc`): (а) `init` с `stage=Discovery` (первый активный этап) → успех; (б) `init` с `stage=Update` (не первый активный этап) → exit 2.
   - Критерий готовности: оба новых сценария PASS, весь набор без регрессий.
   - REQ: REQ-DOC-6.
 
-- [ ] **[TEST] T-4. `test-sdx-stage.sh` — сценарии `next` для `track=doc`**
+- [x] **[TEST] T-4. `test-sdx-stage.sh` — сценарии `next` для `track=doc`**
   - Файлы: `sdx/hooks/test-sdx-stage.sh`.
   - Новые сценарии (зеркала [3]/[4]/[5]/[6]/[7] на 4-этапном треке `doc`): `Discovery → Update` без гейта — всегда успех; `Update → Verification` с пустым/отсутствующим `change_note.md` — exit 1, stderr называет `change_note.md`; `Update → Verification` с непустым `change_note.md` — exit 0; `Verification → Closeout` с `### [FAIL]` в `verification_report.md` — exit 1; `Verification → Closeout` с чистым отчётом — exit 0; `stage=Closeout` (терминальный) — exit 0 no-op.
   - Критерий готовности: все новые сценарии PASS, набор без регрессий.
   - REQ: REQ-DOC-9, REQ-DOC-10, REQ-DOC-11.
 
-- [ ] **[TEST] T-5. `test-sdx-stage.sh` — сценарий `backtrack` для `track=doc`**
+- [x] **[TEST] T-5. `test-sdx-stage.sh` — сценарий `backtrack` для `track=doc`**
   - Файлы: `sdx/hooks/test-sdx-stage.sh`.
   - Новый сценарий (зеркало [15], W-1, но для 4-этапного трека): `backtrack --to Discovery` из `Closeout` с обоими артефактами (`change_note.md`, `verification_report.md`) на диске → оба помечены `<!-- SDX-OUTDATED -->`, без верхней границы по текущему этапу.
   - Критерий готовности: сценарий PASS, набор без регрессий.
   - REQ: REQ-DOC-6.
 
-- [ ] **[TEST] T-6. `test-sdx-stage.sh` — сценарии `retrack` эскалации `doc → {standard, full}`**
+- [x] **[TEST] T-6. `test-sdx-stage.sh` — сценарии `retrack` эскалации `doc → {standard, full}`**
   - Файлы: `sdx/hooks/test-sdx-stage.sh`.
   - Новые сценарии (зеркала [16]/[17]/[24], но с `doc` как ИСТОЧНИКОМ): (а) `doc → standard`, цель `Change`, при непустом `change_note.md` (накопленном на `doc|Update`) → exit 0 — подтверждает бесплатный перенос через совпадение имени файла; (б) `doc → full`, цель `Business Spec`, БЕЗ `context_report.md` на диске → exit 1 (forward-skip guard, предшественник `Discovery` у `full` небанальный); (в) `doc → full`, цель `Discovery` (собственный первый активный этап `full`) → exit 0 безусловно (безопасный fallback).
   - Критерий готовности: все три сценария PASS, полный прогон `test-sdx-stage.sh` без регрессий (`ALL PASSED`).

@@ -53,6 +53,10 @@ standard|Closeout|-|no
 patch|Execution|change_note.md|no
 patch|Verification|verification_report.md|yes
 patch|Closeout|-|no
+doc|Discovery|-|no
+doc|Update|change_note.md|no
+doc|Verification|verification_report.md|yes
+doc|Closeout|-|no
 '
 
 # ---- matrix helpers --------------------------------------------------------------------

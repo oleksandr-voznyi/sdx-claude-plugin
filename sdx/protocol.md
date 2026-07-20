@@ -53,6 +53,7 @@
 | **patch** | багфикс / точечная правка без изменения логики и контрактов | Execution → Verification (лёгкая, обязательная — ADR-014) → Closeout | `change_note.md` |
 | **standard** | малая фича / рефактор | Discovery (лёгкий, инлайн) → Change → Execution → Verification → Closeout | `change_note.md` |
 | **full** | крупная фича, затрагивающая контракты/архитектуру | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout | `SPEC.md`, `DESIGN.md`, `PLAN.md` |
+| **doc** | (TODO T-7 — см. DESIGN.md сессии `fw-session-types-20260720`, раздел «Профиль флоу — проекция в `protocol.md`») | Discovery (лёгкий, инлайн) → Update → Verification (лёгкая, обязательная — ADR-017) → Closeout | `change_note.md` |
 
 **Примечание:** Машиночитаемый источник истины порядка активных этапов каждого трека и их гейт-артефактов — `SDX_STAGE_MATRIX` внутри `sdx/hooks/sdx-stage.sh`. Таблица выше — человекочитаемая проекция для справки. При расхождении скрипт имеет приоритет. Sanity-тест `test-sdx-stage.sh` («sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch, in order») сверяет упорядоченные цепочки названий этапов из таблицы и матрицы для всех трёх треков и выявляет явное пропущенное/добавленное/переставленное различие.
 

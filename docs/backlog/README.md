@@ -41,7 +41,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии](PROC-010-parallel-subagents-shared-session-files.md) |
 | BUG-007 | bug | open | normal | null | [`/sdx:init` создаёт каталоги разборов без файлов-заглушек](BUG-007-init-history-dirs-no-placeholder.md) |
 | DEBT-017 | debt | open | normal | null | [Перечисления треков в `agents/qa.md`/`developer.md`/`devops.md` не включают `doc`](DEBT-017-agent-track-enumerations-incomplete.md) |
-| DEBT-022 | debt | open | normal | null | [`/sdx:reconcile` не определяет поведение для `.sdx/bundles/`](DEBT-022-reconcile-bundles-not-in-scan-list.md) |
 | PROC-004 | proc | open | normal | null | [Режим экстремального прототипирования (vibe)](PROC-004-vibe-prototyping-mode.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
@@ -51,7 +50,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-018 | debt | open | low | null | [Столбец «Типы сессий» в README стирает жёсткость привязки типа к треку `doc`](DEBT-018-readme-track-type-binding-blurred.md) |
 | DEBT-019 | debt | open | low | null | [doc-специфика пп. 2/3 Closeout не продублирована в `archive.md`](DEBT-019-archive-checklist-doc-specifics-partial.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
-| DEBT-021 | debt | open | low | null | [Уже мигрированные вручную источники не помечены `SDX-MIGRATED`](DEBT-021-migrated-sources-unmarked.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
 | IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
@@ -63,6 +61,8 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| DEBT-021 | [Уже мигрированные вручную источники не помечены `SDX-MIGRATED`](DEBT-021-migrated-sources-unmarked.md) | `fw-reconcile-debt-20260720` |
+| DEBT-022 | [`/sdx:reconcile` не определяет поведение для `.sdx/bundles/`](DEBT-022-reconcile-bundles-not-in-scan-list.md) | `fw-reconcile-debt-20260720` |
 | PROC-002 | [Груминг / ретроспектива / постмортем как типы сессий](PROC-002-grooming-retro-postmortem-session-types.md) | `fw-session-types-20260720` |
 | DEBT-001 | [Весь enforcement держится на самодекларируемом поле `stage`](DEBT-001-self-declared-stage-field.md) | `fw-stage-guard-20260720` |
 | DEBT-011 | [`/sdx:backtrack` недоспецифицирован](DEBT-011-backtrack-underspecified.md) | `fw-stage-guard-20260720` |

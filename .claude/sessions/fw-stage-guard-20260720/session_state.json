@@ -2,9 +2,9 @@
   "session_id": "fw-stage-guard-20260720",
   "type": "refactor",
   "track": "full",
-  "stage": "Task Planning",
-  "status": "draft",
-  "gate_mode": "interactive",
+  "stage": "Execution",
+  "status": "executing",
+  "gate_mode": "auto",
   "git_branch": "sdx/fw-stage-guard-20260720",
   "artifacts": [],
   "history": []

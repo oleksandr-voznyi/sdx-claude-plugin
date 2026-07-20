@@ -40,7 +40,7 @@ elif [ -f "$proj/phpunit.xml" ] || [ -f "$proj/phpunit.xml.dist" ]; then
   cmd="./vendor/bin/phpunit"
 fi
 
-# No known test command -> no-op (required behaviour for SDX meta-project, ADR-4).
+# No known test command -> no-op (required behaviour for projects without a test command, ADR-4).
 [ -z "$cmd" ] && exit 0
 
 # Green-run cache (A4): if the working tree's fingerprint matches the last known-green

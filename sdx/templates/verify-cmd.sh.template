@@ -7,7 +7,8 @@
 #
 # Until chmod +x is applied, stop-gate treats this file as non-executable
 # and falls back to autodetect (composer/npm/phpunit). If autodetect also
-# finds nothing, stop-gate exits 0 (no-op) — safe default for meta-projects.
+# finds nothing, stop-gate exits 0 (no-op) — safe default for projects
+# without a test suite.
 #
 # Tip: use --fast for a quick unit-only subset under stop-gate; save the full
 # suite for CI. stop-gate is most effective when the run is < ~30 seconds.

@@ -28,7 +28,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
 | DEBT-001 | debt | open | high | 7 | [Весь enforcement держится на самодекларируемом поле `stage`](DEBT-001-self-declared-stage-field.md) |
-| DEBT-004 | debt | open | normal | 4 | [Мета-проект имеет тест-сьют, но не «доедает свой корм»](DEBT-004-meta-project-no-dogfood-tests.md) |
 | BUG-004 | bug | open | normal | 5 | [Противоречие verify.md ↔ reviewer.md: кто вычисляет diff](BUG-004-diff-computation-mismatch.md) |
 | BUG-003 | bug | open | normal | 8 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) |
 | BUG-005 | bug | open | normal | 9 | [Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) |
@@ -42,6 +41,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
 | IDEA-007 | idea | open | low | null | [Автоматический пуш записей бэклога в GitHub Issues](IDEA-007-backlog-github-issues-sync.md) |
+| DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
 | IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
@@ -53,6 +53,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| DEBT-004 | [Мета-проект имеет тест-сьют, но не «доедает свой корм»](DEBT-004-meta-project-no-dogfood-tests.md) | `fw-dogfood-verifycmd-20260720` |
 | FEAT-001 | [Англоязычная документация для GitHub-аудитории](FEAT-001-english-docs-github.md) | `fw-readme-en-20260720` |
 | BUG-006 | [stage-gate на Windows блокирует не-md файлы в .claude/sessions](BUG-006-stage-gate-windows-backslash-paths.md) | `fw-stagegate-winpath-20260720` |
 | PROC-007 | [Активные рекомендации по улучшению в ходе реальных сессий](PROC-007-proactive-improvement-recommendations.md) | `fw-stagegate-winpath-20260720` |

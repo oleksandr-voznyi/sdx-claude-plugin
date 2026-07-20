@@ -63,4 +63,6 @@
 
 ## Ссылки
 
-- Коммиты: заполняется по ходу Execution.
+- Коммит Execution: `7e81c31` — verify-cmd.sh + правки verify.md, поправки DEBT-004 в
+  specs/designs (phase1-enforcement-routing), косметика комментариев stop-gate.sh и шаблона.
+- Прогон `.claude/sdx/verify-cmd.sh`: 5/5 сьютов, 56/56 тестов, exit 0 (~9 с).

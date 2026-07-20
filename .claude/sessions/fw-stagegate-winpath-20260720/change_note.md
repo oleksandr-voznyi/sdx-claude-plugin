@@ -50,5 +50,12 @@
 - Аналогичный аудит других хуков: `prod-guard` матчит команды (не пути), `stop-gate`/`archive-verify`
   работают через git — backslash-проблеме не подвержены.
 
+## Итог Execution
+- TDD: сценарии 9 (allow backslash-путь сессии) и 10 (deny backslash-путь кода) добавлены,
+  красный воспроизведён (сценарий 9 давал deny на `session_state.json`), после фикса — 10/10 PASS.
+- Регрессия: все 5 тест-сьютов хуков (`test-*.sh`) — ALL PASSED.
+- Секция «Непрерывное улучшение» добавлена в `sdx/protocol.md`.
+- Бэклог: `BUG-006`, `PROC-007` (in-progress, закрыть на Closeout), `IDEA-007` (open); индекс обновлён.
+
 ## Ссылки
-- Коммиты: заполняется по ходу Execution.
+- Коммит поставки: 92a4676 (fix + tests + protocol + backlog).

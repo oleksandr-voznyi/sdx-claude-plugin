@@ -45,7 +45,7 @@ claude plugin install sdx@sdx --scope user
 
 | Путь | Содержимое |
 |------|------------|
-| `commands/` | 15 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import, backlog, reconcile) |
+| `commands/` | 16 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile) |
 | `agents/` | 8 субагентов: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops` |
 | `hooks/hooks.json` | Проводка enforcement-слоя (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Протокол сессий: состояние, треки, гейты, Closeout, import/export |

@@ -47,7 +47,7 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 
 | Path | Contents |
 |------|----------|
-| `commands/` | 15 `/sdx:*` commands (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import, backlog, reconcile) |
+| `commands/` | 16 `/sdx:*` commands (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile) |
 | `agents/` | 8 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops` |
 | `hooks/hooks.json` | Enforcement-layer wiring (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Session protocol: state, tracks, gates, Closeout, import/export |

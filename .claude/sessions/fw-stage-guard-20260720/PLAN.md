@@ -475,7 +475,7 @@ CLI. Это отличается от исходной формулировки 
 
 ---
 
-- [ ] **[INFRA] T-19. `hooks/hooks.json` — третья запись `stage-write-guard.sh`; `chmod +x`**
+- [x] **[INFRA] T-19. `hooks/hooks.json` — третья запись `stage-write-guard.sh`; `chmod +x`**
 
   **Файлы:** `hooks/hooks.json`, `sdx/hooks/stage-write-guard.sh`
 
@@ -509,7 +509,7 @@ CLI. Это отличается от исходной формулировки 
 
 ---
 
-- [ ] **[DOC] T-20. `commands/start.md` — шаг 5 → `sdx-stage.sh init`; удалить шаг 7**
+- [x] **[DOC] T-20. `commands/start.md` — шаг 5 → `sdx-stage.sh init`; удалить шаг 7**
 
   **Файл:** `commands/start.md`
 
@@ -528,7 +528,7 @@ CLI. Это отличается от исходной формулировки 
 
 ---
 
-- [ ] **[DOC] T-21. `commands/import.md` — шаг 2 → `sdx-stage.sh init`**
+- [x] **[DOC] T-21. `commands/import.md` — шаг 2 → `sdx-stage.sh init`**
 
   **Файл:** `commands/import.md`
 
@@ -550,7 +550,7 @@ CLI. Это отличается от исходной формулировки 
 
 ---
 
-- [ ] **[DOC] T-22. `commands/next.md` — укоротить гейт-прозу; шаг 4 → `sdx-stage.sh next`**
+- [x] **[DOC] T-22. `commands/next.md` — укоротить гейт-прозу; шаг 4 → `sdx-stage.sh next`**
 
   **Файл:** `commands/next.md`
 
@@ -573,7 +573,7 @@ CLI. Это отличается от исходной формулировки 
 
 ---
 
-- [ ] **[DOC] T-23. `commands/backtrack.md` — шаги 1–5 → один вызов `sdx-stage.sh backtrack`**
+- [x] **[DOC] T-23. `commands/backtrack.md` — шаги 1–5 → один вызов `sdx-stage.sh backtrack`**
 
   **Файл:** `commands/backtrack.md`
 
@@ -591,7 +591,7 @@ CLI. Это отличается от исходной формулировки 
 
 ---
 
-- [ ] **[DOC] T-24. `commands/retrack.md` — шаг 4 на подшаги + вызов `sdx-stage.sh retrack`**
+- [x] **[DOC] T-24. `commands/retrack.md` — шаг 4 на подшаги + вызов `sdx-stage.sh retrack`**
 
   **Файл:** `commands/retrack.md`
 
@@ -611,7 +611,7 @@ CLI. Это отличается от исходной формулировки 
 
 ---
 
-- [ ] **[DOC] T-25. `commands/archive.md` — шаг 2 (вход в Closeout) → `sdx-stage.sh next`**
+- [x] **[DOC] T-25. `commands/archive.md` — шаг 2 (вход в Closeout) → `sdx-stage.sh next`**
 
   **Файл:** `commands/archive.md`
 

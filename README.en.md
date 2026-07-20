@@ -40,7 +40,7 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 
 - `docs/specs/`, `docs/designs/`, `docs/history/plans/`, `docs/backlog/` — permanent triad documents and the tracked backlog;
 - `.claude/sessions/<id>/` — active session artifacts (versioned on the `sdx/<id>` branch);
-- `.claude/sdx/` — enforcement-layer configs: `prod-guard.conf` (block patterns for prod commands), `stage-gate.allow` (extra write allowlist before the Execution gate), `verify-cmd.sh` (test command for the stop-gate);
+- `.claude/sdx/` — enforcement-layer configs: `prod-guard.conf` (block patterns for prod commands), `stage-gate.allow` (extra write allowlist before the Execution gate), `verify-cmd.sh` (test command for the stop-gate), `sdx-version` (marker of the plugin version the project was last reconciled against — written exclusively by `/sdx:reconcile`, checked by `/sdx:start`);
 - targeted `.gitignore` patterns and (optionally) an SDX block in the project's CLAUDE.md.
 
 ## What's inside the plugin

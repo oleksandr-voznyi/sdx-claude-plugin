@@ -79,7 +79,7 @@
 
 В каждом целевом проекте (включая этот мета-репозиторий) живёт только **per-project слой**:
 - `.claude/sessions/<id>/`: Данные активной сессии. Сессия = ветка `sdx/<id>`, checkout'нутая в основном рабочем дереве (один CLI на весь жизненный цикл, без worktree — ADR-012); артефакты версионируются (tracked) инкрементальными коммитами на этой ветке; только эфемерные `.stopgate.*`-файлы игнорируются точечным паттерном.
-- `.claude/sdx/`: Per-project конфиги enforcement-слоя (`prod-guard.conf`, `stage-gate.allow`, `verify-cmd.sh`).
+- `.claude/sdx/`: Per-project конфиги enforcement-слоя (`prod-guard.conf`, `stage-gate.allow`, `verify-cmd.sh`) и маркер версии плагина `sdx-version` (пишет исключительно `/sdx:reconcile`, сверяет `/sdx:start`).
 - `docs/specs/`: Постоянное хранилище бизнес-спецификаций.
 - `docs/designs/`: Постоянное хранилище технических дизайнов.
 - `docs/history/plans/`: Архив выполненных планов реализации.

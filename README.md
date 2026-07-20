@@ -38,7 +38,7 @@ claude plugin install sdx@sdx --scope user
 
 - `docs/specs/`, `docs/designs/`, `docs/history/plans/`, `docs/backlog/` — постоянные документы триады и трекаемый бэклог;
 - `.claude/sessions/<id>/` — артефакты активных сессий (версионируются на ветке `sdx/<id>`);
-- `.claude/sdx/` — конфиги enforcement-слоя: `prod-guard.conf` (блок-паттерны прод-команд), `stage-gate.allow` (доп. allowlist записи до гейта Execution), `verify-cmd.sh` (тест-команда для stop-gate);
+- `.claude/sdx/` — конфиги enforcement-слоя: `prod-guard.conf` (блок-паттерны прод-команд), `stage-gate.allow` (доп. allowlist записи до гейта Execution), `verify-cmd.sh` (тест-команда для stop-gate), `sdx-version` (маркер версии плагина, на которой проект последний раз сверен — пишет исключительно `/sdx:reconcile`, сверяет `/sdx:start`);
 - targeted-паттерны в `.gitignore` и (по желанию) SDX-блок в CLAUDE.md проекта.
 
 ## Состав плагина

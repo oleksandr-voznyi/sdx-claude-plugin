@@ -27,8 +27,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
-| BUG-006 | bug | in-progress | high | null | [stage-gate на Windows блокирует не-md файлы в .claude/sessions](BUG-006-stage-gate-windows-backslash-paths.md) |
-| PROC-007 | proc | in-progress | normal | null | [Активные рекомендации по улучшению в ходе реальных сессий](PROC-007-proactive-improvement-recommendations.md) |
 | DEBT-001 | debt | open | high | 7 | [Весь enforcement держится на самодекларируемом поле `stage`](DEBT-001-self-declared-stage-field.md) |
 | DEBT-004 | debt | open | normal | 4 | [Мета-проект имеет тест-сьют, но не «доедает свой корм»](DEBT-004-meta-project-no-dogfood-tests.md) |
 | BUG-004 | bug | open | normal | 5 | [Противоречие verify.md ↔ reviewer.md: кто вычисляет diff](BUG-004-diff-computation-mismatch.md) |
@@ -56,6 +54,8 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
 | FEAT-001 | [Англоязычная документация для GitHub-аудитории](FEAT-001-english-docs-github.md) | `fw-readme-en-20260720` |
+| BUG-006 | [stage-gate на Windows блокирует не-md файлы в .claude/sessions](BUG-006-stage-gate-windows-backslash-paths.md) | `fw-stagegate-winpath-20260720` |
+| PROC-007 | [Активные рекомендации по улучшению в ходе реальных сессий](PROC-007-proactive-improvement-recommendations.md) | `fw-stagegate-winpath-20260720` |
 | BUG-001 | [Stage-gate блокирует qa и developer на стадии Verification — КРИТИЧНО](BUG-001-stage-gate-blocks-verification-writes.md) | `fw-enforce-a1a2-20260703` |
 | BUG-002 | [Prod-guard fail-closed блокирует весь Bash даже без сконфигурированной защиты](BUG-002-prod-guard-failclosed-blocks-bash.md) | `fw-enforce-a1a2-20260703` |
 | DEBT-002 | [Stop-gate гоняет полный тест-сьют на каждом завершении хода](DEBT-002-stop-gate-full-suite-per-stop.md) | `fw-econ-a4d1-20260703` |

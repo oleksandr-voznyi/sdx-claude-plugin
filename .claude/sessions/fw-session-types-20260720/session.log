@@ -8,3 +8,5 @@
 [2026-07-20 18:21:21] [STAGE_CHANGE] Переход на этап Documentation
 [2026-07-20 18:24:11] [STAGE_CHANGE] Переход на этап Verification
 [2026-07-20 18:36:26] [STAGE_CHANGE] Возврат на этап Execution
+[2026-07-20 18:38:42] [STAGE_CHANGE] Переход на этап Documentation
+[2026-07-20 18:38:42] [STAGE_CHANGE] Переход на этап Verification

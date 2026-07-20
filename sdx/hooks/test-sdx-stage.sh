@@ -777,10 +777,10 @@ else
 fi
 cleanup
 
-# ---- Scenario 34: sanity cross-check — ALL THREE tracks, order-sensitive (W-5) ----
+# ---- Scenario 34: sanity cross-check — ALL FOUR tracks, order-sensitive (W-5) ----
 # Previously this only checked the 'full' row, as an unordered SET (both sorted before
 # comparison) — a swap of two stages in either document, or a drift in 'patch'/'standard',
-# would go undetected. Now checks all three tracks in the exact row order (no sorting), so
+# would go undetected. Now checks all four tracks in the exact row order (no sorting), so
 # reordering is caught too. NOTE: protocol.md's chain cells may carry trailing parenthetical
 # annotations on a stage name (e.g. "Discovery (лёгкий, инлайн)", "Verification (лёгкая,
 # обязательная — ADR-014)") — stripped before comparison, they annotate, not rename, the
@@ -789,11 +789,11 @@ cleanup
 # (U+2014, bytes E2 80 94) used inside the patch-row annotation — byte-wise `tr` corrupts
 # that annotation text. sed/awk match the multi-byte separator as a whole string, so they
 # don't have this problem.
-echo "[34] sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch, in order"
+echo "[34] sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch/doc, in order"
 proto="$SCRIPT_DIR/../protocol.md"
 sanity_all_ok=1
 sanity_detail=""
-for track in full standard patch; do
+for track in full standard patch doc; do
   proto_row="$(grep "^| \*\*$track\*\*" "$proto")"
   proto_chain="$(printf '%s' "$proto_row" | awk -F'|' '{print $4}')"
   proto_stages="$(printf '%s\n' "$proto_chain" \
@@ -808,9 +808,9 @@ for track in full standard patch; do
   fi
 done
 if [ "$sanity_all_ok" -eq 1 ]; then
-  pass "protocol.md matches SDX_STAGE_MATRIX for full/standard/patch, order included"
+  pass "protocol.md matches SDX_STAGE_MATRIX for full/standard/patch/doc, order included"
 else
-  fail "Expected matching ordered stage chains for all 3 tracks" "$sanity_detail"
+  fail "Expected matching ordered stage chains for all 4 tracks" "$sanity_detail"
 fi
 
 # ---- Scenario 35: sanity — SDX_CANON_ORDER (the old rank-based ceiling, F-1's root cause)
@@ -825,6 +825,242 @@ if ! grep -q 'SDX_CANON_ORDER' "$SCRIPT" && ! grep -q 'canon_rank' "$SCRIPT"; th
 else
   fail "Expected the old rank-based mechanism to be fully removed" "$(grep -n 'SDX_CANON_ORDER\|canon_rank' "$SCRIPT")"
 fi
+
+# ---- Scenario 36: init — track=doc, stage=Discovery (first active stage) -> success (T-3a) ----
+echo "[36] init: track=doc, stage=Discovery (first active stage) -> success"
+TMPPROJ="$(mktemp -d)"
+out="$(run_stage init "t36" "grooming" "doc" "Discovery" "interactive" "sdx/t36")"
+ec=$?
+sf="$(state_file t36)"
+if [ "$ec" -eq 0 ] && [ -f "$sf" ] && [ "$(jq -r '.stage' "$sf")" = "Discovery" ] \
+   && [ "$(jq -r '.track' "$sf")" = "doc" ]; then
+  pass "doc track initialized at Discovery, exit 0"
+else
+  fail "Expected doc/Discovery init to succeed" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 37: init — track=doc, stage=Update (NOT the first active stage) -> exit 2 (T-3b) ----
+echo "[37] init: track=doc, stage=Update (not first active stage) -> exit 2"
+TMPPROJ="$(mktemp -d)"
+out="$(run_stage init "t37" "grooming" "doc" "Update" "interactive" "sdx/t37" 2>&1 1>/dev/null)"
+ec=$?
+sf="$(state_file t37)"
+if [ "$ec" -eq 2 ] && [ ! -f "$sf" ]; then
+  pass "exit 2, no state file created for non-first stage"
+else
+  fail "Expected init rejection for non-first stage" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 38: next — doc: Discovery -> Update, no gate (artifact "-") -> always success (T-4) ----
+echo "[38] next: doc Discovery -> Update, no gate artifact -> always success"
+setup_sdx_repo "t38" "doc" "Discovery"
+out="$(run_stage next "t38")"
+ec=$?
+sf="$(state_file t38)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Update" ] \
+   && [ "$out" = "OK Discovery -> Update" ]; then
+  pass "doc: Discovery -> Update without a gate artifact"
+else
+  fail "Expected doc Discovery -> Update to succeed unconditionally" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 39: next — doc: Update -> Verification, empty/missing change_note.md -> exit 1 (T-4) ----
+echo "[39] next: doc Update -> Verification, missing change_note.md -> exit 1, stderr names change_note.md"
+setup_sdx_repo "t39" "doc" "Update"
+out="$(run_stage next "t39" 2>&1 1>/dev/null)"
+ec=$?
+sf="$(state_file t39)"
+if [ "$ec" -eq 1 ] && [ "$(jq -r '.stage' "$sf")" = "Update" ] \
+   && printf '%s' "$out" | grep -q "change_note.md"; then
+  pass "exit 1, stage unchanged, stderr names change_note.md"
+else
+  fail "Expected doc Update gate rejection" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 40: next — doc: Update -> Verification, non-empty change_note.md -> exit 0 (T-4) ----
+echo "[40] next: doc Update -> Verification, non-empty change_note.md -> exit 0"
+setup_sdx_repo "t40" "doc" "Update"
+printf 'change note\n' > "$TMPPROJ/.claude/sessions/t40/change_note.md"
+out="$(run_stage next "t40")"
+ec=$?
+sf="$(state_file t40)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Verification" ] \
+   && [ "$out" = "OK Update -> Verification" ]; then
+  pass "doc: Update -> Verification with non-empty change_note.md"
+else
+  fail "Expected doc Update -> Verification to succeed" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 41: next — doc: Verification -> Closeout, verification_report.md has [FAIL] -> exit 1 (T-4) ----
+echo "[41] next: doc Verification -> Closeout, verification_report.md contains ### [FAIL] -> exit 1, points to Update (not Execution)"
+setup_sdx_repo "t41" "doc" "Verification"
+printf '### [FAIL] [Correctness] something broken\n' > "$TMPPROJ/.claude/sessions/t41/verification_report.md"
+out="$(run_stage next "t41" 2>&1 1>/dev/null)"
+ec=$?
+sf="$(state_file t41)"
+# Remediation hint must name a stage that is ACTIVE in the track: doc has no Execution,
+# so pointing there would hand the user a second error from /sdx:backtrack.
+if [ "$ec" -eq 1 ] && [ "$(jq -r '.stage' "$sf")" = "Verification" ] \
+   && printf '%s' "$out" | grep -q "FAIL" \
+   && printf '%s' "$out" | grep -q "backtrack --to Update" \
+   && ! printf '%s' "$out" | grep -q "Execution"; then
+  pass "exit 1, FAIL marker blocks doc Verification -> Closeout, hint names Update"
+else
+  fail "Expected doc Verification FAIL-marker rejection pointing at Update" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 42: next — doc: Verification -> Closeout, clean verification_report.md -> exit 0 (T-4) ----
+echo "[42] next: doc Verification -> Closeout, clean verification_report.md -> exit 0"
+setup_sdx_repo "t42" "doc" "Verification"
+printf 'PASS\n' > "$TMPPROJ/.claude/sessions/t42/verification_report.md"
+out="$(run_stage next "t42")"
+ec=$?
+sf="$(state_file t42)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Closeout" ] \
+   && [ "$out" = "OK Verification -> Closeout" ]; then
+  pass "doc: Verification -> Closeout with clean report"
+else
+  fail "Expected doc Verification -> Closeout to succeed" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 43: next — doc: stage=Closeout (terminal) -> exit 0 no-op (T-4) ----
+echo "[43] next: doc stage=Closeout (terminal) -> exit 0 no-op"
+setup_sdx_repo "t43" "doc" "Closeout"
+sf="$(state_file t43)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage next "t43")"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Closeout" ] && [ "$before_sum" = "$after_sum" ]; then
+  pass "doc: no-op on terminal Closeout, file untouched"
+else
+  fail "Expected doc no-op on Closeout" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 44: backtrack — doc: --to Discovery from Closeout marks BOTH artifacts
+#      (change_note.md AND verification_report.md, if both exist) without an upper bound at
+#      the current stage (T-5, mirrors [15]/W-1 but for the 4-stage doc track) ----
+echo "[44] backtrack: doc --to Discovery from Closeout marks change_note.md AND verification_report.md"
+setup_sdx_repo "t44" "doc" "Closeout"
+printf 'change note\n' > "$TMPPROJ/.claude/sessions/t44/change_note.md"
+printf 'report\n' > "$TMPPROJ/.claude/sessions/t44/verification_report.md"
+out="$(run_stage backtrack "t44" "Discovery")"
+ec=$?
+sf="$(state_file t44)"
+change_first_line="$(head -1 "$TMPPROJ/.claude/sessions/t44/change_note.md")"
+report_first_line="$(head -1 "$TMPPROJ/.claude/sessions/t44/verification_report.md")"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Discovery" ] \
+   && printf '%s' "$change_first_line" | grep -q 'SDX-OUTDATED' \
+   && printf '%s' "$report_first_line" | grep -q 'SDX-OUTDATED'; then
+  pass "both change_note.md and verification_report.md marked outdated"
+else
+  fail "Expected both doc artifacts marked outdated" "ec=$ec out='$out' change1='$change_first_line' report1='$report_first_line'"
+fi
+cleanup
+
+# ---- Scenario 45: retrack — escalation doc -> standard, target=Change, non-empty
+#      change_note.md accumulated on doc|Update -> exit 0 landing on Change, AND the SAME
+#      file (never rewritten) is then accepted by `next` as Change's own gate artifact ->
+#      exit 0 into Execution (file-name coincidence transfers the artifact for free, not
+#      merely "Change's predecessor chain happens to be trivially empty") (T-6a) ----
+#      NOTE: retrack's forward-skip guard only proves the chain of stages PRECEDING the
+#      target (here: standard|Discovery, artifact "-", trivially satisfied) — it does not
+#      itself consume change_note.md. Asserting only the retrack exit code would pass even
+#      if the file were absent (regression: this scenario was green with the
+#      `printf ... > change_note.md` line removed). The follow-up `next` call is the part
+#      that actually depends on the pre-existing file — it fails with a missing/empty
+#      change_note.md, and only succeeds because the doc-Update file transferred for free.
+echo "[45] retrack: escalation doc -> standard, target=Change, change_note.md from doc|Update transfers for free and is then consumed by next"
+setup_sdx_repo "t45" "standard" "Update"
+printf 'accumulated during doc Update\n' > "$TMPPROJ/.claude/sessions/t45/change_note.md"
+out="$(run_stage retrack "t45" "Change")"
+ec=$?
+sf="$(state_file t45)"
+retrack_ok=0
+[ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Change" ] && retrack_ok=1
+
+out_next="$(run_stage next "t45")"
+ec_next=$?
+next_ok=0
+[ "$ec_next" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Execution" ] && next_ok=1
+
+if [ "$retrack_ok" -eq 1 ] && [ "$next_ok" -eq 1 ]; then
+  pass "doc's change_note.md satisfies standard's Change gate via filename coincidence (retrack lands on Change, next consumes the same file into Execution)"
+else
+  fail "Expected doc -> standard escalation to Change, then next to Execution, to both succeed" "ec=$ec out='$out' ec_next=$ec_next out_next='$out_next'"
+fi
+cleanup
+
+# ---- Scenario 46: retrack — escalation doc -> full, target=Business Spec, WITHOUT
+#      context_report.md on disk -> exit 1 (forward-skip guard: full's Discovery is not
+#      trivial, unlike standard's) (T-6b) ----
+echo "[46] retrack: escalation doc -> full, target=Business Spec, no context_report.md -> exit 1"
+setup_sdx_repo "t46" "full" "Update"
+out="$(run_stage retrack "t46" "Business Spec" 2>&1 1>/dev/null)"
+ec=$?
+sf="$(state_file t46)"
+if [ "$ec" -eq 1 ] && [ "$(jq -r '.stage' "$sf")" != "Business Spec" ]; then
+  pass "forward-skip guard blocks doc -> full jump to Business Spec without context_report.md"
+else
+  fail "Expected doc -> full escalation to Business Spec to be rejected" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 47: retrack — doc -> full, target=Discovery (full's own first active
+#      stage) -> exit 0 unconditionally (safe fallback) (T-6c) ----
+echo "[47] retrack: doc -> full, target=Discovery (full's own first active stage) -> exit 0"
+setup_sdx_repo "t47" "full" "Update"
+out="$(run_stage retrack "t47" "Discovery")"
+ec=$?
+sf="$(state_file t47)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Discovery" ]; then
+  pass "doc -> full lands unconditionally on full's own first active stage"
+else
+  fail "Expected doc -> full escalation to Discovery to succeed unconditionally" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 48: fix_stage fallback when a FAIL-marked stage is a track's OWN first
+#      active stage — a case unreachable with the real SDX_STAGE_MATRIX (Verification is
+#      never first) but a real edge case in the `matrix_index - 1` arithmetic
+#      (`sed -n "0p"` on a hypothetical track would silently print nothing, producing an
+#      empty "/sdx:backtrack --to " remediation hint). Exercised against a PATCHED copy of
+#      the script with one synthetic track appended to SDX_STAGE_MATRIX, rather than the
+#      real matrix, specifically because the real matrix cannot reach this branch.
+echo "[48] next: fix_stage fallback when the FAIL-marked stage is the track's own first active stage"
+SCRIPT_T48="$(mktemp)"
+# Verification must NOT also be the track's LAST stage, or cmd_next's no-op
+# short-circuit ("$stage" = "$last") fires before the gate/FAIL check ever runs — so the
+# synthetic track needs a stage after Verification too (mirrors every real track, where
+# Verification is always followed by Closeout).
+sed 's/^doc|Closeout|-|no$/doc|Closeout|-|no\nzzztest|Verification|verification_report.md|yes\nzzztest|Closeout|-|no/' "$SCRIPT" > "$SCRIPT_T48"
+chmod +x "$SCRIPT_T48"
+if ! grep -q '^zzztest|Verification|verification_report.md|yes$' "$SCRIPT_T48"; then
+  fail "Expected synthetic track row to be injected into patched script copy" "sed did not match — script format changed?"
+else
+  setup_sdx_repo "t48" "zzztest" "Verification"
+  printf '### [FAIL] synthetic finding\n' > "$TMPPROJ/.claude/sessions/t48/verification_report.md"
+  out48="$(CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$SCRIPT_T48" next "t48" 2>&1 1>/dev/null)"
+  ec48=$?
+  sf48="$(state_file t48)"
+  if [ "$ec48" -eq 1 ] && [ "$(jq -r '.stage' "$sf48")" = "Verification" ] \
+     && printf '%s' "$out48" | grep -q 'backtrack --to Verification' \
+     && ! printf '%s' "$out48" | grep -q 'backtrack --to $'; then
+    pass "fix_stage falls back to the track's own first active stage instead of an empty hint"
+  else
+    fail "Expected non-empty fix_stage fallback naming 'Verification'" "ec48=$ec48 out48='$out48'"
+  fi
+  cleanup
+fi
+rm -f "$SCRIPT_T48"
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

@@ -14,6 +14,7 @@ description: Инициализация SDX фреймворка в сущест
    - `docs/specs/`
    - `docs/designs/`
    - `docs/history/plans/`
+   - `docs/history/retro/`, `docs/history/postmortem/`, `docs/history/intake/` (постоянное хранилище документов разбора `doc`-сессий типов `retro`/`postmortem`/`intake` — ADR-017)
    - `docs/backlog/` (трекаемый бэклог проекта, ADR-015: файл-на-запись с YAML frontmatter + индекс `README.md`; создай индекс с пустыми таблицами по образцу из `${CLAUDE_PLUGIN_ROOT}/sdx/templates/backlog-readme.md`, если его ещё нет)
 2. Убедись, что проект является git-репозиторием (иначе выполни `git init`). Сессии SDX работают в модели **«сессия = ветка `sdx/<id>` в основном рабочем дереве» + версионируемые артефакты** (ADR-012): каталог `.claude/sessions/` в норме НЕ игнорируется целиком — его содержательные файлы (`session_state.json`, `session.log`, `SPEC.md`/`DESIGN.md`/`PLAN.md` и т.д.) трекаются на ветке сессии `sdx/<id>`. Убедись, что корневой `.gitignore` содержит ТОЧЕЧНЫЕ (targeted) паттерны, а не широкий игнор каталога:
    ```gitignore

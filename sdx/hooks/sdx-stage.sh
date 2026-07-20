@@ -53,6 +53,10 @@ standard|Closeout|-|no
 patch|Execution|change_note.md|no
 patch|Verification|verification_report.md|yes
 patch|Closeout|-|no
+doc|Discovery|-|no
+doc|Update|change_note.md|no
+doc|Verification|verification_report.md|yes
+doc|Closeout|-|no
 '
 
 # ---- matrix helpers --------------------------------------------------------------------
@@ -254,7 +258,25 @@ cmd_next() {
       exit 1
     fi
     if [ "$fail_marker" = "yes" ] && grep -q '^### \[FAIL\]' "$path"; then
-      echo "SDX sdx-stage: гейт не пройден — '$artifact' содержит находки FAIL. Исправь их и вызови /sdx:backtrack --to Execution." >&2
+      # Этап исправления зависит от трека: у кодовых треков это Execution, у доп.
+      # треков без Execution (например doc) — предыдущий активный этап, т.е. Update.
+      local fix_stage
+      fix_stage="Execution"
+      if ! printf '%s\n' "$stages" | grep -qx 'Execution'; then
+        local fix_idx
+        fix_idx=$(( $(matrix_index "$track" "$stage") - 1 ))
+        if [ "$fix_idx" -ge 1 ]; then
+          fix_stage="$(printf '%s\n' "$stages" | sed -n "${fix_idx}p")"
+        else
+          # Fallback (no predecessor to name): the FAIL-marked stage is itself the
+          # track's own first active stage. Rather than let `sed -n "0p"` produce an
+          # empty match and emit a blank "/sdx:backtrack --to " hint, point at that
+          # same first active stage — currently unreachable (no track has
+          # fail_marker=yes on its first stage), but a safe, honest answer if one ever did.
+          fix_stage="$(printf '%s\n' "$stages" | head -1)"
+        fi
+      fi
+      echo "SDX sdx-stage: гейт не пройден — '$artifact' содержит находки FAIL. Исправь их и вызови /sdx:backtrack --to $fix_stage." >&2
       exit 1
     fi
   fi

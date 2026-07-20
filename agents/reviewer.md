@@ -37,7 +37,7 @@ tools: Read, Write, Glob, Grep, Bash
 # Verification Report: [session_id]
 
 ## Сводка
-- Трек: [patch|standard|full]
+- Трек: [patch|standard|full|doc]
 - Итог: [PASS | FAIL] (FAIL, если есть хотя бы одна находка FAIL)
 - Находки: FAIL: N, WARN: M
 

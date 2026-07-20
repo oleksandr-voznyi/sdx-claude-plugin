@@ -1,12 +1,12 @@
 ---
 id: PROC-002
 type: proc
-status: open
+status: closed
 priority: normal
 wave: null
 source: audit-2026-07-01 (E1)
-session: null
-links: [PROC-003]
+session: fw-session-types-20260720
+links: [PROC-003, PROC-009, PROC-010, ADR-017]
 ---
 
 # PROC-002. Груминг / ретроспектива / постмортем как типы сессий
@@ -21,3 +21,25 @@ links: [PROC-003]
 Новые типы сессий `grooming` / `retro` / `postmortem` на общем лёгком
 doc-only треке (Discovery-lite → Update → Closeout, без Execution-кода); шаблоны артефактов
 (`retro.md`, `postmortem.md`); выходы всех трёх — записи бэклога. Зависит от E2. ADR.
+
+## Резолюция
+Закрыто сессией `fw-session-types-20260720` (ADR-017). Введён трек `doc`
+(`Discovery -> Update -> Verification -> Closeout`, единственный гейт-артефакт
+`change_note.md`) и **четыре** типа сессий, жёстко привязанных к нему на `/sdx:start`:
+`grooming`, `retro`, `postmortem` и добавленный по ходу сессии `intake` — разбор нового
+блока внешних требований, порождающий записи бэклога (в отличие от `grooming`, который
+перераспределяет атрибуты уже существующих).
+
+Поставлено: 4 строки в `SDX_STAGE_MATRIX` без изменения логики переходов, шаблоны
+`sdx/templates/{retro,postmortem,intake}.md` (первый прецедент шаблона сессионного, а не
+per-project артефакта), постоянные хранилища `docs/history/{retro,postmortem,intake}/`,
+правки шести команд и трёх агентов, `sdx/protocol.md`, `CLAUDE.md`, README (ru+en),
+ADR-017, bump плагина 1.3.0 -> 1.4.0. Обязательный выход любой doc-сессии — минимум одно
+изменение `docs/backlog/`; правки бэклога выполняются на этапе `Update`, Closeout лишь
+сверяет.
+
+Зависимость «E2» (формализация бэклога) была закрыта заранее — PROC-003/ADR-015.
+Порождены новые записи: PROC-009 (нет структурированного места для входящих артефактов
+`intake`), PROC-010 (гонка параллельных субагентов за общими файлами сессии), BUG-007,
+DEBT-017..020 (находки fresh-eyes ревью, сознательно отложенные пользователем).
+

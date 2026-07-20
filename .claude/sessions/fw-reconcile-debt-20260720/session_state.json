@@ -2,7 +2,7 @@
   "session_id": "fw-reconcile-debt-20260720",
   "type": "refactor",
   "track": "standard",
-  "stage": "Discovery",
+  "stage": "Change",
   "gate_mode": "interactive",
   "git_branch": "sdx/fw-reconcile-debt-20260720",
   "artifacts": [],

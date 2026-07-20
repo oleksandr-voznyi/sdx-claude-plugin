@@ -10,3 +10,6 @@
 # database/migrations/*
 # storage/framework/*
 # public/build/*
+
+# Meta-repo: plugin manifest is a lifecycle artifact (version bump at Closeout).
+.claude-plugin/*

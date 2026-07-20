@@ -1,7 +1,7 @@
 {
   "name": "sdx",
   "displayName": "SDX (Spec-Driven X)",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Spec-Driven Development framework: session lifecycle (/sdx:start … /sdx:archive), role subagents (ba, architect, lead-dev, developer, qa, reviewer, tech-writer, devops), adaptive tracks and a deterministic enforcement layer (stage-gate, stop-gate, prod-guard).",
   "author": {
     "name": "Oleksandr Voznyi"

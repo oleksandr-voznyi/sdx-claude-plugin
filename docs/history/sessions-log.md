@@ -204,3 +204,19 @@
 **Затронутые документы:** `README.en.md` (новый), `README.md`, `docs/backlog/` (FEAT-001, FEAT-002 новые; README-индекс).
 
 **Ветка:** `sdx/fw-readme-en-20260720` → слита в `main`.
+
+## 2026-07-20 — fw-stagegate-winpath-20260720 (bug, трек standard, gate_mode auto)
+
+**Цель:** BUG-006 (полевой репорт Windows-сессии) — stage-gate блокировал запись не-md файлов в `.claude/sessions/**`: `file_path` приходит с backslash-разделителями, срезка префикса `$CLAUDE_PROJECT_DIR` и slash-глобы allow-листа не срабатывали (проходил только `*.md`); рабочий процесс обходили через shell.
+
+**Сделано:**
+- **`sdx/hooks/stage-gate.sh`**: нормализация `\` → `/` в `target` и `proj` до вычисления `rel` и всех глобов (pure-bash, семантика гейта не изменена). TDD: сценарий 9 (backslash-путь сессии → allow; без фикса красный) и 10 (backslash-путь кода → deny, guard от расширения гейта); сьют 10/10, все 5 сьютов хуков зелёные. Регистр буквы диска (`C:`/`c:`) — вне скоупа (нет репро). Псевдокод в `docs/designs/phase1-enforcement-routing.md` актуализирован.
+- **`sdx/protocol.md`**: секция «Непрерывное улучшение (рекомендации по ходу сессии)» (PROC-007) — оркестратор обязан озвучивать трение (workaround, ложное срабатывание хука, лишняя церемония) и предлагать `/sdx:backlog add`; молчаливый обход запрещён. Правило сработало в этой же сессии: stage-gate заблокировал бамп версии на Closeout (`.claude-plugin/` вне built-in allow) — решено штатно, паттерн `.claude-plugin/*` в `.claude/sdx/stage-gate.allow` мета-репо.
+- **Бэклог:** BUG-006 и PROC-007 закрыты этой сессией; IDEA-007 «Автоматический пуш записей бэклога в GitHub Issues» (open, low).
+- **Версия плагина:** 1.2.0 → 1.2.1 (фикс требует `/plugin marketplace update sdx` у пользователей).
+
+**Верификация:** GATE PASS (fresh-eyes `reviewer`, контракт изоляции: change_note + diff): 0 FAIL, 0 WARN, 2 INFO (приняты); нетавтологичность сценария 9 и claim «вне скоупа» по остальным хукам подтверждены ревьюером. Ограничение: backslash-пути эмулированы на Unix — нужна проверка репортером на нативной Windows после обновления плагина.
+
+**Затронутые документы:** `sdx/hooks/{stage-gate.sh,test-stage-gate.sh}`, `sdx/protocol.md`, `docs/designs/phase1-enforcement-routing.md`, `docs/backlog/` (BUG-006, PROC-007, IDEA-007 новые; README-индекс), `.claude-plugin/plugin.json`, `.claude/sdx/stage-gate.allow`.
+
+**Ветка:** `sdx/fw-stagegate-winpath-20260720` → слита в `main`.

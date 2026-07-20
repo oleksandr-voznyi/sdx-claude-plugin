@@ -156,6 +156,32 @@ else
 fi
 cleanup
 
+# ---- Scenario 9: allow session artifact with Windows backslash path ----
+echo "[9] Allow .claude session file with backslash separators (Windows path style)"
+setup_sdx_repo "sdx/test-sg" "Task Planning"
+winpath="$(printf '%s' "$TMPPROJ/.claude/sessions/test-sg/session_state.json" | tr '/' '\\')"
+out="$(run_hook "$(jq -cn --arg fp "$winpath" '{tool_input:{file_path:$fp}}')")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (backslash path normalized before matching)"
+else
+  fail "Expected empty stdout + exit 0" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 10: still block code write with Windows backslash path ----
+echo "[10] Block code write with backslash separators outside Execution"
+setup_sdx_repo "sdx/test-sg" "Task Planning"
+winpath="$(printf '%s' "$TMPPROJ/src/app.js" | tr '/' '\\')"
+out="$(run_hook "$(jq -cn --arg fp "$winpath" '{tool_input:{file_path:$fp}}')")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON + exit 0 (normalization does not widen the gate)"
+else
+  fail "Expected deny JSON + exit 0" "ec=$ec out=$out"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

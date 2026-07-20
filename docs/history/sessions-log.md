@@ -220,3 +220,40 @@
 **Затронутые документы:** `sdx/hooks/{stage-gate.sh,test-stage-gate.sh}`, `sdx/protocol.md`, `docs/designs/phase1-enforcement-routing.md`, `docs/backlog/` (BUG-006, PROC-007, IDEA-007 новые; README-индекс), `.claude-plugin/plugin.json`, `.claude/sdx/stage-gate.allow`.
 
 **Ветка:** `sdx/fw-stagegate-winpath-20260720` → слита в `main`.
+
+## 2026-07-20 — fw-dogfood-verifycmd-20260720 (refactor, трек standard, gate_mode auto)
+
+**Цель:** DEBT-004 (wave 4, аудит A6) — мета-проект «не доедал свой корм»: в `sdx/hooks/` 5
+тест-сьютов (56 юнит-тестов), но stop-gate на SDX-сессиях фреймворка молчал (нет
+`verify-cmd.sh`, автодетект пуст), допущение «у мета-проекта нет тестов» устарело.
+
+**Сделано:**
+- **`.claude/sdx/verify-cmd.sh`** (новый, исполняемый): раннер всех `sdx/hooks/test-*.sh` —
+  глоб (новые сьюты подхватываются автоматически), guard пустого глоба (громкий exit 1 вместо
+  тихого no-op), все сьюты прогоняются даже при красном, сводка, exit 1 при любом провале.
+  Полный прогон ~9 с. Stop-gate теперь активен на SDX-сессиях самого фреймворка (dogfooding) —
+  подтверждено end-to-end на этой же сессии.
+- **`commands/verify.md`**: примечание о stop-gate переформулировано генерически («проект без
+  известной тест-команды» вместо «мета-проект без тест-сьюта»).
+- **Датированные поправки DEBT-004**: ADR-4 и связанные места `docs/designs/phase1-enforcement-routing.md`
+  (вкл. заметку [ОТЛОЖЕНО] про pre-commit — WARN-1 ревьюера, доправлен в сессии), допущение №4
+  и REQ-GATE-2 в `docs/specs/phase1-enforcement-routing.md`. Механизм no-op-деградации не
+  менялся — остаётся safe-by-default для проектов без тест-команды.
+- **Косметика комментариев** (логика не тронута): `sdx/hooks/stop-gate.sh`,
+  `sdx/templates/verify-cmd.sh.template` — «meta-project» → генерические формулировки.
+- **Бэклог:** DEBT-004 закрыта этой сессией (в резолюции уточнены факты записи: 56 тестов,
+  путь `sdx/hooks/`); заведена DEBT-013 «У раннера verify-cmd.sh нет собственного автотеста»
+  (open, low — из WARN-2 qa).
+- **Версия плагина:** 1.2.1 → 1.2.2 (изменён контент плагина — нужен `/plugin marketplace update sdx`).
+
+**Верификация:** GATE PASS (qa + fresh-eyes `reviewer`, контракт изоляции: change_note +
+diff 216 строк): 0 FAIL, 2 WARN — WARN-1 доправлен в сессии, WARN-2 → DEBT-013; краевые случаи
+раннера (красный сьют → exit 1, пустой глоб → exit 1) проверены qa в изолированной копии;
+56/56 тестов зелёные.
+
+**Затронутые документы:** `.claude/sdx/verify-cmd.sh` (новый), `commands/verify.md`,
+`docs/specs/phase1-enforcement-routing.md`, `docs/designs/phase1-enforcement-routing.md`,
+`sdx/hooks/stop-gate.sh` (комментарий), `sdx/templates/verify-cmd.sh.template` (комментарий),
+`docs/backlog/` (DEBT-004 closed, DEBT-013 новая; README-индекс), `.claude-plugin/plugin.json`.
+
+**Ветка:** `sdx/fw-dogfood-verifycmd-20260720` → слита в `main`.

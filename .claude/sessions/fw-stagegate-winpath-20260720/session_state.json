@@ -2,7 +2,7 @@
   "session_id": "fw-stagegate-winpath-20260720",
   "type": "bug",
   "track": "standard",
-  "stage": "Verification",
+  "stage": "Closeout",
   "status": "executing",
   "gate_mode": "auto",
   "git_branch": "sdx/fw-stagegate-winpath-20260720",

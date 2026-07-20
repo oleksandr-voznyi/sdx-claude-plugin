@@ -2,3 +2,4 @@
 [2026-07-20 02:08:22] [STAGE_CHANGE] [Change] Discovery -> Change (диагноз: backslash-пути не матчатся глобами stage-gate)
 [2026-07-20 02:12:45] [STAGE_CHANGE] [Execution] Change -> Execution (gate_mode: auto включён пользователем)
 [2026-07-20 02:15:14] [STAGE_CHANGE] [Verification] Execution -> Verification (тесты 10/10, все сьюты хуков зелёные)
+[2026-07-20 02:34:20] [STAGE_CHANGE] [Closeout] Verification -> Closeout (дисклоуз подтверждён запуском /sdx:archive)

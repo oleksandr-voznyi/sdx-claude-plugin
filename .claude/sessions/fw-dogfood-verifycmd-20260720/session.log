@@ -1,1 +1,2 @@
 [2026-07-20 03:46:04] [START] [Discovery] Инициализация сессии fw-dogfood-verifycmd-20260720 (трек: standard, DEBT-004 dogfood verify-cmd)
+[2026-07-20 03:49:01] [STAGE_CHANGE] [Change] Discovery -> Change: change_note.md готов (DEBT-004)

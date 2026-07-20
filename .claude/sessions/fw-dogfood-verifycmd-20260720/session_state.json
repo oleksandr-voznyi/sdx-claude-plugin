@@ -2,7 +2,7 @@
   "session_id": "fw-dogfood-verifycmd-20260720",
   "type": "refactor",
   "track": "standard",
-  "stage": "Discovery",
+  "stage": "Change",
   "status": "draft",
   "gate_mode": "interactive",
   "git_branch": "sdx/fw-dogfood-verifycmd-20260720",

@@ -238,9 +238,14 @@ cmd_next() {
 # backtrack <sid> <target>
 # Backward transition (REQ-BACKTRACK-1/2). No gate check on the departing stage's
 # artifact — going back is always allowed once the target is validated. Marks artifacts of
-# stages strictly after <target> (exclusive) up to and including the current stage as
-# outdated; the target's own artifact is left untouched (it becomes the thing being
-# revisited, not something stale).
+# ALL stages strictly after <target> (exclusive), through the end of the track's active
+# stages, as outdated — NOT bounded by the current stage. REQ-BACKTRACK-2 sets no upper
+# bound ("этапы после новой точки"): an artifact from a stage later than "current" can
+# legitimately exist on disk (e.g. a leftover verification_report.md from a prior
+# Verification cycle while `stage` has since been reset earlier by another backtrack) and
+# must be marked too, otherwise a stale artifact silently keeps passing forward gates. The
+# target's own artifact is left untouched (it becomes the thing being revisited, not
+# something stale).
 cmd_backtrack() {
   local sid="$1" target="$2"
   sdir="$proj/.claude/sessions/$sid"
@@ -265,8 +270,10 @@ cmd_backtrack() {
   local stages
   stages="$(matrix_stages "$track")"
 
-  # Step 2: target must be active in the CURRENT track.
-  if ! printf '%s\n' "$stages" | grep -qx "$target"; then
+  # Step 2: target must be active in the CURRENT track. -F: fixed-string match — $target is
+  # user/orchestrator-supplied and MUST NOT be interpreted as a regex (a target containing
+  # metacharacters could otherwise false-match an unrelated stage name).
+  if ! printf '%s\n' "$stages" | grep -qxF "$target"; then
     echo "SDX sdx-stage: этап '$target' не активен в треке '$track' — нужна смена трека, не откат: /sdx:retrack <track>." >&2
     exit 1
   fi
@@ -301,7 +308,8 @@ cmd_backtrack() {
   while IFS= read -r s; do
     i=$((i + 1))
     [ "$i" -le "$idx_target" ] && continue
-    [ "$i" -gt "$idx_current" ] && break
+    # No upper bound here on purpose (W-1 fix, REQ-BACKTRACK-2): iterate through every
+    # remaining stage of the track, not just up to $idx_current — see docstring above.
     row="$(matrix_row "$track" "$s")"
     artifact="${row%%|*}"
     [ "$artifact" = "-" ] && continue
@@ -312,8 +320,13 @@ cmd_backtrack() {
 
 # retrack <sid> <target>
 # Called AFTER retrack.md has already edited `track` directly via Edit (legitimate,
-# REQ-DENY-2) — reads the already-updated track and the still-unchanged stage. Only
-# checks "target is active in the (new) track"; no forward-gate (this is not an advance).
+# REQ-DENY-2) — reads the already-updated track and the still-unchanged stage. Checks, in
+# the same two-step order as cmd_backtrack (F-3 fix — a stage name check MUST come first,
+# not just "active in this track"; without it a target that is not a real protocol stage
+# name at all would only ever be checked against the CURRENT track and, before this fix,
+# via an unanchored non-fixed-string grep — see the -F note below): (1) target is a
+# recognized protocol stage name at all (union of tracks), (2) target is active in the
+# (new) track. No forward-gate (this is not an advance).
 cmd_retrack() {
   local sid="$1" target="$2"
   sdir="$proj/.claude/sessions/$sid"
@@ -329,9 +342,21 @@ cmd_retrack() {
   track="$(jq -r '.track // empty' "$state")"
   stage="$(jq -r '.stage // empty' "$state")"
 
+  # Step 1: target must be a recognized stage name in the protocol at all (union of
+  # tracks). Without this step a bogus target (typo, or a regex metacharacter string like
+  # ".*") could previously reach write_stage and corrupt `stage` with a value that is not
+  # any protocol stage name (F-3).
+  if ! matrix_stage_exists "$target"; then
+    echo "SDX sdx-stage: '$target' не распознан как имя этапа протокола SDX. Проверь опечатку." >&2
+    exit 1
+  fi
+
   local stages
   stages="$(matrix_stages "$track")"
-  if ! printf '%s\n' "$stages" | grep -qx "$target"; then
+
+  # Step 2: target must be active in the (new) track. -F: fixed-string match — $target is
+  # user/orchestrator-supplied and MUST NOT be interpreted as a regex.
+  if ! printf '%s\n' "$stages" | grep -qxF "$target"; then
     echo "SDX sdx-stage: этап '$target' не активен в треке '$track' — проверь целевой этап /sdx:retrack." >&2
     exit 1
   fi

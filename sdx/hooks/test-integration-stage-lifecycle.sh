@@ -181,9 +181,18 @@ fi
 
 # ---- 13: stage-write-guard.sh still denies a direct Edit of `stage` on the state THIS
 # walk produced — the hook-side half of REQ-DENY-1, exercised against a real, non-fixture
-# session_state.json (not the hook suite's synthetic minimal `{"stage":"..."}` fixture). ----
+# session_state.json (not the hook suite's synthetic minimal `{"stage":"..."}` fixture).
+# old_string/new_string use the actual `jq`-pretty-print spacing (space after `:`) that
+# sdx-stage.sh's writer produces — post F-2 fix (verification_report.md), the guard
+# applies Edit's old_string/new_string to the REAL on-disk bytes and compares the parsed
+# `.stage` value, rather than regexing the fragment for a bare `"stage"` key mention; an
+# old_string that doesn't literally occur in the file (as the previous no-space literal
+# didn't) is now correctly treated as "the real Edit call would fail on its own, nothing
+# to gate" (pass) instead of "deny" — see sdx/hooks/test-stage-write-guard.sh scenario 13
+# for that pass-path covered directly. This scenario is about the deny path, so its
+# literal must match the real file. ----
 echo "[13] stage-write-guard: direct Edit of 'stage' on the walk's own session_state.json is still denied"
-INPUT="$(jq -cn --arg fp "$STATE" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"stage\":\"Closeout\"",new_string:"\"stage\":\"Discovery\""}}')"
+INPUT="$(jq -cn --arg fp "$STATE" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"stage\": \"Closeout\"",new_string:"\"stage\": \"Discovery\""}}')"
 out="$(printf '%s' "$INPUT" | CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$GUARD_HOOK")"
 ec=$?
 if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && [ "$(cur_stage)" = "Closeout" ]; then

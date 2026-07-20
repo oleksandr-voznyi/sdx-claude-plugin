@@ -173,6 +173,13 @@ cleanup
 # ---- Scenario 7: MultiEdit, one edit's new_string contains "stage": -> deny for whole batch ----
 echo "[7] MultiEdit — one of several edits touches \"stage\": -> deny whole batch"
 setup_sdx_repo "sdx/test-swg" "Execution"
+# Real content must actually contain both fields the edits target — the new
+# apply-and-compare mechanism (F-2 fix) simulates literal substitution against the
+# real file, so a "track" edit against a file that has no "track" key would report
+# "old_string not found" (see scenario 13) rather than exercising this scenario's
+# intent (a benign edit followed by a stage-touching one). Overwrite the minimal
+# single-field fixture with a two-field one.
+printf '{"stage":"Execution","track":"full"}' > "$TMPPROJ/$STATE_REL"
 INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '
   {tool_name:"MultiEdit",tool_input:{file_path:$fp,edits:[
     {old_string:"\"track\":\"full\"",new_string:"\"track\":\"standard\""},
@@ -203,20 +210,26 @@ else
 fi
 cleanup
 
-# ---- Scenario 9: Edit touching a "stage" mention that is NOT the actual stage key ----
-# Documented, accepted false positive (DESIGN.md "Deny-хук stage-write-guard.sh" ->
-# "Ложноположительные случаи": pure whitespace reformatting around the real
-# `"stage": "Execution"` key/value, without changing the value, still matches the
-# key-only regex and is blocked as a contract, not a bug — see DESIGN.md.
-echo "[9] Edit reformats whitespace around \"stage\" without changing its value -> deny (documented false positive, not a bug — see DESIGN.md)"
+# ---- Scenario 9: Edit touching a "stage" mention that does NOT change its value ----
+# CONTRACT CHANGE (post F-2 fix, deliberate — see verification_report.md finding F-2 and
+# session report): the old key-regex mechanism treated ANY fragment containing the
+# `"stage"` key substring as a hit, regardless of whether the value actually changed —
+# this whitespace-reformatting case was a *documented, accepted* false positive under
+# that mechanism. The new mechanism applies the edit to the real file content and
+# compares the PARSED `.stage` value before/after, so a reformat that leaves the value
+# unchanged is correctly recognized as a no-op and now PASSES. This is not a regression:
+# it is the direct, intended benefit of switching from key-substring matching to a real
+# apply-and-compare — it removes a previously-accepted false positive without
+# reintroducing the false negative described in F-2 (see scenarios 11/12 below).
+echo "[9] Edit reformats whitespace around \"stage\" without changing its value -> pass (false positive removed by F-2 fix)"
 setup_sdx_repo "sdx/test-swg" "Execution"
 INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"stage\":\"Execution\"","new_string":"\"stage\" :  \"Execution\""}}')"
 out="$(run_hook "$INPUT")"
 ec=$?
-if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-  pass "deny JSON, exit 0 (accepted false positive per DESIGN.md)"
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (value unchanged -> not blocked)"
 else
-  fail "Expected deny JSON + exit 0" "ec=$ec out=$out"
+  fail "Expected empty stdout + exit 0" "ec=$ec out='$out'"
 fi
 cleanup
 
@@ -231,6 +244,87 @@ if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'
   pass "deny JSON, exit 0 (backslash path normalized before matching)"
 else
   fail "Expected deny JSON + exit 0" "ec=$ec out=$out"
+fi
+cleanup
+
+# ---- Scenario 11: Edit changes the "stage" VALUE without mentioning the key at all ----
+# THE F-2 REGRESSION TEST (verification_report.md finding F-2): a fully realistic Edit
+# form — `old_string`/`new_string` are just the quoted value, no `"stage"` key substring
+# anywhere in the fragment. Under the old key-regex mechanism this was a silent bypass
+# (reproduced in the report: exit 0, empty stdout, no deny). The fix must catch this by
+# applying the edit to the real file and comparing the parsed `.stage` value.
+echo "[11] Edit changes stage VALUE only, key never appears in the fragment -> deny (F-2 regression)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"Execution\"",new_string:"\"Closeout\""}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (value-only bypass caught)"
+else
+  fail "Expected deny JSON + exit 0 (F-2 bypass NOT caught)" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 12: MultiEdit — same value-only bypass, but via MultiEdit ----
+echo "[12] MultiEdit — one edit changes stage VALUE only, key never appears -> deny whole batch (F-2 regression)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf '{"stage":"Execution","track":"full"}' > "$TMPPROJ/$STATE_REL"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '
+  {tool_name:"MultiEdit",tool_input:{file_path:$fp,edits:[
+    {old_string:"\"track\":\"full\"",new_string:"\"track\":\"standard\""},
+    {old_string:"\"Execution\"",new_string:"\"Closeout\""}
+  ]}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (value-only bypass caught via MultiEdit)"
+else
+  fail "Expected deny JSON + exit 0 (F-2 bypass NOT caught)" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 13: Edit whose old_string is not present in the file at all -> pass ----
+# The real Edit tool call would itself fail (old_string not found) before ever writing
+# anything, so the hook must not deny here — there is nothing to gate.
+echo "[13] Edit old_string not found in file -> pass (real Edit would fail on its own, nothing to gate)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"Deployment\"",new_string:"\"Closeout\""}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (old_string absent, not blocked)"
+else
+  fail "Expected empty stdout + exit 0" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 14: replace_all=false (default) only touches the FIRST occurrence, ----
+# ---- which here is NOT the stage field -> pass ----
+echo "[14] Edit replace_all=false only replaces first match (non-stage field) -> pass"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf '{"note":"Execution","stage":"Execution"}' > "$TMPPROJ/$STATE_REL"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"Execution\"",new_string:"\"Documentation\""}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (only the non-stage occurrence was touched)"
+else
+  fail "Expected empty stdout + exit 0" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 15: replace_all=true replaces ALL occurrences, including the stage one ----
+# -> deny
+echo "[15] Edit replace_all=true replaces every match, including the stage field -> deny"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf '{"note":"Execution","stage":"Execution"}' > "$TMPPROJ/$STATE_REL"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"Execution\"",new_string:"\"Documentation\"",replace_all:true}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (replace_all correctly touched the stage occurrence too)"
+else
+  fail "Expected deny JSON + exit 0" "ec=$ec out='$out'"
 fi
 cleanup
 

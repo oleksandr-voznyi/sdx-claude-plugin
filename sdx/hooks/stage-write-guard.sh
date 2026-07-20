@@ -38,15 +38,34 @@ state="${state//\\//}"
 
 # Decide the jq-availability path once, up front. jq is the normal way to pull
 # `tool_input.file_path` out of the hook's stdin JSON; without it we fall back to a
-# coarse grep/sed extraction of just that one field. This is a deliberate deviation
-# from the single-line DESIGN pseudocode (which shows a bare `jq -r ...` for target
-# extraction): without a jq-independent way to learn *which* file is being written,
-# the later "jq missing" branch could never be reached for an operation that actually
-# targets an existing session's session_state.json (it would silently no-op instead,
-# via `jq: command not found` -> empty target -> early exit, with no warning printed).
-# The fallback keeps DESIGN's intended ordering optimization (stay silent for
-# operations unrelated to $state, whether or not jq is installed) while still
-# guaranteeing the loud fail-open warning fires exactly when REQ-DENY-4 requires it.
+# coarse grep/sed extraction of just that one field.
+#
+# This is a deliberate deviation from DESIGN.md's "Резолюция сессии и цели" pseudocode,
+# which shows a single bare `jq -r '.tool_input.file_path // empty'` with no fallback —
+# i.e. DESIGN implicitly assumes jq is always present for this step. Reusing that
+# pseudocode literally here would mean: no jq -> `jq: command not found` on stderr,
+# empty $target, `[ -z "$target" ] && exit 0` fires -> the hook silently no-ops for
+# EVERY Write/Edit/MultiEdit, including ones that genuinely target an existing
+# session's session_state.json. That collapses this hook's "jq missing" branch below
+# (the one required by REQ-DENY-4 to print a loud fail-open warning) into dead code: it
+# would never run, because we'd already have bailed out one step earlier for lack of a
+# target. The grep/sed fallback exists ONLY to keep that ordering optimization working
+# (stay silent for operations that don't touch $state at all, jq present or not) while
+# still reaching the REQ-DENY-4 warning exactly when the operation DOES target $state.
+#
+# Known, accepted weaker spot of this fallback (verification_report.md finding W-6):
+# unlike `jq -r`, the grep/sed extraction does not decode JSON string escapes. A
+# Windows-style file_path arrives JSON-escaped (each real "\" is written as two
+# characters, `\\`, in the raw request text). `jq -r` unescapes that back to a single
+# "\" before we hand it to the `target="${target//\\//}"` normalizer below, which then
+# yields a single "/". The grep/sed path instead captures the still-escaped two-character
+# sequence verbatim, so the same normalizer turns each real backslash into TWO
+# forward slashes instead of one — the resulting $target no longer exact-matches
+# $state, and the hook silently no-ops for that specific combination (Windows path +
+# no jq). This is strictly a fail-open gap (REQ-DENY-4's own contract already accepts
+# fail-open without jq), not a new safety hole introduced by the fallback — it is
+# documented here rather than in DESIGN.md because it only affects the already-degraded
+# no-jq path, not the primary detection logic.
 if command -v jq >/dev/null 2>&1; then
   HAVE_JQ=1
   target="$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')"
@@ -81,12 +100,91 @@ fi
 tool_name="$(printf '%s' "$input" | jq -r '.tool_name // empty')"
 old_stage="$(jq -r '.stage // empty' "$state" 2>/dev/null)"
 
-# Rough regex for the Edit/MultiEdit path (DESIGN.md "Edit/MultiEdit (огрублённый
-# путь)"): key-pattern match only, not a value comparison — a touched fragment need
-# not be valid JSON on its own (it can be a partial string inside a larger object).
-STAGE_KEY_RE='"stage"[[:space:]]*:'
-touches_stage() {   # $1 = new_string fragment
-  printf '%s' "$1" | grep -Eq "$STAGE_KEY_RE"
+# --- Edit/MultiEdit detection (post F-2 fix) ---------------------------------------
+# Superseded mechanism (DESIGN.md "Edit/MultiEdit (огрублённый путь)"): regex-match the
+# literal key pattern `"stage"[[:space:]]*:` inside the *fragment* (new_string), never
+# looking at the file itself. verification_report.md finding F-2 showed this has a
+# realistic false negative: a fully ordinary `Edit(old_string:"\"Execution\"",
+# new_string:"\"Closeout\"")` changes the value without the key substring ever
+# appearing in either string, and sailed through undetected — exactly the kind of
+# accidental bypass REQ-DENY-1 exists to close.
+#
+# Fix: for Edit/MultiEdit we now APPLY the edit(s) to the real current file content
+# (read once as `$state`'s bytes) and compare the PARSED `.stage` value before vs.
+# after — the same precise technique `Write` already uses, just derived from a
+# simulated post-edit document instead of a supplied whole one. Matching by parsed
+# value, not by any textual pattern, is the only way to be robust regardless of which
+# substring the edit happens to touch (DESIGN's "уникальность значения `stage` в
+# плоском файле" observation only helps a substring-matching approach; it says nothing
+# about the KEY being present in the touched fragment, which is what F-2 exploited).
+#
+# literal_replace <content> <search> <replace> <all>
+#   Emulates the Edit tool's own substitution semantics: a plain (non-regex) substring
+#   replacement of `search` with `replace` inside `content` — the FIRST occurrence only
+#   unless <all> is "1" (mirrors `tool_input.replace_all`), in which case every
+#   occurrence is replaced, left to right, non-overlapping. Prints the resulting
+#   content on stdout and exits 0 if `search` was found at least once; if `search` was
+#   never found (or is empty), prints nothing and exits 1 — the same situation in which
+#   the REAL Edit tool call would itself fail before writing anything, so the caller
+#   must treat "not found" as "nothing to gate", not as "deny".
+#   Implemented via awk (not bash `${var//search/replace}`) because that bash construct
+#   treats `search` as a glob pattern (`*`, `?`, `[` are special), which would silently
+#   misbehave on JSON fragments containing those characters; awk's index()/substr() do
+#   a byte-for-byte literal search with no such reinterpretation.
+literal_replace() {
+  SWG_CONTENT="$1" SWG_SEARCH="$2" SWG_REPLACE="$3" SWG_ALL="$4" awk '
+    BEGIN {
+      content = ENVIRON["SWG_CONTENT"]
+      search  = ENVIRON["SWG_SEARCH"]
+      replace = ENVIRON["SWG_REPLACE"]
+      all     = ENVIRON["SWG_ALL"]
+      if (search == "") { exit 1 }
+      slen = length(search)
+      pos = 1
+      out = ""
+      found = 0
+      while (1) {
+        rest = substr(content, pos)
+        idx = index(rest, search)
+        if (idx == 0) { out = out rest; break }
+        found = 1
+        out = out substr(rest, 1, idx - 1) replace
+        pos = pos + idx - 1 + slen
+        if (all != "1") { out = out substr(content, pos); break }
+      }
+      if (!found) { exit 1 }
+      printf "%s", out
+      exit 0
+    }
+  '
+}
+
+# check_stage_change <content_before> <content_after>
+#   Parses `.stage` out of both blobs (jq) and denies iff the value actually changed.
+#   If `content_after` fails to parse as JSON while `content_before` did parse, that is
+#   itself suspicious — an edit that turns a well-formed session_state.json into
+#   garbage — and we deny defensively: we cannot prove `stage` didn't change, and
+#   letting a Write/Edit corrupt the ONE file every SDX transition mechanism depends on
+#   is worse than a false-positive block (the same "prove-it-or-block" stance `Write`'s
+#   exact path already takes for unparseable new content). If `content_before` itself
+#   was already unparseable (the state file was corrupt before this operation even
+#   ran), we do NOT additionally block: this hook's job is to guard legitimate `stage`
+#   transitions of a well-formed file, not to arbitrate recovery of an already-broken
+#   one — and blocking here would remove the only remaining way (Edit/Write) to fix it,
+#   which is the same self-defeating trap REQ-DENY-4 already rejected for the no-jq case.
+check_stage_change() {
+  local before="$1" after="$2" new_stage new_rc
+  new_stage="$(printf '%s' "$after" | jq -r '.stage // empty' 2>/dev/null)"
+  new_rc=$?
+  if [ "$new_rc" -ne 0 ]; then
+    if printf '%s' "$before" | jq -e . >/dev/null 2>&1; then
+      deny "SDX stage-write-guard: правка делает session_state.json невалидным JSON — запись заблокирована (не могу доказать, что поле 'stage' не меняется). Пишите валидный JSON или используйте sdx-stage.sh (через /sdx:next, /sdx:backtrack, /sdx:retrack, /sdx:archive)."
+    fi
+    return 0   # was already broken before this operation -> not this hook's problem
+  fi
+  if [ "$new_stage" != "$old_stage" ]; then
+    deny "SDX stage-write-guard: правка поля 'stage' ($old_stage → $new_stage) в обход механизма перехода заблокирована. Используйте /sdx:next, /sdx:backtrack, /sdx:retrack или /sdx:archive — они переводят stage через sdx-stage.sh с проверкой гейта."
+  fi
 }
 
 case "$tool_name" in
@@ -104,20 +202,48 @@ case "$tool_name" in
     fi
     ;;
   Edit)
-    new_string="$(printf '%s' "$input" | jq -r '.tool_input.new_string // empty')"
-    if touches_stage "$new_string"; then
-      deny "SDX stage-write-guard: правка задевает ключ 'stage' в session_state.json в обход механизма перехода. Используйте /sdx:next, /sdx:backtrack, /sdx:retrack или /sdx:archive — они переводят stage через sdx-stage.sh с проверкой гейта."
+    edit_old="$(printf '%s' "$input" | jq -r '.tool_input.old_string // empty')"
+    edit_new="$(printf '%s' "$input" | jq -r '.tool_input.new_string // empty')"
+    edit_all="$(printf '%s' "$input" | jq -r 'if (.tool_input.replace_all == true) then "1" else "0" end')"
+    content_before="$(cat "$state" 2>/dev/null)"
+    if content_after="$(literal_replace "$content_before" "$edit_old" "$edit_new" "$edit_all")"; then
+      check_stage_change "$content_before" "$content_after"
     fi
+    # else: old_string not found in the file -> the real Edit call would itself fail
+    # before writing anything (REQ-DENY-2's "changes the value" precondition can't even
+    # be met) -> nothing to gate, fall through to the trailing `exit 0`.
     ;;
   MultiEdit)
-    # Any single edit touching `stage` blocks the whole batch (MultiEdit is atomic at
-    # the tool level, symmetric with how stage-gate.sh already treats a single
-    # file_path — see DESIGN.md "Edit/MultiEdit (огрублённый путь)").
-    while IFS= read -r ns; do
-      if touches_stage "$ns"; then
-        deny "SDX stage-write-guard: одна из правок MultiEdit задевает ключ 'stage' в session_state.json — вся пачка заблокирована в обход механизма перехода. Используйте /sdx:next, /sdx:backtrack, /sdx:retrack или /sdx:archive — они переводят stage через sdx-stage.sh с проверкой гейта."
+    # Apply every edit SEQUENTIALLY against a running copy of the file content, exactly
+    # as the real MultiEdit tool does (each edit sees the previous edit's result), then
+    # compare the parsed `.stage` value once at the end — not per-edit — against the
+    # value on disk before any of them ran. A single check_stage_change() call at the
+    # end is enough: MultiEdit is atomic at the tool level (all edits apply or none do),
+    # so what matters is the net effect on `stage`, symmetric with how `Write` already
+    # only cares about the final content, not the intermediate diff.
+    content_before="$(cat "$state" 2>/dev/null)"
+    content_cur="$content_before"
+    edits_count="$(printf '%s' "$input" | jq -r '(.tool_input.edits // []) | length')"
+    all_found=1
+    me_i=0
+    while [ "$me_i" -lt "$edits_count" ]; do
+      me_old="$(printf '%s' "$input" | jq -r --argjson i "$me_i" '.tool_input.edits[$i].old_string // empty')"
+      me_new="$(printf '%s' "$input" | jq -r --argjson i "$me_i" '.tool_input.edits[$i].new_string // empty')"
+      me_all="$(printf '%s' "$input" | jq -r --argjson i "$me_i" 'if (.tool_input.edits[$i].replace_all == true) then "1" else "0" end')"
+      if me_next="$(literal_replace "$content_cur" "$me_old" "$me_new" "$me_all")"; then
+        content_cur="$me_next"
+      else
+        # This edit's old_string isn't in the content at this point in the sequence ->
+        # the real MultiEdit call would fail atomically right here, so the whole batch
+        # never writes anything -> nothing to gate for the entire operation.
+        all_found=0
+        break
       fi
-    done < <(printf '%s' "$input" | jq -r '.tool_input.edits[]?.new_string // empty')
+      me_i=$((me_i + 1))
+    done
+    if [ "$all_found" -eq 1 ] && [ "$edits_count" -gt 0 ]; then
+      check_stage_change "$content_before" "$content_cur"
+    fi
     ;;
   *)
     exit 0

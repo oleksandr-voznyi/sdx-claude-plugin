@@ -268,13 +268,40 @@ else
 fi
 cleanup
 
-# ---- Scenario 15: retrack — track already updated to standard, target=Change active -> stage changes ----
-echo "[15] retrack: track already updated to standard, target=Change active -> stage changes without forward-gate"
-setup_sdx_repo "t15" "standard" "Discovery"
-# change_note.md deliberately absent — retrack has no forward-gate.
-out="$(run_stage retrack "t15" "Change")"
+# ---- Scenario 15: backtrack — outdated marking is NOT bounded by the current stage (W-1) ----
+# Reproduces the exact verification_report.md scenario: current stage is Task Planning,
+# but a leftover verification_report.md from a previous cycle (stage index 7, i.e. AFTER
+# the current stage index 4) already sits on disk. REQ-BACKTRACK-2 sets no upper bound —
+# every stage strictly after the target must be covered, regardless of where "current" is.
+echo "[15] backtrack: outdated marking covers stages strictly after target with NO upper bound at current stage (W-1)"
+setup_sdx_repo "t15b" "full" "Task Planning"
+printf '# Design\n' > "$TMPPROJ/.claude/sessions/t15b/DESIGN.md"
+printf '# Plan\n' > "$TMPPROJ/.claude/sessions/t15b/PLAN.md"
+printf 'leftover report\n' > "$TMPPROJ/.claude/sessions/t15b/verification_report.md"
+out="$(run_stage backtrack "t15b" "Business Spec")"
 ec=$?
-sf="$(state_file t15)"
+design_first_line="$(head -1 "$TMPPROJ/.claude/sessions/t15b/DESIGN.md")"
+plan_first_line="$(head -1 "$TMPPROJ/.claude/sessions/t15b/PLAN.md")"
+report_first_line="$(head -1 "$TMPPROJ/.claude/sessions/t15b/verification_report.md")"
+if [ "$ec" -eq 0 ] \
+   && printf '%s' "$design_first_line" | grep -q 'SDX-OUTDATED' \
+   && printf '%s' "$plan_first_line" | grep -q 'SDX-OUTDATED' \
+   && printf '%s' "$report_first_line" | grep -q 'SDX-OUTDATED' \
+   && printf '%s' "$out" | grep -q "OUTDATED: .*verification_report.md"; then
+  pass "DESIGN.md, PLAN.md AND leftover verification_report.md (past idx_current) all marked outdated"
+else
+  fail "Expected ALL stages after target marked, including ones past current stage" \
+    "ec=$ec out='$out' design1='$design_first_line' plan1='$plan_first_line' report1='$report_first_line'"
+fi
+cleanup
+
+# ---- Scenario 16: retrack — track already updated to standard, target=Change active -> stage changes ----
+echo "[16] retrack: track already updated to standard, target=Change active -> stage changes without forward-gate"
+setup_sdx_repo "t16" "standard" "Discovery"
+# change_note.md deliberately absent — retrack has no forward-gate.
+out="$(run_stage retrack "t16" "Change")"
+ec=$?
+sf="$(state_file t16)"
 if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Change" ]; then
   pass "retrack succeeds without change_note.md present"
 else
@@ -282,12 +309,12 @@ else
 fi
 cleanup
 
-# ---- Scenario 16: retrack — target not active in (updated) new track -> exit 1 ----
-echo "[16] retrack: target not active in new track -> exit 1"
-setup_sdx_repo "t16" "patch" "Execution"
-out="$(run_stage retrack "t16" "Technical Design" 2>&1 1>/dev/null)"
+# ---- Scenario 17: retrack — target not active in (updated) new track -> exit 1 ----
+echo "[17] retrack: target not active in new track -> exit 1"
+setup_sdx_repo "t17" "patch" "Execution"
+out="$(run_stage retrack "t17" "Technical Design" 2>&1 1>/dev/null)"
 ec=$?
-sf="$(state_file t16)"
+sf="$(state_file t17)"
 if [ "$ec" -eq 1 ] && [ "$(jq -r '.stage' "$sf")" = "Execution" ]; then
   pass "exit 1, stage unchanged"
 else
@@ -295,8 +322,59 @@ else
 fi
 cleanup
 
-# ---- Scenario 17: no jq in $PATH -> any mutating subcommand exits 2, file untouched ----
-echo "[17] no jq in \$PATH -> exit 2, file untouched"
+# ---- Scenario 18: retrack — unrecognized stage name (typo) -> exit 1, 'не распознан', file untouched (F-3/W-4) ----
+echo "[18] retrack: unrecognized stage name (typo) -> exit 1, 'не распознан', file untouched"
+setup_sdx_repo "t18r" "full" "Execution"
+sf="$(state_file t18r)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage retrack "t18r" "Discoveryy" 2>&1 1>/dev/null)"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 1 ] && printf '%s' "$out" | grep -q "не распознан" && [ "$before_sum" = "$after_sum" ]; then
+  pass "exit 1, 'не распознан', file untouched"
+else
+  fail "Expected unrecognized-name rejection with unchanged file" "ec=$ec out='$out' before=$before_sum after=$after_sum"
+fi
+cleanup
+
+# ---- Scenario 19: retrack — regex-metacharacter target is NOT falsely matched as an active stage (F-3 core repro) ----
+# `retrack <sid> '.*'` used to succeed (rc=0) and write the literal string ".*" into
+# `stage` because the old code fed $target straight into `grep -qx` (no -F) with no prior
+# "is this a real stage name at all" check. It must be rejected as unrecognized, and the
+# state file must stay byte-for-byte unchanged.
+echo "[19] retrack: regex-metacharacter target ('.*') treated literally, not as a pattern -> exit 1, file untouched"
+setup_sdx_repo "t19r" "full" "Execution"
+sf="$(state_file t19r)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage retrack "t19r" ".*" 2>&1 1>/dev/null)"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 1 ] && printf '%s' "$out" | grep -q "не распознан" \
+   && [ "$before_sum" = "$after_sum" ] \
+   && [ "$(jq -r '.stage' "$sf")" != ".*" ]; then
+  pass "'.*' rejected as unrecognized, state file untouched (stage still 'Execution')"
+else
+  fail "Expected '.*' to be rejected without corrupting state" "ec=$ec out='$out' before=$before_sum after=$after_sum stage=$(jq -r '.stage' "$sf" 2>/dev/null)"
+fi
+cleanup
+
+# ---- Scenario 20: retrack — target == current stage -> exit 0 no-op, file untouched (REQ-STAGE-4/W-4) ----
+echo "[20] retrack: target == current stage -> exit 0 no-op, file untouched"
+setup_sdx_repo "t20r" "full" "Execution"
+sf="$(state_file t20r)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage retrack "t20r" "Execution")"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Execution" ] && [ "$before_sum" = "$after_sum" ]; then
+  pass "no-op, file untouched"
+else
+  fail "Expected no-op on same-stage retrack" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 21: no jq in $PATH -> any mutating subcommand exits 2, file untouched ----
+echo "[21] no jq in \$PATH -> exit 2, file untouched"
 setup_sdx_repo "t17" "full" "Discovery"
 printf 'notes\n' > "$TMPPROJ/.claude/sessions/t17/context_report.md"
 sf="$(state_file t17)"
@@ -318,8 +396,8 @@ else
 fi
 cleanup
 
-# ---- Scenario 18: write_stage atomicity — no leftover temp files, original stays valid JSON ----
-echo "[18] write_stage atomicity: broken jq (no jq) leaves no temp files, original stays valid+unchanged"
+# ---- Scenario 22: write_stage atomicity — no leftover temp files, original stays valid JSON ----
+echo "[22] write_stage atomicity: broken jq (no jq) leaves no temp files, original stays valid+unchanged"
 setup_sdx_repo "t18" "full" "Discovery"
 printf 'notes\n' > "$TMPPROJ/.claude/sessions/t18/context_report.md"
 sf="$(state_file t18)"
@@ -339,17 +417,40 @@ else
 fi
 cleanup
 
-# ---- Scenario 19: sanity cross-check — full-track stage names in the matrix vs protocol.md ----
-echo "[19] sanity: full-track stage set in SDX_STAGE_MATRIX matches sdx/protocol.md's track table"
+# ---- Scenario 23: sanity cross-check — ALL THREE tracks, order-sensitive (W-5) ----
+# Previously this only checked the 'full' row, as an unordered SET (both sorted before
+# comparison) — a swap of two stages in either document, or a drift in 'patch'/'standard',
+# would go undetected. Now checks all three tracks in the exact row order (no sorting), so
+# reordering is caught too. NOTE: protocol.md's chain cells may carry trailing parenthetical
+# annotations on a stage name (e.g. "Discovery (лёгкий, инлайн)", "Verification (лёгкая,
+# обязательная — ADR-014)") — stripped before comparison, they annotate, not rename, the
+# stage. Split on the literal " → " string via sed/awk (NOT `tr '→' '\n'`): `tr` treats its
+# argument byte-by-byte, and "→" (U+2192, bytes E2 86 92) shares its lead byte with "—"
+# (U+2014, bytes E2 80 94) used inside the patch-row annotation — byte-wise `tr` corrupts
+# that annotation text. sed/awk match the multi-byte separator as a whole string, so they
+# don't have this problem.
+echo "[23] sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch, in order"
 proto="$SCRIPT_DIR/../protocol.md"
-proto_row="$(grep '^| \*\*full\*\*' "$proto")"
-proto_chain="$(printf '%s' "$proto_row" | awk -F'|' '{print $4}')"
-proto_stages="$(printf '%s\n' "$proto_chain" | tr '→' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' | sort)"
-matrix_stages_full="$(grep -E '^full\|' "$SCRIPT" | cut -d'|' -f2 | sort)"
-if [ -n "$proto_stages" ] && [ "$proto_stages" = "$matrix_stages_full" ]; then
-  pass "protocol.md 'full' stage set matches SDX_STAGE_MATRIX"
+sanity_all_ok=1
+sanity_detail=""
+for track in full standard patch; do
+  proto_row="$(grep "^| \*\*$track\*\*" "$proto")"
+  proto_chain="$(printf '%s' "$proto_row" | awk -F'|' '{print $4}')"
+  proto_stages="$(printf '%s\n' "$proto_chain" \
+    | sed 's/ → /\n/g' \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+    | sed -E 's/[[:space:]]*\([^()]*\)[[:space:]]*$//' \
+    | grep -v '^$')"
+  matrix_stages_this="$(grep -E "^${track}\|" "$SCRIPT" | cut -d'|' -f2)"
+  if [ -z "$proto_stages" ] || [ "$proto_stages" != "$matrix_stages_this" ]; then
+    sanity_all_ok=0
+    sanity_detail="$sanity_detail track=$track proto=[$(printf '%s' "$proto_stages" | tr '\n' ',')] matrix=[$(printf '%s' "$matrix_stages_this" | tr '\n' ',')];"
+  fi
+done
+if [ "$sanity_all_ok" -eq 1 ]; then
+  pass "protocol.md matches SDX_STAGE_MATRIX for full/standard/patch, order included"
 else
-  fail "Expected matching stage sets" "proto=[$proto_stages] matrix=[$matrix_stages_full]"
+  fail "Expected matching ordered stage chains for all 3 tracks" "$sanity_detail"
 fi
 
 echo ""

@@ -1,3 +1,4 @@
 [2026-07-20 04:42:42] [START] [Discovery] Инициализация сессии fw-stage-guard-20260720 (трек: full, источник: DEBT-001)
 [2026-07-20 04:51:17] [STAGE_CHANGE] [Discovery] -> Business Spec (гейт пройден: context_report.md, решения по deny-границе/DEBT-011/матрице приняты)
 [2026-07-20 05:10:04] [STAGE_CHANGE] [Business Spec] -> Technical Design (SPEC.md принят; REQ-DENY-4 изменён на fail-open по решению пользователя)
+[2026-07-20 05:29:15] [STAGE_CHANGE] [Technical Design] -> Task Planning (DESIGN.md принят; развилки: init-подкоманда, рефакторинг lib в скоупе, HTML-баннер, версия 1.3.0)

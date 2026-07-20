@@ -3,3 +3,4 @@
 [2026-07-20 05:10:04] [STAGE_CHANGE] [Business Spec] -> Technical Design (SPEC.md принят; REQ-DENY-4 изменён на fail-open по решению пользователя)
 [2026-07-20 05:29:15] [STAGE_CHANGE] [Technical Design] -> Task Planning (DESIGN.md принят; развилки: init-подкоманда, рефакторинг lib в скоупе, HTML-баннер, версия 1.3.0)
 [2026-07-20 07:39:07] [STAGE_CHANGE] [Task Planning] -> Execution (PLAN.md принят, 29 задач; gate_mode -> auto, блоки A/B/C параллельно)
+[2026-07-20 07:57:56] [STAGE_CHANGE] [Execution] -> Documentation (T-01..T-25 выполнены, 8/8 тест-сьютов зелёные)

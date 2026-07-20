@@ -1,1 +1,2 @@
 [2026-07-20 04:42:42] [START] [Discovery] Инициализация сессии fw-stage-guard-20260720 (трек: full, источник: DEBT-001)
+[2026-07-20 04:51:17] [STAGE_CHANGE] [Discovery] -> Business Spec (гейт пройден: context_report.md, решения по deny-границе/DEBT-011/матрице приняты)

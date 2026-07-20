@@ -2,7 +2,7 @@
 
 ## Статус реализации
 
-**16% (5/32 задач)** — волна 1 выполнена (T1, T2, T7, T8, T9).
+**31% (10/32 задач)** — волны 1-2 выполнены (T1-T9, T32); тестовое ядро зелёное (9/9 сьютов).
 
 ## Чек-лист задач
 
@@ -24,7 +24,7 @@
   Критерий готовности: сценарий 34 из T1 становится GREEN; `git diff sdx/hooks/sdx-stage.sh`
   показывает ровно одну добавленную строку данных, ноль изменённых строк кода.
 
-- [ ] **[TEST] T3. `test-sdx-stage.sh` — новый sanity-сценарий [49]: `vibe` состоит ровно из
+- [x] **[TEST] T3. `test-sdx-stage.sh` — новый sanity-сценарий [49]: `vibe` состоит ровно из
   `Prototype` и не имеет `Closeout`**
   Дословный скрипт из DESIGN «Тест-стратегия», строки 703-708 (`vibe_stages`/`prototype_tracks`
   через `grep`/`cut`). Обязательна мутационная проверка (строки 733-736): удаление строки `vibe`
@@ -34,14 +34,14 @@
   Критерий готовности: сценарий [49] GREEN на текущем коде; вручную (temp-копия скрипта)
   проверены все три мутации из DESIGN — каждая роняет 49 или 52.
 
-- [ ] **[TEST] T4. `test-sdx-stage.sh` — сценарии 50-51: `init` для `track=vibe`**
+- [x] **[TEST] T4. `test-sdx-stage.sh` — сценарии 50-51: `init` для `track=vibe`**
   Позитив: `init t50 proto vibe Prototype interactive sdx/t50` → код `0`, `stage=Prototype`,
   `track=vibe`, `[START]` в логе. Негатив: `init` со `stage=Execution` при `track=vibe` → код `2`,
   файл состояния НЕ создан (DESIGN строки 716-717). Зависит от T2. REQ-VIBE-2.
   Критерий готовности: оба сценария GREEN; повторный запуск негативного сценария подтверждает
   отсутствие побочного файла (`[ ! -f session_state.json ]`).
 
-- [ ] **[TEST] T5. `test-sdx-stage.sh` — сценарии 52-55: `next`/`backtrack` для `track=vibe`**
+- [x] **[TEST] T5. `test-sdx-stage.sh` — сценарии 52-55: `next`/`backtrack` для `track=vibe`**
   52: `next` на `vibe|Prototype` → код `0`, stdout ровно `OK no-op Prototype`, `stage` не
   изменён, md5 файла состояния до/после совпадает. 53: `backtrack --to Prototype` на
   `vibe|Prototype` → код `0`, `OK no-op Prototype`. 54: `backtrack --to Execution` на `vibe` →
@@ -52,7 +52,7 @@
   Критерий готовности: все четыре сценария GREEN; md5-проверка в 52 реализована буквально (не
   заменена сравнением по времени модификации).
 
-- [ ] **[TEST] T6. `test-sdx-stage.sh` — сценарии 56-61: `retrack` легализации `vibe → {standard, full}`**
+- [x] **[TEST] T6. `test-sdx-stage.sh` — сценарии 56-61: `retrack` легализации `vibe → {standard, full}`**
   56: `vibe→standard`, target=`Execution`, есть непустой `change_note.md` → код `0`. 57: то же
   без `change_note.md` и без пары `SPEC.md`+`DESIGN.md` → код `1`, stderr называет `Change`
   (негативный). 58: та же цель, есть пара `SPEC.md`+`DESIGN.md` без `change_note.md` → код `0`
@@ -98,7 +98,7 @@
 
 ### Блок D — интеграционный тест сквозного прохода легализации
 
-- [ ] **[TEST] T32. `sdx/hooks/test-integration-stage-lifecycle.sh` — сценарии 14-19: полный маршрут `vibe → Closeout`**
+- [x] **[TEST] T32. `sdx/hooks/test-integration-stage-lifecycle.sh` — сценарии 14-19: полный маршрут `vibe → Closeout`**
   Продолжает нумерацию (последний существующий — 13). Шаги дословно по DESIGN строки 759-766:
   14 — `init` vibe-сессии на `Prototype`; 15 — `next` → `OK no-op Prototype`, файл состояния
   байт-в-байт не изменён; 16 — создать `change_note.md`, сменить `track` на `standard` (имитация

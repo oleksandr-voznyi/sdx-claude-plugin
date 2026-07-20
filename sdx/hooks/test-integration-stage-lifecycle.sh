@@ -201,6 +201,93 @@ else
   fail "Expected deny on direct Edit of stage" "ec=$ec out=$out"
 fi
 
+
+# ---- 14-19: a SECOND, independent session on the `vibe` track (proto session type,
+# ADR-018) — the sole legalization route out of a track that has no `Closeout` row of its
+# own (DESIGN.md "Решение 1"/"Решение 3"). Reuses the SAME temp repo/branch as steps 1-13
+# (sdx-stage.sh never resolves branch -> sid on init/next/retrack, only the guard hook
+# does, and the guard isn't exercised in this block) but a fresh sid, since SID's own
+# session_state.json is already sitting at Closeout from step 12. ----
+SID2="it-lifecycle-vibe"
+SDIR2="$TMPPROJ/.claude/sessions/$SID2"
+STATE2="$SDIR2/session_state.json"
+cur_stage2() { jq -r '.stage' "$STATE2"; }
+cur_track2() { jq -r '.track' "$STATE2"; }
+
+# ---- 14: init on Prototype, the only active stage of vibe (REQ-VIBE-1/2) ----
+echo "[14] init: vibe-track session (type=proto) starts at Prototype"
+out="$(run_stage init "$SID2" "proto" "vibe" "Prototype" "interactive" "$BRANCH")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -f "$STATE2" ] && [ "$(cur_stage2)" = "Prototype" ] && [ "$(cur_track2)" = "vibe" ]; then
+  pass "vibe session created, stage=Prototype, track=vibe"
+else
+  fail "Expected vibe session at Prototype" "ec=$ec out='$out'"
+fi
+
+# ---- 15: next on Prototype is a permanent no-op — Closeout is unreachable because the
+# vibe row in SDX_STAGE_MATRIX has no successor (Решение 1: enforcement by data shape, not
+# a code branch), not because of any special-cased check. Byte-for-byte untouched file,
+# mirroring the genuine terminal no-op at Closeout in scenario [12]. ----
+echo "[15] next: Prototype -> OK no-op Prototype, vibe never reaches Closeout on its own, file untouched"
+before_sum2="$(md5sum "$STATE2" | cut -d' ' -f1)"
+out="$(run_stage next "$SID2")"; ec=$?
+after_sum2="$(md5sum "$STATE2" | cut -d' ' -f1)"
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Prototype" ] && [ "$before_sum2" = "$after_sum2" ]; then
+  pass "terminal no-op at Prototype, file untouched (vibe has no Closeout row)"
+else
+  fail "Expected terminal no-op at Prototype" "ec=$ec out='$out'"
+fi
+
+# ---- 16: legalization (Решение 3) — the ONLY way out of vibe is /sdx:retrack. The track
+# switch is a direct field edit performed by retrack.md itself BEFORE calling the
+# subcommand (mirrors scenario [8]'s full->standard edit). Reaching Execution on the new
+# (standard) track requires proof that spec-after reverse-engineering actually happened:
+# first attempted with track already switched but no change_note.md yet (rejected, code 1,
+# message names the unmet Change gate — "пропустить легализацию нельзя"), then retried
+# after creating it (accepted, code 0, stage=Execution). ----
+echo "[16] retrack: vibe -> standard legalization rejected without change_note.md, accepted once it exists"
+jq '.track = "standard"' "$STATE2" > "$STATE2.tmp" && mv "$STATE2.tmp" "$STATE2"
+out1="$(run_stage retrack "$SID2" "Execution" 2>&1 1>/dev/null)"; ec1=$?
+printf '# Change note (reverse-engineered from the accepted prototype)\n' > "$SDIR2/change_note.md"
+out2="$(run_stage retrack "$SID2" "Execution")"; ec2=$?
+if [ "$ec1" -eq 1 ] && printf '%s' "$out1" | grep -q "Change" \
+   && [ "$ec2" -eq 0 ] && [ "$(cur_track2)" = "standard" ] && [ "$(cur_stage2)" = "Execution" ]; then
+  pass "legalization rejected without spec-after proof, then accepted once change_note.md exists"
+else
+  fail "Expected reject-then-accept legalization sequence" "ec1=$ec1 out1='$out1' ec2=$ec2 out2='$out2'"
+fi
+
+# ---- 17: next across the legalized (standard) track, same as scenario [10] ----
+echo "[17] next: Execution -> Verification (no objectively checkable gate artifact for Execution)"
+out="$(run_stage next "$SID2")"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(cur_stage2)" = "Verification" ]; then
+  pass "advanced to Verification"
+else
+  fail "Expected Verification" "ec=$ec out='$out'"
+fi
+
+# ---- 18: same as scenario [11], on the legalized session ----
+echo "[18] next: Verification -> Closeout (verification_report.md present, no FAIL marker)"
+printf 'PASS\n' > "$SDIR2/verification_report.md"
+out="$(run_stage next "$SID2")"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(cur_stage2)" = "Closeout" ] && [ "$out" = "OK Verification -> Closeout" ]; then
+  pass "legalized vibe session reaches Closeout via the standard track's own gate chain"
+else
+  fail "Expected Closeout" "ec=$ec out='$out'"
+fi
+
+# ---- 19: terminal no-op at Closeout — UNLIKE vibe itself (scenario [15]), a legalized
+# session has a real Closeout row, so this is a genuine terminal, not an escape hatch. ----
+echo "[19] next: Closeout is terminal -> OK no-op Closeout (legalized session has a normal terminal, unlike vibe)"
+before_sum2="$(md5sum "$STATE2" | cut -d' ' -f1)"
+out="$(run_stage next "$SID2")"; ec=$?
+after_sum2="$(md5sum "$STATE2" | cut -d' ' -f1)"
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Closeout" ] && [ "$before_sum2" = "$after_sum2" ]; then
+  pass "terminal no-op at Closeout on the legalized (standard) track, file untouched"
+else
+  fail "Expected terminal no-op at Closeout" "ec=$ec out='$out'"
+fi
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

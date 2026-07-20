@@ -1062,6 +1062,214 @@ else
 fi
 rm -f "$SCRIPT_T48"
 
+# ---- Scenario 49: sanity — track `vibe` consists of exactly one stage `Prototype` and has
+#      NO `Closeout` (REQ-VIBE-8's machine-readable form: "no merge without legalization").
+#      Scenario [34] alone does not catch this: a future edit that adds `vibe|Closeout|-|no`
+#      to BOTH the matrix and protocol.md's chain cell at the same time would keep [34]
+#      green while silently destroying the structural invariant. This check is
+#      self-contained (reads only $SCRIPT, no protocol.md cross-check) and also proves
+#      `Prototype` has not leaked into any other track's row (DESIGN "Тест-стратегия").
+echo "[49] sanity: track vibe consists of exactly one stage Prototype and has no Closeout (REQ-VIBE-8)"
+vibe_stages="$(grep -E '^vibe\|' "$SCRIPT" | cut -d'|' -f2)"
+prototype_tracks="$(grep -E '^[a-z]+\|Prototype\|' "$SCRIPT" | cut -d'|' -f1 | sort -u)"
+if [ "$vibe_stages" = "Prototype" ] && [ "$prototype_tracks" = "vibe" ]; then
+  pass "vibe = {Prototype} only (no Closeout); Prototype not leaked into other tracks"
+else
+  fail "Expected vibe track to be exactly {Prototype}, no Closeout" "vibe_stages=[$vibe_stages] prototype_tracks=[$prototype_tracks]"
+fi
+
+# ---- Scenario 50: init — track=vibe, type=proto, stage=Prototype (the track's only/first
+#      active stage) -> success ----
+echo "[50] init: type=proto, track=vibe, stage=Prototype -> success"
+TMPPROJ="$(mktemp -d)"
+out="$(run_stage init "t50" "proto" "vibe" "Prototype" "interactive" "sdx/t50")"
+ec=$?
+sf="$(state_file t50)"
+lf="$(log_file t50)"
+if [ "$ec" -eq 0 ] && [ -f "$sf" ] && [ "$(jq -r '.stage' "$sf")" = "Prototype" ] \
+   && [ "$(jq -r '.track' "$sf")" = "vibe" ] && grep -q '\[START\]' "$lf"; then
+  pass "vibe/proto initialized at Prototype, exit 0, [START] logged"
+else
+  fail "Expected vibe/proto init at Prototype to succeed" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 51: init — track=vibe, stage=Execution (NOT vibe's only/first active stage)
+#      -> exit 2, no state file created (negative) ----
+echo "[51] init: track=vibe, stage=Execution (not vibe's first/only stage) -> exit 2, no state file created"
+TMPPROJ="$(mktemp -d)"
+out="$(run_stage init "t51" "proto" "vibe" "Execution" "interactive" "sdx/t51" 2>&1 1>/dev/null)"
+ec=$?
+sf="$(state_file t51)"
+if [ "$ec" -eq 2 ] && [ ! -f "$sf" ]; then
+  pass "exit 2, no state file created for non-Prototype stage on vibe"
+else
+  fail "Expected vibe init rejection for stage=Execution" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 52: next — vibe|Prototype (the track's only/last active stage) -> exit 0,
+#      stdout exactly "OK no-op Prototype", file untouched (md5 before == after). Behavioural
+#      counterpart of [49]: the absent Closeout row means `stage == last` is always true for
+#      vibe, so `next` can never advance it — REQ-VIBE-8 enforced by data shape, not code.
+echo "[52] next: vibe|Prototype -> exit 0, stdout 'OK no-op Prototype', file untouched (md5)"
+setup_sdx_repo "t52" "vibe" "Prototype"
+sf="$(state_file t52)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage next "t52")"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Prototype" ] && [ "$before_sum" = "$after_sum" ]; then
+  pass "vibe: no-op on Prototype (no Closeout to advance to), file untouched"
+else
+  fail "Expected vibe no-op on Prototype" "ec=$ec out='$out' before=$before_sum after=$after_sum"
+fi
+cleanup
+
+# ---- Scenario 53: backtrack — vibe|Prototype, --to Prototype (self) -> exit 0 no-op ----
+echo "[53] backtrack: vibe|Prototype --to Prototype -> exit 0 no-op 'OK no-op Prototype'"
+setup_sdx_repo "t53" "vibe" "Prototype"
+out="$(run_stage backtrack "t53" "Prototype")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Prototype" ]; then
+  pass "vibe: backtrack --to Prototype is a no-op"
+else
+  fail "Expected vibe backtrack --to Prototype no-op" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 54: backtrack — vibe|Prototype, --to Execution (not active in vibe) -> exit 1
+#      (negative) ----
+echo "[54] backtrack: vibe|Prototype --to Execution -> exit 1, 'не активен в треке' + /sdx:retrack"
+setup_sdx_repo "t54" "vibe" "Prototype"
+out="$(run_stage backtrack "t54" "Execution" 2>&1 1>/dev/null)"
+ec=$?
+if [ "$ec" -eq 1 ] && printf '%s' "$out" | grep -q "не активен в треке" \
+   && printf '%s' "$out" | grep -q "/sdx:retrack"; then
+  pass "exit 1, 'не активен в треке' + /sdx:retrack hint"
+else
+  fail "Expected vibe backtrack --to Execution rejection" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 55: backtrack — track=standard, --to Prototype (a union member since [49]/[54],
+#      but NOT active in 'standard') -> exit 1, 'не активен в треке 'standard'' (negative) —
+#      proves Prototype joining the union of recognized stage names did NOT open it up to
+#      tracks other than vibe ----
+echo "[55] backtrack: track=standard --to Prototype -> exit 1, не активен в треке 'standard' (Prototype not leaked to other tracks)"
+setup_sdx_repo "t55" "standard" "Execution"
+out="$(run_stage backtrack "t55" "Prototype" 2>&1 1>/dev/null)"
+ec=$?
+if [ "$ec" -eq 1 ] && printf '%s' "$out" | grep -q "не активен в треке 'standard'"; then
+  pass "exit 1, Prototype not active in standard track"
+else
+  fail "Expected Prototype backtrack rejection on standard track" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 56: retrack — legalization vibe -> standard, target=Execution, non-empty
+#      change_note.md present (native standard evidence) -> exit 0, stage=Execution. Fixture
+#      mirrors scenario [16]'s shape: `track` already carries the NEW value (as retrack.md's
+#      step 4.2 Edit would have left it), `stage` is still "Prototype" (the leftover vibe
+#      value, untouched until this very call writes it) ----
+echo "[56] retrack: legalize vibe -> standard, target=Execution, non-empty change_note.md -> exit 0"
+setup_sdx_repo "t56" "standard" "Prototype"
+printf 'legalization change note\n' > "$TMPPROJ/.claude/sessions/t56/change_note.md"
+out="$(run_stage retrack "t56" "Execution")"
+ec=$?
+sf="$(state_file t56)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Execution" ]; then
+  pass "legalization vibe->standard reaches Execution with change_note.md"
+else
+  fail "Expected legalization vibe->standard to reach Execution" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 57: retrack — legalization vibe -> standard, target=Execution, WITHOUT
+#      change_note.md and WITHOUT the SPEC.md+DESIGN.md pair -> exit 1, stderr names Change
+#      (negative: legalization without reverse-engineered evidence is mechanically
+#      impossible) ----
+echo "[57] retrack: legalize vibe -> standard, target=Execution, no evidence at all -> exit 1, stderr names Change"
+setup_sdx_repo "t57" "standard" "Prototype"
+out="$(run_stage retrack "t57" "Execution" 2>&1 1>/dev/null)"
+ec=$?
+sf="$(state_file t57)"
+if [ "$ec" -eq 1 ] && [ "$(jq -r '.stage' "$sf")" = "Prototype" ] \
+   && printf '%s' "$out" | grep -q "Change"; then
+  pass "legalization without evidence rejected, stderr names Change"
+else
+  fail "Expected legalization vibe->standard rejection without evidence" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 58: retrack — legalization vibe -> standard, target=Execution, SPEC.md+
+#      DESIGN.md pair present (NO change_note.md) -> exit 0 — the same equivalence
+#      stage_artifact_ok already grants a full-track session (W-6) also works for a
+#      legalized vibe prototype ----
+echo "[58] retrack: legalize vibe -> standard, target=Execution, SPEC.md+DESIGN.md pair (no change_note.md) -> exit 0"
+setup_sdx_repo "t58" "standard" "Prototype"
+printf '# Spec\n' > "$TMPPROJ/.claude/sessions/t58/SPEC.md"
+printf '# Design\n' > "$TMPPROJ/.claude/sessions/t58/DESIGN.md"
+out="$(run_stage retrack "t58" "Execution")"
+ec=$?
+sf="$(state_file t58)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Execution" ]; then
+  pass "SPEC.md+DESIGN.md pair alone also satisfies legalization's Change evidence"
+else
+  fail "Expected legalization vibe->standard to reach Execution via SPEC+DESIGN pair" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 59: retrack — legalization vibe -> full, target=Execution, all four
+#      reverse-engineered artifacts present (context_report.md+SPEC.md+DESIGN.md+PLAN.md)
+#      -> exit 0 ----
+echo "[59] retrack: legalize vibe -> full, target=Execution, all four spec-after artifacts present -> exit 0"
+setup_sdx_repo "t59" "full" "Prototype"
+seed_gate_artifacts "t59" "full" "Execution"
+out="$(run_stage retrack "t59" "Execution")"
+ec=$?
+sf="$(state_file t59)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Execution" ]; then
+  pass "legalization vibe->full reaches Execution with all four spec-after artifacts"
+else
+  fail "Expected legalization vibe->full to reach Execution" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 60: retrack — legalization vibe -> full, target=Execution, WITHOUT PLAN.md
+#      -> exit 1, stderr names Task Planning (negative) ----
+echo "[60] retrack: legalize vibe -> full, target=Execution, missing PLAN.md -> exit 1, stderr names Task Planning"
+setup_sdx_repo "t60" "full" "Prototype"
+printf 'notes\n' > "$TMPPROJ/.claude/sessions/t60/context_report.md"
+printf '# Spec\n' > "$TMPPROJ/.claude/sessions/t60/SPEC.md"
+printf '# Design\n' > "$TMPPROJ/.claude/sessions/t60/DESIGN.md"
+# Deliberately no PLAN.md — Task Planning's own gate is unmet.
+out="$(run_stage retrack "t60" "Execution" 2>&1 1>/dev/null)"
+ec=$?
+sf="$(state_file t60)"
+if [ "$ec" -eq 1 ] && [ "$(jq -r '.stage' "$sf")" = "Prototype" ] \
+   && printf '%s' "$out" | grep -q "Task Planning"; then
+  pass "legalization vibe->full rejected without PLAN.md, stderr names Task Planning"
+else
+  fail "Expected legalization vibe->full rejection missing PLAN.md" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 61: retrack — legalization vibe -> full, target=Discovery (full's own first
+#      active stage) -> exit 0 unconditionally — safe fallback when spec-after artifacts are
+#      not (yet) ready, mirrors scenario [47]'s doc -> full fallback ----
+echo "[61] retrack: legalize vibe -> full, target=Discovery (full's own first stage) -> exit 0 (safe fallback)"
+setup_sdx_repo "t61" "full" "Prototype"
+out="$(run_stage retrack "t61" "Discovery")"
+ec=$?
+sf="$(state_file t61)"
+if [ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Discovery" ]; then
+  pass "legalization vibe->full falls back unconditionally to Discovery"
+else
+  fail "Expected legalization vibe->full fallback to Discovery to succeed" "ec=$ec out='$out'"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

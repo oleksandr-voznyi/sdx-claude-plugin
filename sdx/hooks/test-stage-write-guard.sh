@@ -427,6 +427,63 @@ else
 fi
 cleanup
 
+# ---- Scenario 21: W-4 part 1 (Edit path) — session_state.json content is the valid ----
+# ---- JSON scalar `null` -> must still be treated as well-formed (NOT corrupted), so a ----
+# ---- stage-changing edit on top of it is still denied. ----
+# verification_report.md finding W-4: the "was the file already broken before this
+# operation?" check used `jq -e .`, whose exit status reports the TRUTHINESS of the last
+# emitted value (null/false -> non-zero), not whether parsing succeeded. A state file
+# containing the single valid document `null` was misclassified as "corrupted" and fell
+# into the recovery carve-out, silently waiving the `stage` check. Reproduced here: the
+# file on disk is literally `null`, then an Edit turns it into a document with
+# `"stage":"Closeout"` -- a real stage change (old_stage reads as empty from `null`) that
+# must be denied, not silently waved through as a "repair".
+echo "[21] session_state.json content is valid JSON \`null\` (not corrupted) -> Edit changing stage is still denied (W-4 part 1)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf 'null' > "$TMPPROJ/$STATE_REL"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"null",new_string:"{\"stage\":\"Closeout\"}"}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (valid null document correctly NOT treated as corrupted)"
+else
+  fail "Expected deny JSON + exit 0 (null misclassified as corrupted -> stage change bypassed)" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 22: W-4 part 1 (Write path) — same misclassification, but for the ----
+# ---- valid JSON scalar `false` and via the Write branch's own corruption check. ----
+echo "[22] session_state.json content is valid JSON \`false\` (not corrupted) -> Write changing stage is still denied (W-4 part 1)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf 'false' > "$TMPPROJ/$STATE_REL"
+CONTENT='{"stage":"Closeout"}'
+out="$(run_hook "$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" --arg c "$CONTENT" '{tool_name:"Write",tool_input:{file_path:$fp,content:$c}}')")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (valid false document correctly NOT treated as corrupted)"
+else
+  fail "Expected deny JSON + exit 0 (false misclassified as corrupted -> stage change bypassed)" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 23: boundary — a genuinely EMPTY (0-byte) session_state.json is NOT a ----
+# ---- well-formed JSON document (a JSON document must contain at least one value) -> it ----
+# ---- IS treated as corrupted, same as before this fix, so a repairing Write is still ----
+# ---- not blocked. Locks in the deliberately narrow carve-out boundary (empty/whitespace- ----
+# ---- only content and genuine JSON syntax errors -- nothing else -- count as "corrupted"). ----
+echo "[23] session_state.json is a genuinely empty (0-byte) file -> treated as corrupted, repair Write not blocked"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf '' > "$TMPPROJ/$STATE_REL"
+CONTENT='{"stage":"Closeout"}'
+out="$(run_hook "$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" --arg c "$CONTENT" '{tool_name:"Write",tool_input:{file_path:$fp,content:$c}}')")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (empty file treated as corrupted -> repair not blocked)"
+else
+  fail "Expected empty stdout + exit 0 (empty file must be treated as corrupted, not denied)" "ec=$ec out='$out'"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

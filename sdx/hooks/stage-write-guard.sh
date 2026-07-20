@@ -118,6 +118,41 @@ fi
 tool_name="$(printf '%s' "$input" | jq -r '.tool_name // empty')"
 old_stage="$(jq -r '.stage // empty' "$state" 2>/dev/null)"
 
+# is_valid_json <content>
+#   True (exit 0) iff <content> is a well-formed JSON document — INCLUDING the scalar
+#   documents `null` and `false` (verification_report.md finding W-4 part 1).
+#
+#   Deliberately NOT `jq -e .`: with `-e`, jq's exit status reports the TRUTHINESS of the
+#   last emitted value (0 = neither null nor false, 1 = null or false, 4 = no output,
+#   5 = parse error), not whether parsing succeeded. That conflates "this content is
+#   broken JSON" with "this content is the well-formed JSON value null/false" — a state
+#   file containing literally `null` was misclassified as corrupted and fell into the
+#   recovery carve-outs below, silently waiving the `stage` check for that write/edit.
+#
+#   Also deliberately NOT bare `jq .`/`jq empty` on the raw content: jq treats a
+#   completely empty (zero-byte) or whitespace-only input as trivially valid (there is no
+#   document to reject, so the filter just never runs and exits 0) — a truncated/empty
+#   session_state.json would then be misclassified as "not corrupted" and become subject
+#   to the full stage-value comparison instead of the recovery carve-out. An empty file
+#   is NOT itself a well-formed JSON document (RFC 8259 requires at least one value), and
+#   this hook already treated it as corrupted before this fix (`jq -e .` on empty input
+#   exits 4, i.e. non-zero) — that classification is preserved here explicitly rather
+#   than left to jq's no-input special case, so this decision doesn't silently flip if
+#   the parsing primitive underneath ever changes again.
+#
+#   Scope note (this is the "how narrow is the carve-out" half of W-4): jq is fed via a
+#   piped stdin here, never via argv/ENVIRON, so this check cannot fail the way
+#   literal_replace's awk call can (WARN-1, ARG_MAX/E2BIG) — its only two outcomes are
+#   "well-formed JSON" and "not" (empty content counted as "not", per above). It cannot
+#   return a third "tool failed, can't tell" outcome the way literal_replace can, so
+#   there is no ambiguous case here that needs a tool_failure_deny()-style fallback.
+is_valid_json() {
+  local content="$1" stripped
+  stripped="$(printf '%s' "$content" | tr -d '[:space:]')"
+  [ -z "$stripped" ] && return 1
+  printf '%s' "$content" | jq empty >/dev/null 2>&1
+}
+
 # --- Edit/MultiEdit detection (post F-2 fix) ---------------------------------------
 # Superseded mechanism (DESIGN.md "Edit/MultiEdit (огрублённый путь)"): regex-match the
 # literal key pattern `"stage"[[:space:]]*:` inside the *fragment* (new_string), never
@@ -191,9 +226,10 @@ literal_replace() {
 # check_stage_change <content_before> <content_after>
 #   Parses `.stage` out of both blobs (jq) and denies iff the value actually changed.
 #   Recovery carve-out (verification_report.md WARN-2 fix): checked FIRST, unconditionally
-#   on `before` alone. If `content_before` was already unparseable (the state file was
-#   corrupt before this operation even ran), we do NOT block, regardless of what
-#   `content_after` looks like — this hook's job is to guard legitimate `stage`
+#   on `before` alone. If `content_before` was already NOT well-formed JSON (the state
+#   file was corrupt before this operation even ran — see is_valid_json() above for the
+#   precise, narrow definition of "corrupt" this uses), we do NOT block, regardless of
+#   what `content_after` looks like — this hook's job is to guard legitimate `stage`
 #   transitions of a well-formed file, not to arbitrate recovery of an already-broken
 #   one, and blocking here (even when `after` happens to be a valid repair) would remove
 #   the only remaining way (Edit/Write) to fix it — the same self-defeating trap
@@ -209,7 +245,7 @@ literal_replace() {
 #   stance `Write`'s exact path already takes for unparseable new content).
 check_stage_change() {
   local before="$1" after="$2" new_stage new_rc
-  if ! printf '%s' "$before" | jq -e . >/dev/null 2>&1; then
+  if ! is_valid_json "$before"; then
     return 0   # was already broken before this operation -> this is the recovery path
   fi
   new_stage="$(printf '%s' "$after" | jq -r '.stage // empty' 2>/dev/null)"
@@ -234,10 +270,11 @@ tool_failure_deny() {
 case "$tool_name" in
   Write)
     # Recovery carve-out (verification_report.md WARN-2, symmetric with
-    # check_stage_change's carve-out below): if the file ON DISK is already not valid
-    # JSON, this Write is the recovery path -> do not block, regardless of what the new
+    # check_stage_change's carve-out below): if the file ON DISK is already not
+    # well-formed JSON (see is_valid_json() above for the precise, narrow definition),
+    # this Write is the recovery path -> do not block, regardless of what the new
     # content looks like. Checked first, before even parsing the new content.
-    if ! jq -e . "$state" >/dev/null 2>&1; then
+    if ! is_valid_json "$(cat "$state" 2>/dev/null)"; then
       exit 0
     fi
     # Exact path (DESIGN.md "Write (точный путь)"): the full new file content is

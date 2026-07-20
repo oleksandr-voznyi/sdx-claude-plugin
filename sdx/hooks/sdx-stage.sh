@@ -55,59 +55,6 @@ patch|Verification|verification_report.md|yes
 patch|Closeout|-|no
 '
 
-# ---------------------------------------------------------------------------------------
-# Cross-track canonical order (REQ-RETRACK-2, WARN-4 fix). SDX_STAGE_MATRIX above gives
-# ordering WITHIN a single track only; it says nothing about how a stage of track A
-# compares to a differently-named stage of track B. cmd_retrack needs exactly that: a
-# forward-skip guard symmetric to REQ-BACKTRACK-1, but retrack's target and the CURRENT
-# stage can legitimately belong to two different tracks' naming (that is the whole point
-# of retrack), so a single shared timeline is required.
-#
-# This is a MERGE of the three tracks' own (already mutually consistent, monotonic) row
-# orders into one union sequence, given as explicit `name|rank` pairs (NOT bare positional
-# lines — see the `Change` note below for why a plain 1-based line count is not enough).
-# Every name here occurs in at least one track of SDX_STAGE_MATRIX; for any two names that
-# occur in the SAME track, their rank order here matches that track's own row order
-# (verified by test-sdx-stage.sh, which cross-checks this against the matrix the same way
-# scenario "[23] sanity" already cross-checks protocol.md against the matrix).
-#
-# `Change` (standard/patch only) merges full's `Business Spec` + `Technical Design` into
-# one stage (protocol.md "Change ... объединённый этап") — it does not correspond to a
-# single POINT on this timeline, it spans a RANGE. It is given the SAME rank as `Technical
-# Design` (a deliberate TIE, not "one step later" — hence the explicit rank column instead
-# of a bare ordered list, where every line would necessarily get a distinct number). Tying
-# it to the UPPER end of the range it merges is what makes both directions of retrack
-# behave correctly:
-#   - Escalating FROM `Change` (patch/standard -> full): by the time cmd_retrack runs,
-#     retrack.md step 3 has ALREADY promoted change_note.md into both SPEC.md and
-#     DESIGN.md (unconditionally, before step 4 calls this script) — so treating `Change`
-#     as "as far along as Technical Design" is not optimistic, the artifacts backing that
-#     claim already exist on disk by construction. This allows landing on `Technical
-#     Design` (same rank, a lateral move) but NOT `Task Planning` (the next rank up,
-#     REQ-STAGE-2's real Technical Design gate was never actually re-checked by retrack —
-#     REQ-RETRACK-1 explicitly waives it — so `Task Planning` must be reached via a
-#     genuine `/sdx:next` call from `Technical Design` afterwards, which DOES check it).
-#   - Deescalating INTO `Change` (full -> standard/patch, from `Business Spec`,
-#     `Technical Design` or `Task Planning`): the tie makes `Change` reachable from
-#     `Technical Design` (equal rank) and from `Task Planning` (a backward move, always
-#     allowed), but NOT from `Business Spec` alone (one rank short) — that case lands on
-#     `Discovery` instead and needs one extra, gate-less `/sdx:next` (standard's
-#     `Discovery` artifact is "-", so this costs nothing in practice). This is the
-#     conservative side of an inherently ambiguous case, not a functional dead end.
-# ---------------------------------------------------------------------------------------
-SDX_CANON_ORDER='
-Discovery|1
-Business Spec|2
-Technical Design|3
-Change|3
-Task Planning|4
-Execution|5
-Documentation|6
-Verification|7
-Deployment|8
-Closeout|9
-'
-
 # ---- matrix helpers --------------------------------------------------------------------
 
 # matrix_stages <track> -> newline-separated list of active stage names, in row order.
@@ -132,13 +79,38 @@ matrix_stage_exists() {
   printf '%s\n' "$SDX_STAGE_MATRIX" | awk -F'|' -v s="$1" '$2==s{f=1} END{exit !f}'
 }
 
-# canon_rank <stage> -> numeric rank of <stage> per SDX_CANON_ORDER (the cross-track
-# timeline; NOT necessarily unique — see the `Change` tie note above), empty if <stage> is
-# not a recognized protocol stage name at all. Used ONLY by cmd_retrack's forward-skip
-# guard (REQ-RETRACK-2) — matrix_index above already covers WITHIN-track ordering and
-# remains the source of truth for next/backtrack.
-canon_rank() {
-  printf '%s\n' "$SDX_CANON_ORDER" | awk -F'|' -v s="$1" '$1==s{print $2; exit}'
+# stage_artifact_ok <stage> <artifact> <fail_marker> <sdir> -> exit 0 if <stage>'s OWN gate
+# is objectively satisfied on disk, exit 1 otherwise. This is the SAME existence+non-empty
+# (+ absent-FAIL-marker where applicable) criteria cmd_next applies to the departing
+# stage's artifact (REQ-STAGE-2) — reused here by cmd_retrack's artifact-floor guard
+# (REQ-RETRACK-2, rewritten per F-1) to check a whole CHAIN of preceding stages, not just
+# one departing stage.
+#
+# Special case: `Change` (patch/standard) is a merged stage — protocol.md "Change ...
+# объединённый этап" — with no single artifact of its own. Two different kinds of evidence
+# both count as "Change done", by construction:
+#   - `change_note.md` non-empty: the native patch/standard artifact, OR
+#   - `SPEC.md` AND `DESIGN.md` both non-empty: the equivalent full-track evidence. This is
+#     not a weakening — retrack.md step 3 ALREADY promotes change_note.md into exactly
+#     these two files, unconditionally, before ever calling this script when escalating
+#     FROM Change; symmetrically, a full-track session that reached (or passed) its own
+#     Business Spec + Technical Design gates has done strictly MORE than a Change stage
+#     would ever require, so denying it credit for that work when deescalating INTO
+#     standard/patch would be pure ceremony, not safety (W-6 fix).
+stage_artifact_ok() {
+  local stage="$1" artifact="$2" fail_marker="$3" sdir="$4"
+  if [ "$stage" = "Change" ]; then
+    [ -s "$sdir/change_note.md" ] && return 0
+    [ -s "$sdir/SPEC.md" ] && [ -s "$sdir/DESIGN.md" ] && return 0
+    return 1
+  fi
+  [ "$artifact" = "-" ] && return 0
+  local path="$sdir/$artifact"
+  [ -s "$path" ] || return 1
+  if [ "$fail_marker" = "yes" ] && grep -q '^### \[FAIL\]' "$path"; then
+    return 1
+  fi
+  return 0
 }
 
 # ---- atomic state mutation (DESIGN.md "Механика записи stage (атомарность)") -----------
@@ -382,16 +354,19 @@ cmd_backtrack() {
 
 # retrack <sid> <target>
 # Called AFTER retrack.md has already edited `track` directly via Edit (legitimate,
-# REQ-DENY-2) — reads the already-updated track and the still-unchanged stage. Checks, in
-# the same two-step order as cmd_backtrack (F-3 fix — a stage name check MUST come first,
-# not just "active in this track"; without it a target that is not a real protocol stage
-# name at all would only ever be checked against the CURRENT track and, before this fix,
-# via an unanchored non-fixed-string grep — see the -F note below): (1) target is a
-# recognized protocol stage name at all (union of tracks), (2) target is active in the
-# (new) track, (3) idempotent no-op, (4) forward-skip guard (REQ-RETRACK-2, WARN-4 fix —
-# see below). No forward-GATE check on artifacts (this remains true, REQ-RETRACK-1): the
-# guard below is purely positional (can target be reached AT ALL without going through
-# /sdx:next), it never inspects artifacts the way cmd_next does.
+# REQ-DENY-2) — reads the already-updated track and the still-unchanged stage. Checks, IN
+# THIS ORDER (F-1 fix — order matters, see step 3's docstring for why the guard must
+# precede the no-op check): (1) target is a recognized protocol stage name at all (union of
+# tracks) — F-3; (2) target is active in the (new) track; (3) artifact-floor guard
+# (REQ-RETRACK-2, rewritten per F-1 — see below); (4) idempotent no-op.
+#
+# REQ-RETRACK-1 ("без повторной проверки forward гейт-артефактов уходящего этапа") still
+# holds: the guard below never checks the DEPARTING stage's own artifact, nor `target`'s
+# own artifact — only the artifacts of stages that PRECEDE `target` in the new track's row
+# order. It also never re-derives a position from `stage`/the old track the way the
+# previous rank-based version did — see stage_artifact_ok's docstring for the rationale
+# (F-1: a self-reported position cannot be trusted as proof of progress; only artifacts on
+# disk can).
 cmd_retrack() {
   local sid="$1" target="$2"
   sdir="$proj/.claude/sessions/$sid"
@@ -426,48 +401,56 @@ cmd_retrack() {
     exit 1
   fi
 
-  # Idempotent no-op (REQ-STAGE-4 applies to backtrack/retrack alike, see DESIGN.md
-  # "Обработка ошибок" — "target == current для backtrack/retrack").
+  # Step 3: artifact-floor guard (REQ-RETRACK-2, rewritten — F-1 fix). Deliberately runs
+  # BEFORE the idempotent no-op check below: F-1's sub-finding showed that a target whose
+  # STAGE NAME happens to equal the current `stage` value, but whose TRACK actually just
+  # changed (e.g. patch/Execution -> full/Execution — see scenario [26]), used to reach the
+  # old no-op branch and skip the guard entirely. Running the guard unconditionally closes
+  # that hole without needing to know whether the track literally changed.
+  #
+  # The rule is no longer positional (a rank derived from WHERE `stage` self-reports being)
+  # — it is evidence-based: `target` is reachable iff EVERY stage of the (new) track that
+  # PRECEDES it in row order (matrix_index < idx_target) already has its own gate
+  # objectively satisfied on disk (stage_artifact_ok — same criteria cmd_next applies to a
+  # single departing stage, REQ-STAGE-2). `stage`/the old track are never consulted for
+  # this — a track's own FIRST active stage always has an empty preceding chain, so
+  # entering a track at its own starting point remains unconditionally allowed; landing
+  # further requires the SAME artifacts /sdx:next would have required to get there for
+  # real. This is deliberately NOT bounded by "current progress" as a position, precisely
+  # because that position is exactly what F-1 showed cannot be trusted (a ratchet: two
+  # legitimate-looking retrack calls could inflate it without a single gate ever passing).
+  local idx_target
+  idx_target="$(matrix_index "$track" "$target")"
+  local i=0 s row artifact fail_marker missing_stage="" missing_artifact=""
+  while IFS= read -r s; do
+    i=$((i + 1))
+    [ "$i" -ge "$idx_target" ] && break
+    row="$(matrix_row "$track" "$s")"
+    artifact="${row%%|*}"
+    fail_marker="${row##*|}"
+    if ! stage_artifact_ok "$s" "$artifact" "$fail_marker" "$sdir"; then
+      missing_stage="$s"
+      missing_artifact="$artifact"
+      break
+    fi
+  done <<< "$stages"
+
+  if [ -n "$missing_stage" ]; then
+    if [ "$missing_stage" = "Change" ]; then
+      echo "SDX sdx-stage: '$target' недостижим — этап '$missing_stage' трека '$track' не подтверждён (нет ни change_note.md, ни пары SPEC.md+DESIGN.md в .claude/sessions/$sid/). retrack не продвигает вперёд мимо непройденного гейта — выбери менее продвинутый активный этап нового трека либо заверши '$missing_stage', затем продвинься штатно через /sdx:next." >&2
+    else
+      echo "SDX sdx-stage: '$target' недостижим — этап '$missing_stage' трека '$track' не подтверждён (не найден/пуст '$missing_artifact' в .claude/sessions/$sid/, либо остались находки FAIL). retrack не продвигает вперёд мимо непройденного гейта — выбери менее продвинутый активный этап нового трека либо заверши '$missing_stage' (артефакт '$missing_artifact'), затем продвинься штатно через /sdx:next." >&2
+    fi
+    exit 1
+  fi
+
+  # Step 4: idempotent no-op (REQ-STAGE-4 applies to backtrack/retrack alike, see
+  # DESIGN.md "Обработка ошибок" — "target == current для backtrack/retrack"). Safe here,
+  # AFTER the guard: reaching this point already proves every stage preceding `target` has
+  # a satisfied gate, so a no-op never hides an unearned position.
   if [ "$target" = "$stage" ]; then
     echo "OK no-op $stage"
     return 0
-  fi
-
-  # Step 4: forward-skip guard (REQ-RETRACK-2, closes WARN-4 — retrack had no counterpart
-  # to REQ-BACKTRACK-1's "not later than current"). `stage`/`target` can belong to two
-  # DIFFERENT tracks' own naming, so matrix_index (within-track only) cannot compare them
-  # directly — SDX_CANON_ORDER gives the shared cross-track timeline instead.
-  #
-  # idx_equiv = position, WITHIN THE NEW TRACK, of the LATEST active stage whose canonical
-  # rank does not exceed the current stage's canonical rank. That is the furthest point
-  # retrack may land on without advancing past a gate that was never actually checked. If
-  # the new track's own FIRST active stage already has a higher canonical rank than
-  # current (e.g. `patch` has no Discovery/Business Spec/... at all — its lifecycle simply
-  # starts later), clamp to that first stage: entering a track at its own starting point is
-  # always allowed, entering past it without evidence is not.
-  local cur_rank
-  cur_rank="$(canon_rank "$stage")"
-  if [ -z "$cur_rank" ]; then
-    echo "SDX sdx-stage: текущий этап '$stage' не распознан в канонической шкале этапов — состояние сессии повреждено." >&2
-    exit 2
-  fi
-  local idx_equiv=""
-  local i=0 s s_rank
-  while IFS= read -r s; do
-    i=$((i + 1))
-    s_rank="$(canon_rank "$s")"
-    if [ -n "$s_rank" ] && [ "$s_rank" -le "$cur_rank" ]; then
-      idx_equiv="$i"
-    fi
-  done <<< "$stages"
-  [ -z "$idx_equiv" ] && idx_equiv=1
-
-  local idx_target ceiling_stage
-  idx_target="$(matrix_index "$track" "$target")"
-  if [ "$idx_target" -gt "$idx_equiv" ]; then
-    ceiling_stage="$(printf '%s\n' "$stages" | sed -n "${idx_equiv}p")"
-    echo "SDX sdx-stage: '$target' дальше по треку '$track', чем позволяет текущий прогресс (этап '$stage', допустимый потолок в новом треке — '$ceiling_stage') — retrack не продвигает вперёд мимо гейта. Выбери менее продвинутый активный этап нового трека, затем продвинься штатно через /sdx:next." >&2
-    exit 1
   fi
 
   write_stage "$target"

@@ -34,17 +34,22 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-007 | debt | open | normal | 10 | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) |
 | DEBT-009 | debt | open | normal | 10 | [Discovery на standard-треке не имеет определённого артефакта](DEBT-009-discovery-standard-no-artifact.md) |
 | DEBT-010 | debt | open | normal | 10 | [Тихая деградация хуков не видна пользователю](DEBT-010-silent-hook-degradation-invisible.md) |
-| PROC-002 | proc | open | normal | null | [Груминг / ретроспектива / постмортем как типы сессий](PROC-002-grooming-retro-postmortem-session-types.md) |
 | DEBT-014 | debt | open | normal | null | [stage-gate на Verification не пускает тесты хуков](DEBT-014-stage-gate-blocks-hook-tests.md) |
 | DEBT-015 | debt | open | normal | null | [Пробелы тестового покрытия нового stage-enforcement](DEBT-015-stage-guard-coverage-gaps.md) |
 | PROC-008 | proc | open | normal | null | [Длинный DESIGN.md — систематический источник дрейфа](PROC-008-long-design-drift.md) |
 | PROC-009 | proc | open | normal | null | [Структурированное размещение входящих артефактов проекта](PROC-009-incoming-artifacts-placement.md) |
+| PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии](PROC-010-parallel-subagents-shared-session-files.md) |
+| BUG-007 | bug | open | normal | null | [`/sdx:init` создаёт каталоги разборов без файлов-заглушек](BUG-007-init-history-dirs-no-placeholder.md) |
+| DEBT-017 | debt | open | normal | null | [Перечисления треков в `agents/qa.md`/`developer.md`/`devops.md` не включают `doc`](DEBT-017-agent-track-enumerations-incomplete.md) |
 | PROC-004 | proc | open | normal | null | [Режим экстремального прототипирования (vibe)](PROC-004-vibe-prototyping-mode.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
 | IDEA-007 | idea | open | low | null | [Автоматический пуш записей бэклога в GitHub Issues](IDEA-007-backlog-github-issues-sync.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-016 | debt | open | low | null | [`stage-write-guard.sh` не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) |
+| DEBT-018 | debt | open | low | null | [Столбец «Типы сессий» в README стирает жёсткость привязки типа к треку `doc`](DEBT-018-readme-track-type-binding-blurred.md) |
+| DEBT-019 | debt | open | low | null | [doc-специфика пп. 2/3 Closeout не продублирована в `archive.md`](DEBT-019-archive-checklist-doc-specifics-partial.md) |
+| DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
 | IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
@@ -56,6 +61,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| PROC-002 | [Груминг / ретроспектива / постмортем как типы сессий](PROC-002-grooming-retro-postmortem-session-types.md) | `fw-session-types-20260720` |
 | DEBT-001 | [Весь enforcement держится на самодекларируемом поле `stage`](DEBT-001-self-declared-stage-field.md) | `fw-stage-guard-20260720` |
 | DEBT-011 | [`/sdx:backtrack` недоспецифицирован](DEBT-011-backtrack-underspecified.md) | `fw-stage-guard-20260720` |
 | DEBT-004 | [Мета-проект имеет тест-сьют, но не «доедает свой корм»](DEBT-004-meta-project-no-dogfood-tests.md) | `fw-dogfood-verifycmd-20260720` |

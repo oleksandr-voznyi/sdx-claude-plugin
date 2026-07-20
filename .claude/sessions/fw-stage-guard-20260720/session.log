@@ -6,3 +6,6 @@
 [2026-07-20 07:57:56] [STAGE_CHANGE] [Execution] -> Documentation (T-01..T-25 выполнены, 8/8 тест-сьютов зелёные)
 [2026-07-20 08:02:26] [STAGE_CHANGE] [Documentation] -> Verification (T-26..T-27 выполнены)
 [2026-07-20 08:39:17] [STAGE_CHANGE] Возврат на этап Execution
+[2026-07-20 12:03:56] [STAGE_CHANGE] Переход на этап Documentation
+[2026-07-20 12:04:05] [STAGE_CHANGE] Переход на этап Verification
+[2026-07-20 12:04:05] [STAGE_CHANGE] Переход на этап Deployment

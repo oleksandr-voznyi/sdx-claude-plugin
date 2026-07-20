@@ -19,6 +19,11 @@ deny() {
 target="$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')"
 [ -z "$target" ] && exit 0   # no file path in input -> nothing to gate
 
+# Normalize separators: on Windows file_path (and possibly CLAUDE_PROJECT_DIR) comes
+# with backslashes, which breaks both the prefix strip and the slash-based globs below.
+target="${target//\\//}"
+proj="${proj//\\//}"
+
 # Determine active SDX session from the git branch name (invariant: branch = sdx/<id>).
 branch="$(git -C "$proj" branch --show-current 2>/dev/null || true)"
 case "$branch" in

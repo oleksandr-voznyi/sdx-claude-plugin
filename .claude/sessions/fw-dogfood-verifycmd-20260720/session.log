@@ -1,6 +1,0 @@
-[2026-07-20 03:46:04] [START] [Discovery] Инициализация сессии fw-dogfood-verifycmd-20260720 (трек: standard, DEBT-004 dogfood verify-cmd)
-[2026-07-20 03:49:01] [STAGE_CHANGE] [Change] Discovery -> Change: change_note.md готов (DEBT-004)
-[2026-07-20 04:10:42] [STAGE_CHANGE] [Execution] Change -> Execution (gate_mode: auto включён пользователем)
-[2026-07-20 04:15:44] [STAGE_CHANGE] [Verification] Execution -> Verification (авторежим: гейт пройден дефолтом)
-[2026-07-20 04:22:29] [STAGE_CHANGE] [Verification] Верификация пройдена: 0 FAIL, 2 WARN (1 доправлен, 1 автоквитирован) — гейт PASS
-[2026-07-20 04:29:05] [STAGE_CHANGE] [Closeout] Переход на этап Closeout (дисклоуз авторежима подтверждён)

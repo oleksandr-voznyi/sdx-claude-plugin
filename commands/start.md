@@ -63,13 +63,14 @@ description: Запуск новой сессии разработки SDX (Feat
      fi
      {
        printf '# SDX vibe prototype baseline\n'
-       printf 'attempt %s\n' "<N>"
+       printf 'attempt %s\n' "1"
        printf 'started %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
        printf 'rev %s\n' "$(git rev-parse HEAD)"
        git ls-files --others --exclude-standard -z | tr '\0' '\n' | sed '/^$/d' | sed 's|^|untracked |'
      } > "$sdir/prototype_baseline.txt"
-     git add "$sdir/prototype_baseline.txt" && git commit -m "sdx(<id>): vibe baseline (attempt <N>)"
+     git add "$sdir/prototype_baseline.txt" && git commit -m "sdx(<id>): vibe baseline (attempt 1)"
      ```
+     Блок совпадает с блоком повторного захвата baseline в `/sdx:proto` (шаг 6) с точностью до номера попытки: здесь это всегда первая попытка (`attempt 1`), там — `<N+1>`. При правке одного блока правь и второй.
      Если гард сработал (путь с переводом строки среди untracked) — baseline НЕ записывается: сообщи пользователю об ошибке и остановись; сессия не переходит к реализации, пока проблемный путь не будет убран/переименован. Это честный отказ, а не тихая деградация к `git clean`.
 9. Дальнейшие переходы этапа (`stage`) в рамках сессии выполняются исключительно через `sdx-stage.sh` (`/sdx:next`/`backtrack`/`retrack`/`archive`) — здесь, в момент старта, больше писать `[STAGE_CHANGE]` вручную не нужно. Создание артефактов в лог тоже не пиши — вместо этого коммить созданные файлы сессии в ветку инкрементально (их история и состав выводятся из git).
 10. Продолжай работу в ЭТОМ ЖЕ CLI — никакого хендоффа нет (ADR-012): ветка `sdx/<session_id>` checkout'нута в основном дереве, enforcement-хуки резолвят активную сессию по имени текущей ветки. Дальнейшие `/sdx:next|checkpoint|verify|archive` выполняются здесь же.

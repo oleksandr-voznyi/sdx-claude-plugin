@@ -3,3 +3,4 @@
 [2026-07-20 04:10:42] [STAGE_CHANGE] [Execution] Change -> Execution (gate_mode: auto включён пользователем)
 [2026-07-20 04:15:44] [STAGE_CHANGE] [Verification] Execution -> Verification (авторежим: гейт пройден дефолтом)
 [2026-07-20 04:22:29] [STAGE_CHANGE] [Verification] Верификация пройдена: 0 FAIL, 2 WARN (1 доправлен, 1 автоквитирован) — гейт PASS
+[2026-07-20 04:29:05] [STAGE_CHANGE] [Closeout] Переход на этап Closeout (дисклоуз авторежима подтверждён)

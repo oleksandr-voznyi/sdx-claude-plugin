@@ -2,11 +2,13 @@
   "session_id": "fw-dogfood-verifycmd-20260720",
   "type": "refactor",
   "track": "standard",
-  "stage": "Verification",
+  "stage": "Closeout",
   "status": "executing",
   "gate_mode": "auto",
   "git_branch": "sdx/fw-dogfood-verifycmd-20260720",
   "artifacts": [],
   "history": [],
-  "backlog_refs": ["DEBT-004"]
+  "backlog_refs": [
+    "DEBT-004"
+  ]
 }

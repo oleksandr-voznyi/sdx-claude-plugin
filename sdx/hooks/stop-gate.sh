@@ -3,14 +3,15 @@
 # Stop hook. exit 2 + stderr blocks turn-end until the verify command is green.
 set -uo pipefail
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/resolve-session.sh
+. "$here/lib/resolve-session.sh"
+
 proj="${CLAUDE_PROJECT_DIR:-.}"
 
 # Determine active SDX session from the git branch name.
-branch="$(git -C "$proj" branch --show-current 2>/dev/null || true)"
-case "$branch" in
-  sdx/*) sid="${branch#sdx/}" ;;
-  *)     exit 0 ;;   # not an SDX branch -> transparent
-esac
+sid="$(resolve_sid "$proj")"
+[ -z "$sid" ] && exit 0   # not an SDX branch -> transparent
 
 # Load current stage; missing state file -> no-op.
 state="$proj/.claude/sessions/${sid}/session_state.json"

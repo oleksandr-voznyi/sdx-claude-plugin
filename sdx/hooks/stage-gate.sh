@@ -4,6 +4,10 @@
 # Blocks via JSON permissionDecision:"deny" on stdout, exit 0. NOT exit 2.
 set -uo pipefail
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/resolve-session.sh
+. "$here/lib/resolve-session.sh"
+
 input="$(cat)"
 proj="${CLAUDE_PROJECT_DIR:-.}"
 
@@ -25,11 +29,8 @@ target="${target//\\//}"
 proj="${proj//\\//}"
 
 # Determine active SDX session from the git branch name (invariant: branch = sdx/<id>).
-branch="$(git -C "$proj" branch --show-current 2>/dev/null || true)"
-case "$branch" in
-  sdx/*) sid="${branch#sdx/}" ;;
-  *)     exit 0 ;;   # not an SDX branch -> gate is transparent
-esac
+sid="$(resolve_sid "$proj")"
+[ -z "$sid" ] && exit 0   # not an SDX branch -> gate is transparent
 
 # Load current stage from session state; missing file or empty stage -> no-op.
 state="$proj/.claude/sessions/${sid}/session_state.json"

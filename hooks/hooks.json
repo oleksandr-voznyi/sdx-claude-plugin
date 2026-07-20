@@ -17,6 +17,10 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stage-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stage-write-guard.sh"
           }
         ]
       },

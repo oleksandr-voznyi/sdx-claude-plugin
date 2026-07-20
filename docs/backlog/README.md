@@ -41,6 +41,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии](PROC-010-parallel-subagents-shared-session-files.md) |
 | BUG-007 | bug | open | normal | null | [`/sdx:init` создаёт каталоги разборов без файлов-заглушек](BUG-007-init-history-dirs-no-placeholder.md) |
 | DEBT-017 | debt | open | normal | null | [Перечисления треков в `agents/qa.md`/`developer.md`/`devops.md` не включают `doc`](DEBT-017-agent-track-enumerations-incomplete.md) |
+| DEBT-022 | debt | open | normal | null | [`/sdx:reconcile` не определяет поведение для `.sdx/bundles/`](DEBT-022-reconcile-bundles-not-in-scan-list.md) |
 | PROC-004 | proc | open | normal | null | [Режим экстремального прототипирования (vibe)](PROC-004-vibe-prototyping-mode.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |

@@ -3,7 +3,7 @@
   "type": "feature",
   "track": "full",
   "stage": "Task Planning",
-  "gate_mode": "interactive",
+  "gate_mode": "auto",
   "git_branch": "sdx/fw-session-types-20260720",
   "artifacts": [],
   "history": []

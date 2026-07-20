@@ -295,10 +295,17 @@ else
 fi
 cleanup
 
-# ---- Scenario 16: retrack — track already updated to standard, target=Change active -> stage changes ----
-echo "[16] retrack: track already updated to standard, target=Change active -> stage changes without forward-gate"
-setup_sdx_repo "t16" "standard" "Discovery"
-# change_note.md deliberately absent — retrack has no forward-gate.
+# ---- Scenario 16: retrack — deescalation full "Technical Design" -> standard, track already
+#      updated, target=Change (the natural landing point) -> stage changes without forward-gate ----
+# `stage` still carries the OLD track's value at call time (DESIGN.md "reads the
+# already-updated track and the still-unchanged stage") — this fixture reproduces exactly
+# that: `track` is already "standard" (as retrack.md step 4.2's Edit would have left it),
+# `stage` is still "Technical Design" (the full-track value, not yet touched). `Change`'s
+# canonical rank ties with `Technical Design` (REQ-RETRACK-2 "Change" note) so this remains
+# a lateral move, not a forward-skip, and change_note.md is deliberately absent — retrack
+# still has no forward-GATE-artifact check (REQ-RETRACK-1), only the positional ceiling.
+echo "[16] retrack: deescalation full 'Technical Design' -> standard, target=Change (tied rank) -> stage changes without forward-gate"
+setup_sdx_repo "t16" "standard" "Technical Design"
 out="$(run_stage retrack "t16" "Change")"
 ec=$?
 sf="$(state_file t16)"
@@ -373,8 +380,98 @@ else
 fi
 cleanup
 
-# ---- Scenario 21: no jq in $PATH -> any mutating subcommand exits 2, file untouched ----
-echo "[21] no jq in \$PATH -> exit 2, file untouched"
+# ---- Scenario 21: retrack — forward-skip guard (REQ-RETRACK-2, WARN-4 regression repro) ----
+# Exact reproduction of the verification_report.md WARN-4 finding: track `full`, stage
+# `Discovery`, zero artifacts anywhere, `track` field is UNCHANGED (retrack called directly,
+# the same shape as calling it without ever having gone through retrack.md's step 4.2 Edit).
+# Before REQ-RETRACK-2 this returned rc=0 and wrote `stage=Closeout`, skipping every gate in
+# the track. Symmetric to backtrack's own "target later than current" guard (scenario 11).
+echo "[21] retrack: forward-skip guard blocks same-track jump straight to Closeout (WARN-4 regression)"
+setup_sdx_repo "t21r" "full" "Discovery"
+sf="$(state_file t21r)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage retrack "t21r" "Closeout" 2>&1 1>/dev/null)"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 1 ] && [ "$before_sum" = "$after_sum" ] \
+   && printf '%s' "$out" | grep -q "/sdx:next"; then
+  pass "exit 1, file untouched, stderr points to /sdx:next"
+else
+  fail "Expected forward-skip rejection (WARN-4)" "ec=$ec out='$out' before=$before_sum after=$after_sum"
+fi
+cleanup
+
+# ---- Scenario 22: retrack — forward-skip guard also fires across an ACTUAL track change ----
+# Same exploit shape as scenario 21, but this time `track` really did change (standard, as
+# retrack.md's step 4.2 would leave it) — confirms the guard is not merely a same-track
+# special case tacked onto the old checks.
+echo "[22] retrack: forward-skip guard also blocks a jump straight to Closeout after a real track change"
+setup_sdx_repo "t22r" "standard" "Discovery"
+sf="$(state_file t22r)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage retrack "t22r" "Closeout" 2>&1 1>/dev/null)"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 1 ] && [ "$before_sum" = "$after_sum" ]; then
+  pass "exit 1, file untouched"
+else
+  fail "Expected forward-skip rejection across a real track change" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 23: retrack — legitimate escalation stops at the tied-rank ceiling, not beyond ----
+# `stage=Change` (standard), escalating to `full`: 'Technical Design' ties Change's rank
+# (lateral move, allowed) but 'Task Planning' is one rank further (must go through a real
+# `/sdx:next` afterwards, which DOES check the Technical Design gate).
+echo "[23] retrack: escalating from Change lands on Technical Design (tied rank) but NOT Task Planning (one rank further)"
+setup_sdx_repo "t23a" "full" "Change"
+out="$(run_stage retrack "t23a" "Technical Design")"
+ec=$?
+sf="$(state_file t23a)"
+ok1=0
+[ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Technical Design" ] && ok1=1
+cleanup
+setup_sdx_repo "t23b" "full" "Change"
+out2="$(run_stage retrack "t23b" "Task Planning" 2>&1 1>/dev/null)"
+ec2=$?
+sf2="$(state_file t23b)"
+ok2=0
+[ "$ec2" -eq 1 ] && [ "$(jq -r '.stage' "$sf2")" = "Change" ] && ok2=1
+cleanup
+if [ "$ok1" -eq 1 ] && [ "$ok2" -eq 1 ]; then
+  pass "Technical Design allowed (tied rank), Task Planning rejected (one rank further)"
+else
+  fail "Expected escalation ceiling exactly at Technical Design" "ec=$ec out='$out' ec2=$ec2 out2='$out2'"
+fi
+
+# ---- Scenario 24: retrack — deescalation clamps to the new track's OWN first active stage ----
+# `patch` has no Discovery/Business Spec/.../Task Planning at all — its lifecycle starts at
+# Execution BY DESIGN, not because anything was skipped. Landing there must stay allowed
+# even though Execution's canonical rank is far later than Discovery's; landing any FURTHER
+# (Verification/Closeout) must still be rejected.
+echo "[24] retrack: deescalation to patch clamps ceiling to patch's own first stage (Execution), not beyond"
+setup_sdx_repo "t24a" "patch" "Discovery"
+out="$(run_stage retrack "t24a" "Execution")"
+ec=$?
+sf="$(state_file t24a)"
+ok1=0
+[ "$ec" -eq 0 ] && [ "$(jq -r '.stage' "$sf")" = "Execution" ] && ok1=1
+cleanup
+setup_sdx_repo "t24b" "patch" "Discovery"
+out2="$(run_stage retrack "t24b" "Verification" 2>&1 1>/dev/null)"
+ec2=$?
+sf2="$(state_file t24b)"
+ok2=0
+[ "$ec2" -eq 1 ] && [ "$(jq -r '.stage' "$sf2")" = "Discovery" ] && ok2=1
+cleanup
+if [ "$ok1" -eq 1 ] && [ "$ok2" -eq 1 ]; then
+  pass "clamped to patch's own first stage (Execution), Verification still rejected"
+else
+  fail "Expected clamp to track's own first active stage" "ec=$ec out='$out' ec2=$ec2 out2='$out2'"
+fi
+
+# ---- Scenario 25: no jq in $PATH -> any mutating subcommand exits 2, file untouched ----
+echo "[25] no jq in \$PATH -> exit 2, file untouched"
 setup_sdx_repo "t17" "full" "Discovery"
 printf 'notes\n' > "$TMPPROJ/.claude/sessions/t17/context_report.md"
 sf="$(state_file t17)"
@@ -396,8 +493,8 @@ else
 fi
 cleanup
 
-# ---- Scenario 22: write_stage atomicity — no leftover temp files, original stays valid JSON ----
-echo "[22] write_stage atomicity: broken jq (no jq) leaves no temp files, original stays valid+unchanged"
+# ---- Scenario 26: write_stage atomicity — no leftover temp files, original stays valid JSON ----
+echo "[26] write_stage atomicity: broken jq (no jq) leaves no temp files, original stays valid+unchanged"
 setup_sdx_repo "t18" "full" "Discovery"
 printf 'notes\n' > "$TMPPROJ/.claude/sessions/t18/context_report.md"
 sf="$(state_file t18)"
@@ -417,7 +514,7 @@ else
 fi
 cleanup
 
-# ---- Scenario 23: sanity cross-check — ALL THREE tracks, order-sensitive (W-5) ----
+# ---- Scenario 27: sanity cross-check — ALL THREE tracks, order-sensitive (W-5) ----
 # Previously this only checked the 'full' row, as an unordered SET (both sorted before
 # comparison) — a swap of two stages in either document, or a drift in 'patch'/'standard',
 # would go undetected. Now checks all three tracks in the exact row order (no sorting), so
@@ -429,7 +526,7 @@ cleanup
 # (U+2014, bytes E2 80 94) used inside the patch-row annotation — byte-wise `tr` corrupts
 # that annotation text. sed/awk match the multi-byte separator as a whole string, so they
 # don't have this problem.
-echo "[23] sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch, in order"
+echo "[27] sanity: SDX_STAGE_MATRIX matches sdx/protocol.md's track table for full/standard/patch, in order"
 proto="$SCRIPT_DIR/../protocol.md"
 sanity_all_ok=1
 sanity_detail=""
@@ -451,6 +548,51 @@ if [ "$sanity_all_ok" -eq 1 ]; then
   pass "protocol.md matches SDX_STAGE_MATRIX for full/standard/patch, order included"
 else
   fail "Expected matching ordered stage chains for all 3 tracks" "$sanity_detail"
+fi
+
+# ---- Scenario 28: sanity cross-check — SDX_CANON_ORDER covers every matrix stage name, and
+#      within each track its rank sequence is non-decreasing (REQ-RETRACK-2 precondition) ----
+# canon_rank is only correct as a forward-skip ceiling if (a) every stage name that appears
+# in SDX_STAGE_MATRIX also has an entry in SDX_CANON_ORDER (otherwise cmd_retrack's "текущий
+# этап не распознан в канонической шкале" defensive exit would fire on a perfectly legitimate
+# stage), and (b) within any ONE track, walking the matrix's own row order never produces a
+# DECREASING canon_rank (a decrease there would mean the shared timeline disagrees with a
+# track's own internal ordering, silently breaking the ceiling computation for that track).
+echo "[28] sanity: SDX_CANON_ORDER covers every matrix stage name and agrees with each track's own order"
+# Both tables live as heredoc-style literal lines directly inside $SCRIPT (this test does
+# NOT source sdx-stage.sh, same reasoning as scenario 27's grep-on-the-file approach).
+# Matrix rows: "<track>|<stage>|<artifact>|<fail_marker>" (4 fields, last is yes/no).
+# Canon rows:  "<stage>|<rank>" (2 fields, last is a bare integer) — the two shapes never
+# collide because fail_marker is never numeric and a matrix row always has 4 fields.
+sanity28_ok=1
+sanity28_detail=""
+all_names="$(grep -E '^(full|standard|patch)\|' "$SCRIPT" | cut -d'|' -f2 | sort -u)"
+canon_lines="$(grep -E '^[A-Za-z][A-Za-z ]*\|[0-9]+$' "$SCRIPT")"
+while IFS= read -r name; do
+  [ -z "$name" ] && continue
+  rank="$(printf '%s\n' "$canon_lines" | awk -F'|' -v s="$name" '$1==s{print $2; exit}')"
+  if [ -z "$rank" ]; then
+    sanity28_ok=0
+    sanity28_detail="$sanity28_detail missing-canon-rank:[$name];"
+  fi
+done <<< "$all_names"
+for track in full standard patch; do
+  prev_rank=0
+  track_stages="$(grep -E "^${track}\|" "$SCRIPT" | cut -d'|' -f2)"
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    rank="$(printf '%s\n' "$canon_lines" | awk -F'|' -v s="$name" '$1==s{print $2; exit}')"
+    if [ -n "$rank" ] && [ "$rank" -lt "$prev_rank" ]; then
+      sanity28_ok=0
+      sanity28_detail="$sanity28_detail decreasing-rank:track=$track,stage=[$name];"
+    fi
+    [ -n "$rank" ] && prev_rank="$rank"
+  done <<< "$track_stages"
+done
+if [ "$sanity28_ok" -eq 1 ]; then
+  pass "every matrix stage name has a canon rank, ranks non-decreasing within each track"
+else
+  fail "Expected full canon coverage + non-decreasing ranks per track" "$sanity28_detail"
 fi
 
 echo ""

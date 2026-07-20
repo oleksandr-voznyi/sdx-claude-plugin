@@ -58,6 +58,14 @@ run_hook() {
   printf '%s' "$1" | CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK"
 }
 
+# run_hook_stderr <json-stdin> <stderr-file>
+#   Same as run_hook, but also captures stderr into the given file — needed when a
+#   scenario must assert on both the deny JSON on stdout AND a diagnostic on stderr
+#   (e.g. the WARN-1 tool-failure case).
+run_hook_stderr() {
+  printf '%s' "$1" | CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK" 2>"$2"
+}
+
 # run_hook_nojq <json-stdin> <stderr-file>
 #   Same, but with a PATH that has every tool the hook needs EXCEPT jq (mirrors
 #   the NOJQ_BIN pattern already used by test-prod-guard.sh scenario 5/6/7).
@@ -323,6 +331,97 @@ out="$(run_hook "$INPUT")"
 ec=$?
 if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
   pass "deny JSON, exit 0 (replace_all correctly touched the stage occurrence too)"
+else
+  fail "Expected deny JSON + exit 0" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 16: WARN-1 regression — awk itself fails to exec (E2BIG on ENVIRON) on ----
+# ---- an oversized session_state.json -> must DENY, not silently pass. ----
+# verification_report.md WARN-1: `literal_replace` passes the whole file content through
+# an awk ENVIRON variable; past ~131072 bytes (Linux single-arg/env-string exec limit),
+# the `awk` process itself fails to start ("Argument list too long", non-zero exit) —
+# a TOOL failure, indistinguishable (before the fix) from the STATUS "old_string not
+# found" (also non-zero exit), which the caller treats as "nothing to gate" -> the edit
+# sails through undetected even when it demonstrably changes `stage`.
+echo "[16] Edit on an oversized session_state.json (awk ENVIRON exec failure) -> deny, not silent bypass (WARN-1)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+BIG_PAD="$(head -c 140000 /dev/zero | tr '\0' 'x')"
+printf '{"stage":"Execution","pad":"%s"}' "$BIG_PAD" > "$TMPPROJ/$STATE_REL"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"Execution\"",new_string:"\"Closeout\""}}')"
+STDERR_FILE="$(mktemp)"
+out="$(run_hook_stderr "$INPUT" "$STDERR_FILE")"
+ec=$?
+RUN_STDERR="$(cat "$STDERR_FILE" 2>/dev/null || true)"
+rm -f "$STDERR_FILE"
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (awk tool failure denied, not silently bypassed)"
+else
+  fail "Expected deny JSON + exit 0 (awk exec failure must not silently bypass the gate)" "ec=$ec out='$out' stderr='$RUN_STDERR'"
+fi
+cleanup
+
+# ---- Scenario 17: same WARN-1 tool-failure regression, via MultiEdit ----
+echo "[17] MultiEdit on an oversized session_state.json (awk ENVIRON exec failure) -> deny, not silent bypass (WARN-1)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+BIG_PAD="$(head -c 140000 /dev/zero | tr '\0' 'x')"
+printf '{"stage":"Execution","track":"full","pad":"%s"}' "$BIG_PAD" > "$TMPPROJ/$STATE_REL"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '
+  {tool_name:"MultiEdit",tool_input:{file_path:$fp,edits:[
+    {old_string:"\"track\":\"full\"",new_string:"\"track\":\"standard\""},
+    {old_string:"\"stage\":\"Execution\"",new_string:"\"stage\":\"Closeout\""}
+  ]}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (awk tool failure in MultiEdit denied, not silently bypassed)"
+else
+  fail "Expected deny JSON + exit 0 (awk exec failure must not silently bypass the gate)" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 18: WARN-2 regression — Write repairing an already-corrupt ----
+# ---- session_state.json must NOT be blocked (the code comment already promises this; ----
+# ---- the Write branch just never implemented the carve-out). ----
+echo "[18] Write with fully valid content repairs an already-corrupt session_state.json -> pass (WARN-2)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf '{"stage":"Execution",,,' > "$TMPPROJ/$STATE_REL"
+CONTENT='{"stage":"Execution"}'
+out="$(run_hook "$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" --arg c "$CONTENT" '{tool_name:"Write",tool_input:{file_path:$fp,content:$c}}')")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (repair of an already-broken file is not blocked)"
+else
+  fail "Expected empty stdout + exit 0 (repair must not be blocked, WARN-2)" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 19: WARN-2 regression — Edit repairing an already-corrupt ----
+# ---- session_state.json (turning ",,," into "}") must NOT be blocked either. ----
+echo "[19] Edit repairs an already-corrupt session_state.json -> pass (WARN-2)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+printf '{"stage":"Execution",,,' > "$TMPPROJ/$STATE_REL"
+INPUT="$(jq -cn --arg fp "$TMPPROJ/$STATE_REL" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:",,,",new_string:"}"}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && [ -z "$out" ]; then
+  pass "stdout empty, exit 0 (repair of an already-broken file is not blocked)"
+else
+  fail "Expected empty stdout + exit 0 (repair must not be blocked, WARN-2)" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 20: WARN-3 (partial fix) — a "/./" segment in file_path must not ----
+# ---- defeat the exact-path comparison. (True relative-path resolution is left as a ----
+# ---- documented, accepted gap — see stage-write-guard.sh comment at the normalizer.) ----
+echo "[20] file_path containing a '/./' segment still matches session_state.json -> deny (WARN-3)"
+setup_sdx_repo "sdx/test-swg" "Execution"
+dotted_path="$TMPPROJ/.claude/./sessions/test-swg/session_state.json"
+INPUT="$(jq -cn --arg fp "$dotted_path" '{tool_name:"Edit",tool_input:{file_path:$fp,old_string:"\"Execution\"",new_string:"\"Closeout\""}}')"
+out="$(run_hook "$INPUT")"
+ec=$?
+if [ "$ec" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+  pass "deny JSON, exit 0 (/./ segment normalized before path comparison)"
 else
   fail "Expected deny JSON + exit 0" "ec=$ec out='$out'"
 fi

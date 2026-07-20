@@ -81,6 +81,24 @@ fi
 # Normalize separators (BUG-006 pattern): Windows file_path arrives with backslashes.
 target="${target//\\//}"
 
+# normalize_path <path> — collapse "/./" segments and duplicate slashes so a
+# semantically-identical path spelled differently still exact-matches $state
+# (verification_report.md WARN-3). Applied to both sides so $state itself (built
+# from $proj, which callers could also hand us with such segments) is covered too.
+# Deliberately NOT a full canonicalizer: it does not resolve ".." and does not turn
+# a relative path into an absolute one (that would require guessing a cwd this
+# hook has no reliable way to know). Left as a documented, accepted gap — the
+# Write/Edit/MultiEdit tool contract requires file_path to already be absolute, so
+# a genuinely relative $target is considered practically unreachable in practice.
+normalize_path() {
+  local p="$1"
+  while [[ "$p" == *"/./"* ]]; do p="${p//\/.\//\/}"; done
+  while [[ "$p" == *"//"* ]]; do p="${p//\/\//\/}"; done
+  printf '%s' "$p"
+}
+target="$(normalize_path "$target")"
+state="$(normalize_path "$state")"
+
 [ "$target" != "$state" ] && exit 0   # hook is specific to THIS file, exact path match
 
 # Primary creation is not blocked (REQ-DENY-2): no file on disk yet -> this is a
@@ -131,6 +149,17 @@ old_stage="$(jq -r '.stage // empty' "$state" 2>/dev/null)"
 #   treats `search` as a glob pattern (`*`, `?`, `[` are special), which would silently
 #   misbehave on JSON fragments containing those characters; awk's index()/substr() do
 #   a byte-for-byte literal search with no such reinterpretation.
+#   Exit-code contract (verification_report.md WARN-1): the awk BEGIN block above never
+#   itself exits with anything other than 0 (found) or 1 (not found/empty search) — those
+#   are the only two `exit` statements it contains. `$content` is passed through an
+#   ENVIRON variable, and on Linux a single env string longer than ~128 KiB (or a total
+#   argv+envp over ARG_MAX) makes the `awk` *process itself* fail to start — a TOOL
+#   failure (typically exit 126, "Argument list too long" on stderr), not a search
+#   result. Because that failure happens before awk's own code runs at all, it can never
+#   produce 0 or 1 — so any exit code the caller sees OTHER than 0 or 1 is unambiguously
+#   "the tool could not compute an answer", never "search wasn't found". Callers MUST
+#   treat that third case as "cannot prove `stage` didn't change" -> deny (same stance
+#   already taken for unparseable JSON), not silently fall through to "nothing to gate".
 literal_replace() {
   SWG_CONTENT="$1" SWG_SEARCH="$2" SWG_REPLACE="$3" SWG_ALL="$4" awk '
     BEGIN {
@@ -161,34 +190,56 @@ literal_replace() {
 
 # check_stage_change <content_before> <content_after>
 #   Parses `.stage` out of both blobs (jq) and denies iff the value actually changed.
-#   If `content_after` fails to parse as JSON while `content_before` did parse, that is
-#   itself suspicious — an edit that turns a well-formed session_state.json into
-#   garbage — and we deny defensively: we cannot prove `stage` didn't change, and
-#   letting a Write/Edit corrupt the ONE file every SDX transition mechanism depends on
-#   is worse than a false-positive block (the same "prove-it-or-block" stance `Write`'s
-#   exact path already takes for unparseable new content). If `content_before` itself
-#   was already unparseable (the state file was corrupt before this operation even
-#   ran), we do NOT additionally block: this hook's job is to guard legitimate `stage`
+#   Recovery carve-out (verification_report.md WARN-2 fix): checked FIRST, unconditionally
+#   on `before` alone. If `content_before` was already unparseable (the state file was
+#   corrupt before this operation even ran), we do NOT block, regardless of what
+#   `content_after` looks like — this hook's job is to guard legitimate `stage`
 #   transitions of a well-formed file, not to arbitrate recovery of an already-broken
-#   one — and blocking here would remove the only remaining way (Edit/Write) to fix it,
-#   which is the same self-defeating trap REQ-DENY-4 already rejected for the no-jq case.
+#   one, and blocking here (even when `after` happens to be a valid repair) would remove
+#   the only remaining way (Edit/Write) to fix it — the same self-defeating trap
+#   REQ-DENY-4 already rejected for the no-jq case. (Previously this carve-out was only
+#   reachable when `after` was ALSO unparseable, so the one case anyone actually cares
+#   about — before broken, after repaired — fell through to the generic comparison below
+#   and got denied; that was the bug.)
+#   Past that carve-out: if `content_after` fails to parse as JSON (while `before` DID
+#   parse), that is itself suspicious — an edit that turns a well-formed
+#   session_state.json into garbage — and we deny defensively: we cannot prove `stage`
+#   didn't change, and letting a Write/Edit corrupt the ONE file every SDX transition
+#   mechanism depends on is worse than a false-positive block (the same "prove-it-or-block"
+#   stance `Write`'s exact path already takes for unparseable new content).
 check_stage_change() {
   local before="$1" after="$2" new_stage new_rc
+  if ! printf '%s' "$before" | jq -e . >/dev/null 2>&1; then
+    return 0   # was already broken before this operation -> this is the recovery path
+  fi
   new_stage="$(printf '%s' "$after" | jq -r '.stage // empty' 2>/dev/null)"
   new_rc=$?
   if [ "$new_rc" -ne 0 ]; then
-    if printf '%s' "$before" | jq -e . >/dev/null 2>&1; then
-      deny "SDX stage-write-guard: правка делает session_state.json невалидным JSON — запись заблокирована (не могу доказать, что поле 'stage' не меняется). Пишите валидный JSON или используйте sdx-stage.sh (через /sdx:next, /sdx:backtrack, /sdx:retrack, /sdx:archive)."
-    fi
-    return 0   # was already broken before this operation -> not this hook's problem
+    deny "SDX stage-write-guard: правка делает session_state.json невалидным JSON — запись заблокирована (не могу доказать, что поле 'stage' не меняется). Пишите валидный JSON или используйте sdx-stage.sh (через /sdx:next, /sdx:backtrack, /sdx:retrack, /sdx:archive)."
   fi
   if [ "$new_stage" != "$old_stage" ]; then
     deny "SDX stage-write-guard: правка поля 'stage' ($old_stage → $new_stage) в обход механизма перехода заблокирована. Используйте /sdx:next, /sdx:backtrack, /sdx:retrack или /sdx:archive — они переводят stage через sdx-stage.sh с проверкой гейта."
   fi
 }
 
+# tool_failure_deny <exit-code>
+#   Shared deny message for the WARN-1 case: literal_replace's underlying awk process
+#   itself failed to run (see literal_replace's exit-code contract comment above) rather
+#   than returning a normal found/not-found result. We cannot compute what the edit
+#   would have done, so — same "prove-it-or-block" stance as unparseable JSON — deny.
+tool_failure_deny() {
+  deny "SDX stage-write-guard: не удалось вычислить результат правки (сбой инструмента, код возврата $1) — запись заблокирована (не могу доказать, что поле 'stage' не меняется). Повторите правку меньшего объёма или используйте sdx-stage.sh (через /sdx:next, /sdx:backtrack, /sdx:retrack, /sdx:archive)."
+}
+
 case "$tool_name" in
   Write)
+    # Recovery carve-out (verification_report.md WARN-2, symmetric with
+    # check_stage_change's carve-out below): if the file ON DISK is already not valid
+    # JSON, this Write is the recovery path -> do not block, regardless of what the new
+    # content looks like. Checked first, before even parsing the new content.
+    if ! jq -e . "$state" >/dev/null 2>&1; then
+      exit 0
+    fi
     # Exact path (DESIGN.md "Write (точный путь)"): the full new file content is
     # available -> parse and compare .stage precisely.
     content="$(printf '%s' "$input" | jq -r '.tool_input.content // empty')"
@@ -206,12 +257,19 @@ case "$tool_name" in
     edit_new="$(printf '%s' "$input" | jq -r '.tool_input.new_string // empty')"
     edit_all="$(printf '%s' "$input" | jq -r 'if (.tool_input.replace_all == true) then "1" else "0" end')"
     content_before="$(cat "$state" 2>/dev/null)"
-    if content_after="$(literal_replace "$content_before" "$edit_old" "$edit_new" "$edit_all")"; then
+    content_after="$(literal_replace "$content_before" "$edit_old" "$edit_new" "$edit_all")"
+    lr_rc=$?
+    if [ "$lr_rc" -eq 0 ]; then
       check_stage_change "$content_before" "$content_after"
+    elif [ "$lr_rc" -eq 1 ]; then
+      : # old_string not found in the file -> the real Edit call would itself fail
+        # before writing anything (REQ-DENY-2's "changes the value" precondition can't
+        # even be met) -> nothing to gate, fall through to the trailing `exit 0`.
+    else
+      # WARN-1: literal_replace's awk process itself failed to run (e.g. E2BIG on a
+      # very large session_state.json) -> a tool failure, not a "not found" result.
+      tool_failure_deny "$lr_rc"
     fi
-    # else: old_string not found in the file -> the real Edit call would itself fail
-    # before writing anything (REQ-DENY-2's "changes the value" precondition can't even
-    # be met) -> nothing to gate, fall through to the trailing `exit 0`.
     ;;
   MultiEdit)
     # Apply every edit SEQUENTIALLY against a running copy of the file content, exactly
@@ -230,14 +288,19 @@ case "$tool_name" in
       me_old="$(printf '%s' "$input" | jq -r --argjson i "$me_i" '.tool_input.edits[$i].old_string // empty')"
       me_new="$(printf '%s' "$input" | jq -r --argjson i "$me_i" '.tool_input.edits[$i].new_string // empty')"
       me_all="$(printf '%s' "$input" | jq -r --argjson i "$me_i" 'if (.tool_input.edits[$i].replace_all == true) then "1" else "0" end')"
-      if me_next="$(literal_replace "$content_cur" "$me_old" "$me_new" "$me_all")"; then
+      me_next="$(literal_replace "$content_cur" "$me_old" "$me_new" "$me_all")"
+      lr_rc=$?
+      if [ "$lr_rc" -eq 0 ]; then
         content_cur="$me_next"
-      else
+      elif [ "$lr_rc" -eq 1 ]; then
         # This edit's old_string isn't in the content at this point in the sequence ->
         # the real MultiEdit call would fail atomically right here, so the whole batch
         # never writes anything -> nothing to gate for the entire operation.
         all_found=0
         break
+      else
+        # WARN-1: tool failure mid-batch -> cannot compute the net effect on `stage`.
+        tool_failure_deny "$lr_rc"
       fi
       me_i=$((me_i + 1))
     done

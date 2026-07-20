@@ -897,17 +897,21 @@ fi
 cleanup
 
 # ---- Scenario 41: next — doc: Verification -> Closeout, verification_report.md has [FAIL] -> exit 1 (T-4) ----
-echo "[41] next: doc Verification -> Closeout, verification_report.md contains ### [FAIL] -> exit 1"
+echo "[41] next: doc Verification -> Closeout, verification_report.md contains ### [FAIL] -> exit 1, points to Update (not Execution)"
 setup_sdx_repo "t41" "doc" "Verification"
 printf '### [FAIL] [Correctness] something broken\n' > "$TMPPROJ/.claude/sessions/t41/verification_report.md"
 out="$(run_stage next "t41" 2>&1 1>/dev/null)"
 ec=$?
 sf="$(state_file t41)"
+# Remediation hint must name a stage that is ACTIVE in the track: doc has no Execution,
+# so pointing there would hand the user a second error from /sdx:backtrack.
 if [ "$ec" -eq 1 ] && [ "$(jq -r '.stage' "$sf")" = "Verification" ] \
-   && printf '%s' "$out" | grep -q "FAIL"; then
-  pass "exit 1, FAIL marker blocks doc Verification -> Closeout"
+   && printf '%s' "$out" | grep -q "FAIL" \
+   && printf '%s' "$out" | grep -q "backtrack --to Update" \
+   && ! printf '%s' "$out" | grep -q "Execution"; then
+  pass "exit 1, FAIL marker blocks doc Verification -> Closeout, hint names Update"
 else
-  fail "Expected doc Verification FAIL-marker rejection" "ec=$ec out='$out'"
+  fail "Expected doc Verification FAIL-marker rejection pointing at Update" "ec=$ec out='$out'"
 fi
 cleanup
 

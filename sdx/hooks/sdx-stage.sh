@@ -258,7 +258,14 @@ cmd_next() {
       exit 1
     fi
     if [ "$fail_marker" = "yes" ] && grep -q '^### \[FAIL\]' "$path"; then
-      echo "SDX sdx-stage: гейт не пройден — '$artifact' содержит находки FAIL. Исправь их и вызови /sdx:backtrack --to Execution." >&2
+      # Этап исправления зависит от трека: у кодовых треков это Execution, у doc-трека
+      # (где Execution не активен) — предыдущий активный этап, т.е. Update.
+      local fix_stage
+      fix_stage="Execution"
+      if ! printf '%s\n' "$stages" | grep -qx 'Execution'; then
+        fix_stage="$(printf '%s\n' "$stages" | sed -n "$(( $(matrix_index "$track" "$stage") - 1 ))p")"
+      fi
+      echo "SDX sdx-stage: гейт не пройден — '$artifact' содержит находки FAIL. Исправь их и вызови /sdx:backtrack --to $fix_stage." >&2
       exit 1
     fi
   fi

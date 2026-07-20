@@ -1,3 +1,5 @@
+<!-- SDX-OUTDATED: устарело откатом /sdx:backtrack --to "Execution" (2026-07-20 18:36:26). Актуализируйте перед продолжением; история версии — `git log -p -- ./.claude/sessions/fw-session-types-20260720/verification_report.md`. -->
+
 # Verification Report: `fw-session-types-20260720`
 
 Трек: full. QA-верификация (корректность исполнением) — прогон полного набора тест-сьютов

@@ -56,6 +56,30 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 
 Hooks are safe by default: outside an `sdx/<id>` branch and without per-project configs they are transparent (no-op), so a user-scope installation does not interfere with projects that don't use SDX.
 
+## Adaptive tracks (flow profiles)
+
+The SDX lifecycle scales with task size: each session follows one of **four adaptive tracks**, defining active stages and gates.
+
+| Track | Purpose | Session types | Stages |
+|-------|---------|---------------|--------|
+| **patch** | Bugfix or small fix without logic changes | `bug` | Execution → Verification → Closeout |
+| **standard** | Small feature or refactor | `feature`, `refactor` | Discovery → Change → Execution → Verification → Closeout |
+| **full** | Large feature affecting contracts or architecture | `feature`, `refactor`, `init`, `import` | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout |
+| **doc** | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements | `grooming`, `retro`, `postmortem`, `intake` | Discovery → Update → Verification → Closeout |
+
+### The `doc` track and its session types
+
+The `doc` track handles work on the backlog and SDX process itself. All four session types follow the same stages; the difference lies in the nature of input and output:
+
+- **`grooming`** — review of existing backlog entries: update status, priority, wave. This is a **redistribution** of attributes across existing entries.
+- **`retro`** — review of completed sessions over a period: identify patterns and conclusions, expressed as new backlog entries.
+- **`postmortem`** — review of an incident (production, process failure, critical defect): timeline, root cause, action plan.
+- **`intake`** — processing a significant new block of external requirements (epic, batch of bug reports, product material): breakdown into backlog entries. This is **creation** of new entries from external material.
+
+**Key distinction between `intake` and `grooming`:** `intake` sits higher in the workflow and focuses on **generating** new entries from external material, while `grooming` then **redistributes** priority and wave across what has accumulated. Both types work with the same `docs/backlog/`, but in opposite operational directions.
+
+Each doc session must produce at least one observable backlog change and pass a lightweight verification. For `retro`, `postmortem`, and `intake`, a permanent analysis document is additionally created in `docs/history/`.
+
 ## Rules and documentation
 
 - Process, tracks, gates, and the session closeout contract: `sdx/protocol.md`.

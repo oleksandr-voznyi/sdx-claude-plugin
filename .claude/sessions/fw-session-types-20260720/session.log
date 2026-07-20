@@ -1,2 +1,4 @@
 [2026-07-20 14:44:59] [START] Инициализация сессии fw-session-types-20260720 (трек: full)
 [2026-07-20 15:04:30] [STAGE_CHANGE] Переход на этап Business Spec
+[2026-07-20 15:20:55] [STAGE_CHANGE] Переход на этап Technical Design
+[2026-07-20 15:51:13] [STAGE_CHANGE] Возврат на этап Business Spec

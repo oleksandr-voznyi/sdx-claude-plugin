@@ -38,6 +38,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-014 | debt | open | normal | null | [stage-gate на Verification не пускает тесты хуков](DEBT-014-stage-gate-blocks-hook-tests.md) |
 | DEBT-015 | debt | open | normal | null | [Пробелы тестового покрытия нового stage-enforcement](DEBT-015-stage-guard-coverage-gaps.md) |
 | PROC-008 | proc | open | normal | null | [Длинный DESIGN.md — систематический источник дрейфа](PROC-008-long-design-drift.md) |
+| PROC-009 | proc | open | normal | null | [Структурированное размещение входящих артефактов проекта](PROC-009-incoming-artifacts-placement.md) |
 | PROC-004 | proc | open | normal | null | [Режим экстремального прототипирования (vibe)](PROC-004-vibe-prototyping-mode.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |

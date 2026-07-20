@@ -1,3 +1,5 @@
+<!-- SDX-OUTDATED: устарело откатом /sdx:backtrack --to "Business Spec" (2026-07-20 15:51:13). Актуализируйте перед продолжением; история версии — `git log -p -- ./.claude/sessions/fw-session-types-20260720/DESIGN.md`. -->
+
 # Technical Design: Типы сессий grooming / retro / postmortem и трек doc
 
 ## Архитектурный обзор

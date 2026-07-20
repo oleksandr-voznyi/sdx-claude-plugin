@@ -1,3 +1,4 @@
+
 # Verification Report (четвёртая, финальная верификация): fw-reconcile-20260720
 
 ## Сводка

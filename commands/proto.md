@@ -39,7 +39,9 @@ description: Гейт принятия/отклонения прототипа (
    # (1) tracked-дельта: изменённые, удалённые и добавленные-в-индекс файлы против baseline.
    #     `git diff --name-only <rev>` сравнивает РАБОЧЕЕ ДЕРЕВО с ревизией, поэтому покрывает
    #     и staged, и unstaged. Каталог артефактов сессии исключён — он живёт своей жизнью.
-   git diff --name-only "$base_rev" -- . ':!.claude/sessions/**' > "$tmp_tracked"
+   #     `-c core.quotePath=false` — иначе не-ASCII пути печатаются в C-кавычках
+   #     (`"\320\272..."`) и не совпадают с реальными именами файлов ниже по пайплайну.
+   git -c core.quotePath=false diff --name-only "$base_rev" -- . ':!.claude/sessions/**' > "$tmp_tracked"
 
    # (2) новые untracked = untracked сейчас МИНУС untracked, записанные в baseline.
    comm -23 \
@@ -76,7 +78,9 @@ description: Гейт принятия/отклонения прототипа (
    # (1) tracked-дельта: изменённые, удалённые и добавленные-в-индекс файлы против baseline.
    #     `git diff --name-only <rev>` сравнивает РАБОЧЕЕ ДЕРЕВО с ревизией, поэтому покрывает
    #     и staged, и unstaged. Каталог артефактов сессии исключён — он живёт своей жизнью.
-   git diff --name-only "$base_rev" -- . ':!.claude/sessions/**' > "$tmp_tracked"
+   #     `-c core.quotePath=false` — иначе не-ASCII пути печатаются в C-кавычках
+   #     (`"\320\272..."`) и не совпадают с реальными именами файлов ниже по пайплайну.
+   git -c core.quotePath=false diff --name-only "$base_rev" -- . ':!.claude/sessions/**' > "$tmp_tracked"
 
    # (2) новые untracked = untracked сейчас МИНУС untracked, записанные в baseline.
    comm -23 \

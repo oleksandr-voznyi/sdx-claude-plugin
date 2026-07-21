@@ -101,6 +101,7 @@ doc|Discovery|-|no
 doc|Update|change_note.md|no
 doc|Verification|verification_report.md|yes
 doc|Closeout|-|no
+vibe|Prototype|-|no
 '
 ```
 

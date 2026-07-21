@@ -47,7 +47,7 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 
 | Path | Contents |
 |------|----------|
-| `commands/` | 15 `/sdx:*` commands (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import, backlog, reconcile) |
+| `commands/` | 16 `/sdx:*` commands (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile) |
 | `agents/` | 8 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops` |
 | `hooks/hooks.json` | Enforcement-layer wiring (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Session protocol: state, tracks, gates, Closeout, import/export |
@@ -58,7 +58,7 @@ Hooks are safe by default: outside an `sdx/<id>` branch and without per-project 
 
 ## Adaptive tracks (flow profiles)
 
-The SDX lifecycle scales with task size: each session follows one of **four adaptive tracks**, defining active stages and gates.
+The SDX lifecycle scales with task size: each session follows one of **five adaptive tracks**, defining active stages and gates.
 
 | Track | Purpose | Session types | Stages |
 |-------|---------|---------------|--------|
@@ -66,6 +66,7 @@ The SDX lifecycle scales with task size: each session follows one of **four adap
 | **standard** | Small feature or refactor | `feature`, `refactor` | Discovery → Change → Execution → Verification → Closeout |
 | **full** | Large feature affecting contracts or architecture | `feature`, `refactor`, `init`, `import` | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout |
 | **doc** | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements | `grooming`, `retro`, `postmortem`, `intake` | Discovery → Update → Verification → Closeout |
+| **vibe** | Extreme prototyping: a fast, code-first hypothesis check without TDD/`PLAN.md`/commits until an explicit decision | `proto` (rigidly bound, no triage) | Prototype (no `Closeout`) |
 
 ### The `doc` track and its session types
 
@@ -79,6 +80,12 @@ The `doc` track handles work on the backlog and SDX process itself. All four ses
 **Key distinction between `intake` and `grooming`:** `intake` sits higher in the workflow and focuses on **generating** new entries from external material, while `grooming` then **redistributes** priority and wave across what has accumulated. Both types work with the same `docs/backlog/`, but in opposite operational directions.
 
 Each doc session must produce at least one observable backlog change and pass a lightweight verification. For `retro`, `postmortem`, and `intake`, a permanent analysis document is additionally created in `docs/history/`.
+
+### The `vibe` track and mandatory legalization
+
+The `vibe` track is an extreme-prototyping mode (ADR-018): its only session type is `proto`, and the `proto → vibe` binding is rigid and unconditional (no track-choice dialog) — much like all four `doc` types are locked to their track, unlike `patch`/`standard`/`full`, where the type is only a starting hypothesis and the track is decided by triage.
+
+On the `Prototype` stage code is written in one continuous pass: no `PLAN.md`, no `change_note.md`, and — the single named exception to the incremental-commit norm (ADR-005) — no intermediate code commits. Once done, the `/sdx:proto` gate unconditionally asks the user to decide: **reject** the prototype (a targeted rollback of just the prototype's files back to the baseline snapshot) or **accept** it and legalize the session via `/sdx:retrack standard|full`. `vibe` has no `Closeout` of its own: a session on this track cannot be closed or merged into the main branch without legalization (REQ-VIBE-8) — `/sdx:archive` stops on such a session and points to `/sdx:proto`/`/sdx:retrack`.
 
 ## Rules and documentation
 

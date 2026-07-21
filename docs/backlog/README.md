@@ -39,11 +39,14 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-008 | proc | open | normal | null | [Длинный DESIGN.md — систематический источник дрейфа](PROC-008-long-design-drift.md) |
 | PROC-009 | proc | open | normal | null | [Структурированное размещение входящих артефактов проекта](PROC-009-incoming-artifacts-placement.md) |
 | PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии](PROC-010-parallel-subagents-shared-session-files.md) |
+| PROC-011 | proc | open | normal | null | [Синхронизацию DESIGN с кодом нельзя вести параллельно с правкой кода](PROC-011-design-sync-after-code-not-parallel.md) |
+| DEBT-023 | debt | open | normal | null | [Гейт `/sdx:proto` не показывает содержимое новых файлов прототипа](DEBT-023-proto-gate-new-files-diff.md) |
+| DEBT-025 | debt | open | normal | null | [Ручной прогон трека `vibe` не выполнен — покрытие видимое](DEBT-025-vibe-manual-test-not-executed.md) |
 | BUG-007 | bug | open | normal | null | [`/sdx:init` создаёт каталоги разборов без файлов-заглушек](BUG-007-init-history-dirs-no-placeholder.md) |
 | DEBT-017 | debt | open | normal | null | [Перечисления треков в `agents/qa.md`/`developer.md`/`devops.md` не включают `doc`](DEBT-017-agent-track-enumerations-incomplete.md) |
-| PROC-004 | proc | open | normal | null | [Режим экстремального прототипирования (vibe)](PROC-004-vibe-prototyping-mode.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
+| DEBT-024 | debt | open | low | null | [Инвариант ADR-001 «трек не привязан к типу» сужен дважды без пометки](DEBT-024-adr-001-invariant-narrowed-twice.md) |
 | IDEA-007 | idea | open | low | null | [Автоматический пуш записей бэклога в GitHub Issues](IDEA-007-backlog-github-issues-sync.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-016 | debt | open | low | null | [`stage-write-guard.sh` не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) |
@@ -63,6 +66,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 |----|----------|------------------|
 | DEBT-021 | [Уже мигрированные вручную источники не помечены `SDX-MIGRATED`](DEBT-021-migrated-sources-unmarked.md) | `fw-reconcile-debt-20260720` |
 | DEBT-022 | [`/sdx:reconcile` не определяет поведение для `.sdx/bundles/`](DEBT-022-reconcile-bundles-not-in-scan-list.md) | `fw-reconcile-debt-20260720` |
+| PROC-004 | [Режим экстремального прототипирования (vibe)](PROC-004-vibe-prototyping-mode.md) | `feat-vibe-track-20260720` |
 | PROC-002 | [Груминг / ретроспектива / постмортем как типы сессий](PROC-002-grooming-retro-postmortem-session-types.md) | `fw-session-types-20260720` |
 | DEBT-001 | [Весь enforcement держится на самодекларируемом поле `stage`](DEBT-001-self-declared-stage-field.md) | `fw-stage-guard-20260720` |
 | DEBT-011 | [`/sdx:backtrack` недоспецифицирован](DEBT-011-backtrack-underspecified.md) | `fw-stage-guard-20260720` |

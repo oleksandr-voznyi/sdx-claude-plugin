@@ -45,7 +45,7 @@ claude plugin install sdx@sdx --scope user
 
 | Путь | Содержимое |
 |------|------------|
-| `commands/` | 15 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, archive, init, export, import, backlog, reconcile) |
+| `commands/` | 16 команд `/sdx:*` (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile) |
 | `agents/` | 8 субагентов: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops` |
 | `hooks/hooks.json` | Проводка enforcement-слоя (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Протокол сессий: состояние, треки, гейты, Closeout, import/export |
@@ -56,7 +56,7 @@ claude plugin install sdx@sdx --scope user
 
 ## Адаптивные треки (профили флоу)
 
-Жизненный цикл SDX масштабируется под размер задачи: каждая сессия проходит по одному из **четырёх адаптивных треков**, определяющих активные этапы и гейты.
+Жизненный цикл SDX масштабируется под размер задачи: каждая сессия проходит по одному из **пяти адаптивных треков**, определяющих активные этапы и гейты.
 
 | Трек | Назначение | Типы сессий | Этапы |
 |------|-----------|-----------|-------|
@@ -64,6 +64,7 @@ claude plugin install sdx@sdx --scope user
 | **standard** | Малая фича или рефактор | `feature`, `refactor` | Discovery → Change → Execution → Verification → Closeout |
 | **full** | Крупная фича, затрагивающая контракты или архитектуру | `feature`, `refactor`, `init`, `import` | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout |
 | **doc** | Процессная работа без кода: груминг бэклога, ретроспектива, разбор инцидентов, обработка новых требований | `grooming`, `retro`, `postmortem`, `intake` | Discovery → Update → Verification → Closeout |
+| **vibe** | Экстремальное прототипирование: быстрая проверка гипотезы кодом без TDD/`PLAN.md`/коммитов до явного решения | `proto` (жёстко привязан, без триажа) | Prototype (без `Closeout`) |
 
 ### Трек `doc` и его типы сессий
 
@@ -77,6 +78,12 @@ claude plugin install sdx@sdx --scope user
 **Ключевое отличие `intake` от `grooming`:** `intake` стоит по потоку выше и занимается **порождением** новых записей из внешнего материала, а `grooming` затем **перераспределяет** приоритеты и волны среди уже накопленного. Оба типа работают с одним и тем же `docs/backlog/`, но в разных направлениях операций.
 
 Каждая doc-сессия обязана произвести минимум одно видимое изменение бэклога и пройти лёгкую верификацию. Для `retro`, `postmortem` и `intake` дополнительно создаётся постоянный документ разбора в `docs/history/`.
+
+### Трек `vibe` и обязательная легализация
+
+Трек `vibe` — режим экстремального прототипирования (ADR-018): единственный тип сессии — `proto`, и привязка `proto → vibe` жёсткая и безусловная (без диалога о выборе трека) — аналогично тому, как все четыре типа `doc` закреплены за своим треком, в отличие от `patch`/`standard`/`full`, где тип — лишь стартовая гипотеза, а трек определяется триажем.
+
+На стадии `Prototype` код пишется одним непрерывным проходом: без `PLAN.md`, без `change_note.md` и — единственное именованное исключение из нормы инкрементальных коммитов (ADR-005) — без промежуточных коммитов. По завершении гейт `/sdx:proto` безусловно запрашивает решение пользователя: **отклонить** прототип (точечный откат к baseline-снимку рабочего дерева) либо **принять** и легализовать сессию через `/sdx:retrack standard|full`. У `vibe` нет собственного `Closeout`: сессия этого трека не может быть закрыта и замёржена в основную ветку без легализации (REQ-VIBE-8) — `/sdx:archive` останавливается на такой сессии и направляет к `/sdx:proto`/`/sdx:retrack`.
 
 ## Правила и документация
 

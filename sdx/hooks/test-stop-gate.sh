@@ -284,6 +284,29 @@ else
 fi
 cleanup
 
+
+# ---- Scenario 13: transparent on stage=Prototype (vibe track), even with a failing
+#                   verify command configured — regression guard for the intentional
+#                   [UNCHANGED] decision on the Execution|Verification enforcement branch
+#                   (DESIGN "Enforcement-слой" / ADR-018). Mirrors scenario [2], but with
+#                   a verify-cmd.sh that WOULD fail if the hook actually ran it, so this
+#                   test goes red the moment someone adds "Prototype" to the enforcement
+#                   case branch. sdx/hooks/stop-gate.sh itself is not modified for this. ----
+echo "[13] Transparent on stage=Prototype (vibe track), with a verify-cmd.sh that would fail if run"
+setup_stop_repo "sdx/test-stop" "Prototype"
+mkdir -p "$TMPPROJ/.claude/sdx"
+# A verify command that always fails — must never be invoked while stage=Prototype
+# is (correctly) treated as outside the enforcement scope.
+printf '#!/bin/bash\nexit 1\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+if [ "$RUN_EC" -eq 0 ]; then
+  pass "exit 0 (Prototype stays transparent even with a failing verify command configured)"
+else
+  fail "Expected exit 0 (Prototype must stay outside the enforcement branch)" "got exit $RUN_EC"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

@@ -27,7 +27,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
-| BUG-004 | bug | open | normal | 5 | [Противоречие verify.md ↔ reviewer.md: кто вычисляет diff](BUG-004-diff-computation-mismatch.md) |
 | BUG-003 | bug | open | normal | 8 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) |
 | BUG-005 | bug | open | normal | 9 | [Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) |
 | DEBT-003 | debt | open | normal | 10 | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) |
@@ -61,6 +60,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| BUG-004 | [Противоречие verify.md ↔ reviewer.md: кто вычисляет diff](BUG-004-diff-computation-mismatch.md) | `fix-diff-computation-contract-20260722` |
 | DEBT-017 | [Перечисления треков в `agents/qa.md`/`developer.md`/`devops.md` не включают `doc`](DEBT-017-agent-track-enumerations-incomplete.md) | `fix-track-consistency-20260722` |
 | DEBT-018 | [Столбец «Типы сессий» в README стирает жёсткость привязки типа к треку `doc`](DEBT-018-readme-track-type-binding-blurred.md) | `fix-track-consistency-20260722` |
 | DEBT-019 | [doc-специфика пп. 2/3 Closeout не продублирована в `archive.md`](DEBT-019-archive-checklist-doc-specifics-partial.md) | `fix-track-consistency-20260722` |

@@ -443,3 +443,24 @@ regex как имя этапа и писал в state мусор; **храпов
 **Бэклог:** `DEBT-017`, `DEBT-018`, `DEBT-019` закрыты. Новых записей не заведено (WARN квитирован).
 
 **Ветка:** `sdx/fix-track-consistency-20260722` → слита в `main`.
+
+---
+
+## 2026-07-22 — fix-diff-computation-contract-20260722 (bug, трек standard)
+
+**Цель:** `BUG-004` (wave 5) — устранить противоречие «кто вычисляет diff поставки»: `verify.md` возлагал вычисление на оркестратора, `reviewer.md` — на самого ревьюера через Bash (двойная токенизация + дыра в изоляции: Bash даёт доступ к `session.log`).
+
+**Сделано:**
+- **verify.md** шаг 4 — оркестратор материализует diff **редиректом в файл** `.claude/sessions/<id>/delivery.diff` (не через контекст); шаг 5 передаёт ревьюеру **путь**, не текст. Снимает исключение ADR-005 о двойной токенизации.
+- **reviewer.md** — из frontmatter `tools:` изъят `Bash` (`Read, Write, Glob, Grep`): контракт изоляции стал **enforcement**, а не прозой (нет инструмента → физически нет доступа к `session.log`/произвольному git). «Вход»/«Инструкция 2» переписаны на чтение файла.
+- Смежный дефект когерентности, найденный на Discovery: `reviewer.md` хардкодил `git diff main...`, тогда как фреймворк резолвит основную ветку динамически (`default-branch.sh`, REQ-BRANCH-3, ADR-010). Хардкод `main` удалён.
+- `delivery.diff` объявлен эфемерным буфером: targeted-паттерн `.claude/sessions/*/delivery.diff` добавлен в корневой `.gitignore` и seed-блок `commands/init.md` (REQ-SESS-2, как `.stopgate.*`).
+- `sdx/protocol.md` (раздел «Fresh-eyes: контракт изоляции») приведён в соответствие — триада «протокол ↔ `verify.md` ↔ `reviewer.md`» когерентна (сама ось BUG-004).
+
+**Верификация (standard):** `qa` — регресс 9/9 hook-сьютов зелёные (поставка не трогает `sdx/hooks/*.sh`), gitignore-паттерн проверен исполнением (`git check-ignore`); новых автотестов не требуется (prose/config-контракты вне тест-пола). Fresh-eyes `reviewer` (против `change_note.md`) — **PASS, 0 FAIL, 0 WARN**. Особенность: сессия верифицировалась уже по новому контракту (diff подан файлом, ревьюер без `Bash`) — живая самопроверка правки. Коллизий триады нет.
+
+**Затронутые документы:** `commands/verify.md`, `agents/reviewer.md`, `commands/init.md`, `sdx/protocol.md`, `.gitignore`. Отдельного переноса в `docs/specs/`/`docs/designs/` нет: правки — сами постоянные файлы фреймворка; `docs/designs/phase1-enforcement-routing.md:521` (изоляция reviewer) — phase-scoped и не противоречит новому контракту, оставлен как есть.
+
+**Бэклог:** `BUG-004` закрыт. Новых записей не заведено (WARN отсутствовал).
+
+**Ветка:** `sdx/fix-diff-computation-contract-20260722` → слита в `main`.

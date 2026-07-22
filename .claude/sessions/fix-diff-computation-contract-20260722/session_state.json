@@ -2,7 +2,7 @@
   "session_id": "fix-diff-computation-contract-20260722",
   "type": "bug",
   "track": "standard",
-  "stage": "Verification",
+  "stage": "Closeout",
   "gate_mode": "interactive",
   "git_branch": "sdx/fix-diff-computation-contract-20260722",
   "artifacts": [],

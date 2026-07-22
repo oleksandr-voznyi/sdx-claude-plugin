@@ -21,6 +21,9 @@ description: Инициализация SDX фреймворка в сущест
    # SDX: эфемерные scratch-файлы enforcement-слоя (loop-guard, буфер верификации).
    #      НЕ версионируются ни при каких условиях (REQ-SESS-2).
    .claude/sessions/*/.stopgate.*
+   # SDX: материализованный diff поставки для fresh-eyes ревью (регенерируется из git,
+   #      передаётся ревьюеру файлом — BUG-004). НЕ версионируется (REQ-SESS-2).
+   .claude/sessions/*/delivery.diff
 
    # SDX: переносимые бандлы import/export (транспортные артефакты).
    .sdx/bundles/

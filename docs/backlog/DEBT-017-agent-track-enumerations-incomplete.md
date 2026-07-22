@@ -1,11 +1,11 @@
 ---
 id: DEBT-017
 type: debt
-status: open
+status: closed
 priority: normal
 wave: null
 source: fresh-eyes ревью сессии fw-session-types-20260720 (отложено пользователем)
-session: null
+session: fix-track-consistency-20260722
 links: [PROC-002, ADR-017, ADR-014]
 ---
 
@@ -26,3 +26,18 @@ links: [PROC-002, ADR-017, ADR-014]
 Одной правкой: дописать `doc` в перечисления треков `agents/qa.md`, `agents/developer.md`,
 `agents/devops.md` и исправить утверждение про опциональность Verification на `patch`
 в `agents/qa.md` в соответствии с ADR-014.
+
+## Резолюция
+Закрыто сессией `fix-track-consistency-20260722` (трек `patch`).
+- **Первая часть** (перечисления): `doc` дописан в «Контекст трека»/«Режимы работы» трёх
+  агентов — `agents/qa.md` (не вызывается: нет кода → нечего проверять регресс-прогону),
+  `agents/developer.md` (кодовой поставки нет → не вызывается), `agents/devops.md` (кода и
+  инфраструктуры нет → не вызывается). Стиль сверен с уже-поправленными
+  `reviewer.md`/`lead-dev.md`/`tech-writer.md`.
+- **Вторая часть** (ложное «Verification опционален на `patch`») к моменту этой сессии **уже
+  была устранена** попутной правкой сессии `feat-vibe-track-20260720` (см. её лог: «в
+  `agents/qa.md` попутно устранено противоречие с ADR-014»): текущий `agents/qa.md` читается
+  «этап Verification **обязателен** в лёгком объёме», упоминаний опциональности нет
+  (верифицировано fresh-eyes ревью фактом). Отдельной правки не потребовалось.
+
+Верификация: fresh-eyes PASS, 0 FAIL. Коллизий триады нет.

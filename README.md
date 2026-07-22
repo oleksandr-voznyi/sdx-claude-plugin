@@ -63,8 +63,10 @@ claude plugin install sdx@sdx --scope user
 | **patch** | Багфикс или точечная правка без изменения логики | `bug` | Execution → Verification → Closeout |
 | **standard** | Малая фича или рефактор | `feature`, `refactor` | Discovery → Change → Execution → Verification → Closeout |
 | **full** | Крупная фича, затрагивающая контракты или архитектуру | `feature`, `refactor`, `init`, `import` | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout |
-| **doc** | Процессная работа без кода: груминг бэклога, ретроспектива, разбор инцидентов, обработка новых требований | `grooming`, `retro`, `postmortem`, `intake` | Discovery → Update → Verification → Closeout |
+| **doc** | Процессная работа без кода: груминг бэклога, ретроспектива, разбор инцидентов, обработка новых требований | `grooming`, `retro`, `postmortem`, `intake` (жёстко привязаны, без триажа) | Discovery → Update → Verification → Closeout |
 | **vibe** | Экстремальное прототипирование: быстрая проверка гипотезы кодом без TDD/`PLAN.md`/коммитов до явного решения | `proto` (жёстко привязан, без триажа) | Prototype (без `Closeout`) |
+
+> Столбец «Типы сессий» читается по-разному для линейной шкалы и параллельных треков: для `patch`/`standard`/`full` тип — лишь стартовая гипотеза, а трек выбирается **триажем** и адаптивен (`/sdx:retrack`); для `doc` и `vibe` связь `тип → трек` **жёсткая 1:1 и безусловная** (без диалога о выборе трека).
 
 ### Трек `doc` и его типы сессий
 

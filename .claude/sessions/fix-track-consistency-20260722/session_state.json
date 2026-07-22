@@ -2,7 +2,7 @@
   "session_id": "fix-track-consistency-20260722",
   "type": "refactor",
   "track": "patch",
-  "stage": "Verification",
+  "stage": "Closeout",
   "gate_mode": "interactive",
   "git_branch": "sdx/fix-track-consistency-20260722",
   "artifacts": [],

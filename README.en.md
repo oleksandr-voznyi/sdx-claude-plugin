@@ -65,8 +65,10 @@ The SDX lifecycle scales with task size: each session follows one of **five adap
 | **patch** | Bugfix or small fix without logic changes | `bug` | Execution → Verification → Closeout |
 | **standard** | Small feature or refactor | `feature`, `refactor` | Discovery → Change → Execution → Verification → Closeout |
 | **full** | Large feature affecting contracts or architecture | `feature`, `refactor`, `init`, `import` | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout |
-| **doc** | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements | `grooming`, `retro`, `postmortem`, `intake` | Discovery → Update → Verification → Closeout |
+| **doc** | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements | `grooming`, `retro`, `postmortem`, `intake` (rigidly bound, no triage) | Discovery → Update → Verification → Closeout |
 | **vibe** | Extreme prototyping: a fast, code-first hypothesis check without TDD/`PLAN.md`/commits until an explicit decision | `proto` (rigidly bound, no triage) | Prototype (no `Closeout`) |
+
+> The "Session types" column reads differently for the linear scale and the parallel tracks: for `patch`/`standard`/`full` the type is only a starting hypothesis, and the track is chosen by **triage** and is adaptive (`/sdx:retrack`); for `doc` and `vibe` the `type → track` binding is **rigid, 1:1, and unconditional** (no track-choice dialog).
 
 ### The `doc` track and its session types
 

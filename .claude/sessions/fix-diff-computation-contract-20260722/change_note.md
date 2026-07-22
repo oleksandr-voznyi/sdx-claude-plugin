@@ -40,4 +40,4 @@
 standard: `qa` (регресс — прогон hook-сьютов зелёный) + fresh-eyes `reviewer` против этого `change_note.md`. Особый интерес — самопроверка: новый контракт verify.md/reviewer.md применяется к этой же сессии (diff подаётся файлом, у ревьюера нет Bash).
 
 ## Коммиты
-(заполняется по ходу)
+- `bb55636` — BUG-004: verify.md (redirect diff → `delivery.diff`, передача пути), reviewer.md (−Bash, diff как файл, снят хардкод `main`), `.gitignore`+`init.md` (targeted-паттерн `delivery.diff`), protocol.md (Fresh-eyes: материализация + enforcement изоляции).

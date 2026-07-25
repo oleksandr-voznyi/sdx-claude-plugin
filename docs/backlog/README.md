@@ -27,6 +27,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
+| BUG-008 | bug | open | high | null | [`archive-verify.sh` — единственная точка, зависящая от бита выполнения; ложный FAIL Closeout](BUG-008-archive-verify-exec-bit-dependency.md) |
 | BUG-003 | bug | open | normal | 8 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) |
 | BUG-005 | bug | open | normal | 9 | [Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) |
 | DEBT-003 | debt | open | normal | 10 | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) |

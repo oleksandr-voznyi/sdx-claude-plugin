@@ -272,7 +272,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 proj="${CLAUDE_PROJECT_DIR:-.}"
 sid="${1:?session_id required}"
 sdir="$proj/.claude/sessions/$sid"
-def="$("$here/lib/default-branch.sh" "$proj")"      # ADR-010: no hardcoded 'main'
+def="$(bash "$here/lib/default-branch.sh" "$proj")" # ADR-010: no hardcoded 'main'
+[ -z "$def" ] && { echo "[FAIL] не удалось определить основную ветку" >&2; exit 1; }
 fail=0
 
 # Invariant 1: main worktree clean (session files already git-rm'd on branch pre-merge,
@@ -362,12 +363,12 @@ echo "[OK] Closeout-инварианты выполнены: дерево чис
      checkout той же ветки в двух worktree).
 
 ФАЗА 2 — в ОСНОВНОМ CLI (proj = repo-root):
-  7. def=$(.claude/sdx/hooks/lib/default-branch.sh)
+  7. def=$(bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/lib/default-branch.sh)
      git checkout "$def"
      git merge --no-ff sdx/<id> -m "Merge sdx/<id>"
        # docs-дельты вливаются в основную ветку; каталога сессии в HEAD-дереве НЕТ;
        # --no-ff: вся история sdx/<id> достижима из merge-коммита (REQ-SESS-4).
-  8. bash .claude/sdx/hooks/archive-verify.sh <id>
+  8. bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/archive-verify.sh <id>
        # инв.1 (дерево чисто) + инв.5 (слита в $def) + инв.6 (каталог не tracked)
        # → git worktree remove --force .sdx/worktrees/<id>  (REQ-WT-5)
        # → git branch -d sdx/<id>

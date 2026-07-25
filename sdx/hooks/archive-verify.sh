@@ -10,7 +10,18 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 proj="${CLAUDE_PROJECT_DIR:-.}"
 sid="${1:?session_id required}"
 sdir="$proj/.claude/sessions/$sid"
-def="$("$here/lib/default-branch.sh" "$proj")"      # ADR-010: no hardcoded 'main'
+# ADR-010: no hardcoded 'main'. Invoked through `bash` rather than executed directly
+# (BUG-008): plugin installs are not guaranteed to preserve the exec bit, and a stripped
+# bit would silently yield an empty $def -> bogus invariant-5 FAIL. Same call form as
+# commands/archive.md and commands/verify.md already use.
+def="$(bash "$here/lib/default-branch.sh" "$proj")"
+if [ -z "$def" ]; then
+  # Never feed an empty ref into git: it would surface as `malformed object name`
+  # plus a misleading "branch not merged" verdict instead of the real cause.
+  echo "[FAIL] не удалось определить основную ветку — $here/lib/default-branch.sh не вернул имя." >&2
+  echo "[ABORT] Closeout не завершён — устраните FAIL и повторите." >&2
+  exit 1
+fi
 fail=0
 
 # Invariant 1: main worktree clean (session files already git-rm'd on branch pre-merge,

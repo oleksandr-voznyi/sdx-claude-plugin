@@ -334,6 +334,105 @@ else
 fi
 wt_cleanup
 
+# ==== Deployment-robustness scenarios (10, 11) — BUG-008 ====
+
+STRIPDIR=""
+HOOK_COPY=""
+
+# make_hook_copy: copy archive-verify.sh + lib/ into a temp dir, mirroring an install
+# that did not preserve the exec bit (observed: all sdx/hooks/**/*.sh delivered 0600).
+# Sets STRIPDIR and HOOK_COPY; caller runs the copy through `bash`, as /sdx:archive does.
+# Assigns globals directly — a `$(...)` call would run this in a subshell and leave
+# STRIPDIR empty in the caller.
+make_hook_copy() {
+  STRIPDIR="$(mktemp -d)"
+  mkdir -p "$STRIPDIR/lib"
+  cp "$HOOK" "$STRIPDIR/archive-verify.sh"
+  cp "$SCRIPT_DIR/lib/"*.sh "$STRIPDIR/lib/"
+  chmod 0600 "$STRIPDIR/archive-verify.sh" "$STRIPDIR/lib/"*.sh
+  HOOK_COPY="$STRIPDIR/archive-verify.sh"
+}
+
+strip_cleanup() {
+  cleanup
+  [ -n "$STRIPDIR" ] && rm -rf "$STRIPDIR"
+  STRIPDIR=""; HOOK_COPY=""
+}
+
+# setup_merged_repo: clean repo where the full variant-A cycle is already complete — the state
+# in which archive-verify must report [OK]. Shared by scenarios 10 and 11.
+setup_merged_repo() {
+  setup_clean_repo
+  git -C "$TMPPROJ" checkout -q -b "sdx/$SID"
+  mkdir -p "$TMPPROJ/.claude/sessions/$SID"
+  printf '{"stage":"Execution"}' > "$TMPPROJ/.claude/sessions/$SID/session_state.json"
+  track_and_commit ".claude/sessions/$SID" "sdx($SID): init session state"
+  git -C "$TMPPROJ" rm -rq ".claude/sessions/$SID"
+  git -C "$TMPPROJ" commit -q -m "sdx($SID): drop session artifacts pre-merge"
+  git -C "$TMPPROJ" checkout -q main
+  git -C "$TMPPROJ" merge -q --no-ff "sdx/$SID" -m "Merge sdx/$SID"
+}
+
+# ---- Scenario 10: lib/*.sh without the exec bit -> resolver still works (BUG-008) ----
+echo "[10] lib/*.sh delivered без бита x: default branch still resolves -> [OK]"
+setup_merged_repo
+make_hook_copy
+
+out_file="$(mktemp)"; err_file="$(mktemp)"
+ec=0
+CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK_COPY" "$SID" >"$out_file" 2>"$err_file" || ec=$?
+stdout_content="$(cat "$out_file")"; stderr_content="$(cat "$err_file")"
+rm -f "$out_file" "$err_file"
+
+if [ "$ec" -eq 0 ] && printf '%s' "$stdout_content" | grep -q "\[OK\]"; then
+  pass "exit 0 + [OK] despite non-executable lib/*.sh"
+else
+  fail "Expected exit 0 + [OK] with stripped exec bit" "ec=$ec stdout='$stdout_content' stderr='$stderr_content'"
+fi
+# The regression signature: resolver output empty -> 'in .' / malformed object name.
+if printf '%s' "$stdout_content" | grep -q "слита в main"; then
+  pass "default branch name present in output (not empty)"
+else
+  fail "Default branch name missing from [OK] line" "stdout='$stdout_content'"
+fi
+if ! printf '%s' "$stderr_content" | grep -qi "permission denied\|malformed object name"; then
+  pass "no Permission denied / malformed object name on stderr"
+else
+  fail "Exec-bit dependency still present" "stderr='$stderr_content'"
+fi
+strip_cleanup
+
+# ---- Scenario 11: resolver yields nothing -> explicit [FAIL], no destructive action ----
+echo "[11] default-branch.sh returns empty -> explicit [FAIL], branch preserved"
+setup_merged_repo
+make_hook_copy
+# Resolver that succeeds but prints nothing — stands in for any future way of ending up
+# with an empty $def. Without the guard this reaches git as an empty ref.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$STRIPDIR/lib/default-branch.sh"
+
+err_file="$(mktemp)"
+ec=0
+CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK_COPY" "$SID" >/dev/null 2>"$err_file" || ec=$?
+stderr_content="$(cat "$err_file")"
+rm -f "$err_file"
+
+if [ "$ec" -eq 1 ] && printf '%s' "$stderr_content" | grep -q "не удалось определить основную ветку"; then
+  pass "exit 1 with cause-naming [FAIL] (not a bogus 'не слита')"
+else
+  fail "Expected [FAIL] about the default branch" "ec=$ec stderr='$stderr_content'"
+fi
+if ! printf '%s' "$stderr_content" | grep -q "не слита"; then
+  pass "no misleading 'не слита' verdict"
+else
+  fail "Emitted misleading merge verdict on empty \$def" "stderr='$stderr_content'"
+fi
+if git -C "$TMPPROJ" branch | grep -q "sdx/$SID"; then
+  pass "branch sdx/$SID preserved (abort before destructive actions)"
+else
+  fail "Branch deleted despite FAIL" ""
+fi
+strip_cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

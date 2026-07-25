@@ -1,0 +1,10 @@
+{
+  "session_id": "fix-archive-verify-exec-bit-20260725",
+  "type": "bug",
+  "track": "patch",
+  "stage": "Execution",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/fix-archive-verify-exec-bit-20260725",
+  "artifacts": [],
+  "history": []
+}

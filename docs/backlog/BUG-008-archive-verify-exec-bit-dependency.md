@@ -1,12 +1,12 @@
 ---
 id: BUG-008
 type: bug
-status: open
+status: closed
 priority: high
 wave: null
 source: полевой репорт (Closeout сессии grooming-0725 в проекте cortexdev, 2026-07-25)
-session: null
-links: [BUG-006, DEBT-010, ADR-010]
+session: fix-archive-verify-exec-bit-20260725
+links: [BUG-006, DEBT-010, DEBT-026, DEBT-027, ADR-010]
 ---
 
 # BUG-008. Зависимость от бита выполнения: ложный FAIL Closeout + тихая смерть enforcement-слоя
@@ -103,3 +103,29 @@ enforcement-слой в той же среде работает штатно» �
 **Обходной путь до фикса:** `chmod +x <plugin-root>/sdx/hooks/*.sh <plugin-root>/sdx/hooks/lib/*.sh`
 — локальный и временный, при `autoUpdate: true` очередная синхронизация, скорее всего, снова
 срежет бит.
+
+## Резолюция
+
+Закрыто сессией `fix-archive-verify-exec-bit-20260725` (трек `patch`, 2026-07-25). Устранены все
+шесть точек зависимости от бита выполнения:
+
+- `sdx/hooks/archive-verify.sh:13` — резолвер вызывается через `bash <путь>`; добавлен явный
+  отказ `[FAIL] не удалось определить основную ветку` до всех проверок и до деструктива, так что
+  пустой ref больше не уходит в git под видом «ветка не слита».
+- `hooks/hooks.json` — все пять регистраций (`preflight`, `stage-gate`, `stage-write-guard`,
+  `prod-guard`, `stop-gate`) переведены на `bash "${CLAUDE_PLUGIN_ROOT}"/…`. Эта часть в исходном
+  репорте отсутствовала и была найдена fresh-eyes ревью на верификации: первая редакция фикса
+  чинила одну точку из шести, а пять остальных умирали молча с `exit 126`.
+- Инвариант формы вызова назван в `sdx/protocol.md` («Enforcement-слой») и enforced новым сьютом
+  `sdx/hooks/test-hook-wiring.sh` — для проводки `hooks.json` это гарантия, для вызовов из
+  прозаических команд `/sdx:*` остаётся конвенция текста.
+- Регрессия: `test-archive-verify.sh` 24/24 (два новых сценария подтверждены красными на
+  до-фиксовой версии), полный сьют 10/10.
+
+Отложено отдельными записями: [DEBT-026](DEBT-026-stop-gate-verify-cmd-exec-bit.md) (`stop-gate`
+определяет тест-команду по биту `x` — смена семантики, не формы вызова) и
+[DEBT-027](DEBT-027-legacy-hook-paths-in-permanent-docs.md) (легаси-пути `.claude/sdx/hooks/`
+в постоянных документах).
+
+**Условие получения эффекта:** правка `hooks/hooks.json` действует только после
+`/plugin marketplace update sdx` — рантайм исполняет установленную копию плагина.

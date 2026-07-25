@@ -1,3 +1,4 @@
 [2026-07-25 22:31:18] [START] Инициализация сессии fix-archive-verify-exec-bit-20260725 (трек: patch)
 [2026-07-25 22:37:37] [STAGE_CHANGE] Переход на этап Verification
 [2026-07-25 22:48:09] [ERROR] [Verification] Verification: 1 FAIL (когерентность: hooks.json — 5 хуков вызываются прямым исполнением, утверждение «единственная точка» опровергнуто), 3 WARN
+[2026-07-25 22:48:20] [STAGE_CHANGE] Возврат на этап Execution

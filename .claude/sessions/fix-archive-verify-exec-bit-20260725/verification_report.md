@@ -1,3 +1,5 @@
+<!-- SDX-OUTDATED: устарело откатом /sdx:backtrack --to "Execution" (2026-07-25 22:48:20). Актуализируйте перед продолжением; история версии — `git log -p -- ./.claude/sessions/fix-archive-verify-exec-bit-20260725/verification_report.md`. -->
+
 # Verification Report: fix-archive-verify-exec-bit-20260725
 
 ## Сводка

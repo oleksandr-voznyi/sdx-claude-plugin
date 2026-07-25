@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/preflight.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/preflight.sh"
           }
         ]
       }
@@ -16,11 +16,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stage-gate.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stage-gate.sh"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stage-write-guard.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stage-write-guard.sh"
           }
         ]
       },
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/prod-guard.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/prod-guard.sh"
           }
         ]
       }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stop-gate.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/stop-gate.sh"
           }
         ]
       }

@@ -47,8 +47,8 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 
 | Path | Contents |
 |------|----------|
-| `commands/` | 16 `/sdx:*` commands (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile) |
-| `agents/` | 8 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops` |
+| `commands/` | 17 `/sdx:*` commands (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile, audit) |
+| `agents/` | 9 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops`, `auditor` |
 | `hooks/hooks.json` | Enforcement-layer wiring (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Session protocol: state, tracks, gates, Closeout, import/export |
 | `sdx/hooks/` | Hook scripts (stage-gate, stop-gate, prod-guard, preflight, archive-verify) and their tests (`test-*.sh`) |
@@ -65,23 +65,24 @@ The SDX lifecycle scales with task size: each session follows one of **five adap
 | **patch** | Bugfix or small fix without logic changes | `bug` | Execution → Verification → Closeout |
 | **standard** | Small feature or refactor | `feature`, `refactor` | Discovery → Change → Execution → Verification → Closeout |
 | **full** | Large feature affecting contracts or architecture | `feature`, `refactor`, `init`, `import` | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout |
-| **doc** | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements | `grooming`, `retro`, `postmortem`, `intake` (rigidly bound, no triage) | Discovery → Update → Verification → Closeout |
+| **doc** | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements, audit-report triage | `grooming`, `retro`, `postmortem`, `intake`, `audit` (rigidly bound, no triage) | Discovery → Update → Verification → Closeout |
 | **vibe** | Extreme prototyping: a fast, code-first hypothesis check without TDD/`PLAN.md`/commits until an explicit decision | `proto` (rigidly bound, no triage) | Prototype (no `Closeout`) |
 
 > The "Session types" column reads differently for the linear scale and the parallel tracks: for `patch`/`standard`/`full` the type is only a starting hypothesis, and the track is chosen by **triage** and is adaptive (`/sdx:retrack`); for `doc` and `vibe` the `type → track` binding is **rigid, 1:1, and unconditional** (no track-choice dialog).
 
 ### The `doc` track and its session types
 
-The `doc` track handles work on the backlog and SDX process itself. All four session types follow the same stages; the difference lies in the nature of input and output:
+The `doc` track handles work on the backlog and SDX process itself. All five session types follow the same stages; the difference lies in the nature of input and output:
 
 - **`grooming`** — review of existing backlog entries: update status, priority, wave. This is a **redistribution** of attributes across existing entries.
 - **`retro`** — review of completed sessions over a period: identify patterns and conclusions, expressed as new backlog entries.
 - **`postmortem`** — review of an incident (production, process failure, critical defect): timeline, root cause, action plan.
 - **`intake`** — processing a significant new block of external requirements (epic, batch of bug reports, product material): breakdown into backlog entries. This is **creation** of new entries from external material.
+- **`audit`** — triage of an already-produced `/sdx:audit` report. The `/sdx:audit` command itself is a read-only "as-is" project audit run outside sessions: a parallel fan-out across nine vectors (architecture, triad integrity, requirement traceability, code quality, tests, documentation, deployment, security, process) builds a cumulative report in `docs/history/audit/`; each vector gets one of three outcomes — findings, clean, or **not applicable** (the vector structurally has no subject) — and the report itself gates nothing. The `audit` session type takes that already-existing report as input and **verifies** its findings against the backlog: it enriches open entries, spawns new entries for previously unrecorded findings, and files a separate regression entry when a finding matches an already-closed entry. It produces no permanent analysis document — the second type on this track without one, alongside `grooming` (the subject of the review is already a permanent document — the report itself).
 
-**Key distinction between `intake` and `grooming`:** `intake` sits higher in the workflow and focuses on **generating** new entries from external material, while `grooming` then **redistributes** priority and wave across what has accumulated. Both types work with the same `docs/backlog/`, but in opposite operational directions.
+**The distinction between `intake`, `grooming`, and `audit`:** `intake` **generates** new entries from external material (create), `grooming` then **redistributes** priority and wave across what has accumulated without creating new entries (update), `audit` **verifies** the accumulated backlog against a fresh as-is project report — enriching existing entries, spawning new ones for previously unrecorded findings, and separately flagging a regression when a finding matches an already-closed entry (verify). All three work with the same `docs/backlog/`, but in different operational directions.
 
-Each doc session must produce at least one observable backlog change and pass a lightweight verification. For `retro`, `postmortem`, and `intake`, a permanent analysis document is additionally created in `docs/history/`.
+Each doc session must produce at least one observable backlog change and pass a lightweight verification. For `retro`, `postmortem`, and `intake`, a permanent analysis document is additionally created in `docs/history/`; `grooming` and `audit` produce no such document.
 
 ### The `vibe` track and mandatory legalization
 

@@ -1,3 +1,5 @@
+<!-- SDX-OUTDATED: устарело откатом /sdx:backtrack --to "Technical Design" (2026-07-26 15:37:07). Актуализируйте перед продолжением; история версии — `git log -p -- ./.claude/sessions/feat-audit-agent-20260726/verification_report.md`. -->
+
 # Verification Report: feat-audit-agent-20260726
 
 ## Сводка

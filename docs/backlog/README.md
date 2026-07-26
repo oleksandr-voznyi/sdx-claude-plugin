@@ -42,7 +42,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-023 | debt | open | normal | null | [Гейт `/sdx:proto` не показывает содержимое новых файлов прототипа](DEBT-023-proto-gate-new-files-diff.md) |
 | DEBT-025 | debt | open | normal | null | [Ручной прогон трека `vibe` не выполнен — покрытие видимое](DEBT-025-vibe-manual-test-not-executed.md) |
 | DEBT-026 | debt | open | normal | null | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) |
-| BUG-007 | bug | open | normal | null | [`/sdx:init` создаёт каталоги разборов без файлов-заглушек](BUG-007-init-history-dirs-no-placeholder.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
 | DEBT-024 | debt | open | low | null | [Инвариант ADR-001 «трек не привязан к типу» сужен дважды без пометки](DEBT-024-adr-001-invariant-narrowed-twice.md) |
@@ -50,7 +49,11 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-016 | debt | open | low | null | [`stage-write-guard.sh` не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
+| DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
+| DEBT-029 | debt | open | normal | null | [Три ветки `/sdx:audit` не исполнялись: `CLEAN`, правило `-N`, штатная конфигурация инструментов](DEBT-029-audit-run-unexercised-branches.md) |
+| DEBT-030 | debt | open | normal | null | [Значение `model` во frontmatter агентов не валидируется ничем](DEBT-030-agent-model-tier-not-validated.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
+| IDEA-008 | idea | deferred | low | null | [Инструмент сравнения прогонов аудита (тренд находок во времени)](IDEA-008-audit-run-comparison.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
 | IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
@@ -62,6 +65,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| BUG-007 | [`/sdx:init` создаёт каталоги разборов без файлов-заглушек](BUG-007-init-history-dirs-no-placeholder.md) | `feat-audit-agent-20260726` |
 | BUG-008 | [Зависимость от бита выполнения: ложный FAIL Closeout + тихая смерть enforcement-слоя](BUG-008-archive-verify-exec-bit-dependency.md) | `fix-archive-verify-exec-bit-20260725` |
 | BUG-004 | [Противоречие verify.md ↔ reviewer.md: кто вычисляет diff](BUG-004-diff-computation-mismatch.md) | `fix-diff-computation-contract-20260722` |
 | DEBT-017 | [Перечисления треков в `agents/qa.md`/`developer.md`/`devops.md` не включают `doc`](DEBT-017-agent-track-enumerations-incomplete.md) | `fix-track-consistency-20260722` |

@@ -2,7 +2,7 @@
   "session_id": "feat-audit-agent-20260726",
   "type": "feature",
   "track": "full",
-  "stage": "Verification",
+  "stage": "Deployment",
   "gate_mode": "interactive",
   "git_branch": "sdx/feat-audit-agent-20260726",
   "artifacts": [],

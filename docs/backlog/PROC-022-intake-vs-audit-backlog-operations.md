@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: fresh-eyes ревью сессии sdx-runtime-rethink-20260830 (WARN квитирован пользователем)
 session: null
-links: [PROC-002, ADR-017, ADR-019, PROC-009]
+links: [PROC-002, ADR-017, ADR-019, PROC-009, PROC-024, DEBT-033, FEAT-007, FEAT-009]
 ---
 
 # PROC-022. Границы типа `intake`: вправе ли он дополнять существующие записи и вести слой сверки против закрытых

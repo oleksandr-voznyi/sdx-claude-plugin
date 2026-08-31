@@ -6,7 +6,7 @@ priority: normal
 wave: 5
 source: intake sdx-runtime-rethink-20260830 (тезис Т1)
 session: null
-links: [DEBT-031, PROC-016, PROC-017, FEAT-006, FEAT-009, IDEA-010]
+links: [DEBT-031, PROC-016, PROC-017, FEAT-006, FEAT-009, IDEA-010, PROC-023]
 ---
 
 # PROC-021. Позиционирование SDX как design-time двойника ядра Конструктора

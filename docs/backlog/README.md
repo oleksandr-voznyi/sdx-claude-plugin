@@ -75,12 +75,14 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-009 | proc | open | normal | null | [Структурированное размещение входящих артефактов проекта](PROC-009-incoming-artifacts-placement.md) |
 | PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии без protocol'а разрешения гонок](PROC-010-parallel-subagents-shared-session-files.md) |
 | PROC-011 | proc | open | normal | null | [Синхронизацию DESIGN с кодом нельзя вести параллельно с правкой кода](PROC-011-design-sync-after-code-not-parallel.md) |
+| PROC-022 | proc | open | normal | null | [Границы типа `intake`: вправе ли он дополнять существующие записи и вести слой сверки против закрытых](PROC-022-intake-vs-audit-backlog-operations.md) |
 | PROC-015 | proc | open | low | 2 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-016 | debt | open | low | null | [`stage-write-guard.sh` не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-024 | debt | open | low | null | [Инвариант ADR-001 «трек не привязан жёстко к типу» сужен дважды без пометки](DEBT-024-adr-001-invariant-narrowed-twice.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
+| DEBT-032 | debt | open | low | null | [П.4 Closeout-чек-листа требует поля `session` там, где конвенция бэклога отводит `source`](DEBT-032-closeout-session-field-convention-drift.md) |
 | IDEA-007 | idea | open | low | null | [Автоматический пуш записей бэклога в GitHub Issues](IDEA-007-backlog-github-issues-sync.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |

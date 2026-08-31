@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: user-feedback 2026-07-20 (сессия fw-session-types-20260720)
 session: null
-links: [PROC-002, PROC-003]
+links: [PROC-002, PROC-003, PROC-022]
 ---
 
 # PROC-009. Структурированное размещение входящих артефактов проекта

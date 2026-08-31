@@ -6,7 +6,7 @@ priority: low
 wave: null
 source: verification feat-vibe-track-20260720 (квитированный WARN)
 session: null
-links: [ADR-001, ADR-017, ADR-018, PROC-012]
+links: [ADR-001, ADR-017, ADR-018, PROC-012, DEBT-032]
 ---
 
 # DEBT-024. Инвариант ADR-001 «трек не привязан жёстко к типу» сужен дважды без пометки

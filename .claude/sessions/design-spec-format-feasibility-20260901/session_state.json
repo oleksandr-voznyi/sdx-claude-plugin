@@ -2,7 +2,7 @@
   "session_id": "design-spec-format-feasibility-20260901",
   "type": "feature",
   "track": "standard",
-  "stage": "Execution",
+  "stage": "Verification",
   "gate_mode": "interactive",
   "git_branch": "sdx/design-spec-format-feasibility-20260901",
   "artifacts": [],

@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: verification feat-vibe-track-20260720 (квитированный WARN)
 session: null
-links: [ADR-018, PROC-004, DEBT-023]
+links: [ADR-018, PROC-004, DEBT-023, PROC-012]
 ---
 
 # DEBT-025. Ручной прогон трека `vibe` не выполнен — покрытие ключевых критериев видимое

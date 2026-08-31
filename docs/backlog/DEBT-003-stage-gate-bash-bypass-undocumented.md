@@ -6,7 +6,7 @@ priority: normal
 wave: 10
 source: audit-2026-07-01 (A5)
 session: null
-links: []
+links: [PROC-012, PROC-013]
 ---
 
 # DEBT-003. Обход stage-gate через Bash не зафиксирован как граница

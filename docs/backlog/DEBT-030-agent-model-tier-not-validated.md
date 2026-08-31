@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: DESIGN сессии feat-audit-agent-20260726, раздел «Отложено за пределы поставки» п.1 (вне скоупа по SPEC)
 session: null
-links: [ADR-008, ADR-019, DEBT-010]
+links: [ADR-008, ADR-019, DEBT-010, PROC-014, PROC-015]
 ---
 
 # DEBT-030. Значение `model` во frontmatter агентов не валидируется ничем — тихий сбой в рантайме

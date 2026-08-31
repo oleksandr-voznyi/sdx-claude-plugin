@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: bundle sdx-efficiency-automation-2026 (REQ-LOOP-1, Фаза 4)
 session: null
-links: [DEBT-008]
+links: [DEBT-008, FEAT-008]
 ---
 
 # IDEA-003. Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)

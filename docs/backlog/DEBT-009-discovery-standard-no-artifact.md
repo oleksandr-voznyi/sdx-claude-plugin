@@ -6,7 +6,7 @@ priority: normal
 wave: 10
 source: audit-2026-07-01 (C4)
 session: null
-links: []
+links: [PROC-012]
 ---
 
 # DEBT-009. Discovery на standard-треке не имеет определённого артефакта

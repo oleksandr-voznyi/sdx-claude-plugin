@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: session (sdx/fw-stage-guard-20260720), находка qa на Verification
 session: null
-links: [BUG-001, DEBT-003]
+links: [BUG-001, DEBT-003, PROC-012, PROC-013]
 ---
 
 # DEBT-014. stage-gate на Verification не пускает тесты хуков — конвенция репозитория не совпадает с allow-паттерном

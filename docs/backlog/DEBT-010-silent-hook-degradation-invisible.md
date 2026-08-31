@@ -6,7 +6,7 @@ priority: normal
 wave: 10
 source: audit-2026-07-01 (C5)
 session: null
-links: []
+links: [FEAT-014]
 ---
 
 # DEBT-010. Тихая деградация хуков не видна пользователю

@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: session (sdx/fw-stage-guard-20260720), наблюдение оркестратора
 session: null
-links: [PROC-007, ADR-016]
+links: [PROC-007, ADR-016, PROC-017]
 ---
 
 # PROC-008. Длинный DESIGN.md — систематический источник дрейфа при итеративной доработке

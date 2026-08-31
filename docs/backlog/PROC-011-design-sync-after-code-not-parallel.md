@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: session feat-vibe-track-20260720 (процессное наблюдение)
 session: null
-links: [PROC-008, PROC-010, ADR-018]
+links: [PROC-008, PROC-010, ADR-018, PROC-017]
 ---
 
 # PROC-011. Синхронизацию DESIGN с кодом нельзя вести параллельно с правкой кода

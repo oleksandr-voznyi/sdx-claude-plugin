@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: bundle sdx-efficiency-automation-2026 (REQ-CHECKPOINT-1, Фаза 3)
 session: null
-links: [DEBT-008]
+links: [DEBT-008, FEAT-004, PROC-019]
 ---
 
 # IDEA-004. Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)

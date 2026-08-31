@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: verification feat-vibe-track-20260720 (квитированный WARN)
 session: null
-links: [ADR-018, PROC-004, DEBT-025]
+links: [ADR-018, PROC-004, DEBT-025, PROC-012]
 ---
 
 # DEBT-023. Гейт `/sdx:proto` не показывает содержимое новых файлов прототипа

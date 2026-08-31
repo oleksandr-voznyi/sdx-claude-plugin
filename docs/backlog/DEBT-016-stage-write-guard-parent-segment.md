@@ -6,7 +6,7 @@ priority: low
 wave: null
 source: session (sdx/fw-stage-guard-20260720), WARN верификации
 session: null
-links: [ADR-016, DEBT-003]
+links: [ADR-016, DEBT-003, PROC-012]
 ---
 
 # DEBT-016. `stage-write-guard.sh` не разрешает сегмент `..` в пути

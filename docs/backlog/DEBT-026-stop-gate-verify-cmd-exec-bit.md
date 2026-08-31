@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: fresh-eyes ревью сессии fix-archive-verify-exec-bit-20260725 (WARN 2, отложено пользователем)
 session: null
-links: [BUG-008, DEBT-010]
+links: [BUG-008, DEBT-010, FEAT-014]
 ---
 
 # DEBT-026. `stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол

@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: наблюдение по ходу сессии fw-session-types-20260720
 session: null
-links: [PROC-002, IDEA-006, PROC-007]
+links: [PROC-002, IDEA-006, PROC-007, PROC-014]
 ---
 
 # PROC-010. Параллельные субагенты Execution пишут в общие файлы сессии без protocol'а разрешения гонок

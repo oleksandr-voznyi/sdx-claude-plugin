@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: session (sdx/fw-stage-guard-20260720), неквитированные WARN проходов 4-6
 session: null
-links: [ADR-016, DEBT-001]
+links: [ADR-016, DEBT-001, PROC-012, PROC-013]
 ---
 
 # DEBT-015. Пробелы тестового покрытия нового stage-enforcement

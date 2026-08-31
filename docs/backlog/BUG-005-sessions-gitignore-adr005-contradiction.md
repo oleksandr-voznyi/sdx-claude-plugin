@@ -6,7 +6,7 @@ priority: normal
 wave: 9
 source: audit-2026-07-01 (C7)
 session: null
-links: [ADR-005, BUG-003]
+links: [ADR-005, BUG-003, PROC-012]
 ---
 
 # BUG-005. Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`

@@ -6,7 +6,7 @@ priority: low
 wave: null
 source: bundle sdx-efficiency-automation-2026 (§2.7, часть REQ-NOOP-TEAMS)
 session: null
-links: [DEBT-008]
+links: [DEBT-008, PROC-015]
 ---
 
 # IDEA-006. Опциональный escalate-тир параллельного Execution

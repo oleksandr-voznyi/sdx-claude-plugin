@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: bundle sdx-efficiency-automation-2026 (REQ-LANE-1, Фаза 4)
 session: null
-links: [DEBT-008, IDEA-001]
+links: [DEBT-008, IDEA-001, FEAT-006, IDEA-011]
 ---
 
 # IDEA-002. Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)

@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: bundle sdx-efficiency-automation-2026 (REQ-LEAN-1, Фаза 3)
 session: null
-links: [DEBT-008]
+links: [DEBT-008, PROC-012, PROC-014]
 ---
 
 # IDEA-005. Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)

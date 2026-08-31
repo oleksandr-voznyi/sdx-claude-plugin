@@ -84,7 +84,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-014 | proc | open | normal | 7 | [Субагенты: девять → два](PROC-014-subagents-nine-to-two.md) |
 | DEBT-029 | debt | open | normal | null | [Три ветки `/sdx:audit` не исполнялись: исход `CLEAN`, правило `-N`, штатная конфигурация инструментов агента](DEBT-029-audit-run-unexercised-branches.md) |
 | DEBT-030 | debt | open | normal | null | [Значение `model` во frontmatter агентов не валидируется ничем — тихий сбой в рантайме](DEBT-030-agent-model-tier-not-validated.md) |
-| DEBT-033 | debt | open | normal | null | [Конвенция тела записи бэклога описана в шести местах и разошлась; спецификация верна, производные документы — нет](DEBT-033-backlog-body-convention-scattered.md) |
+| DEBT-033 | debt | open | normal | null | [Конвенция тела записи бэклога описана в шести местах и разошлась; верны две редакции из шести](DEBT-033-backlog-body-convention-scattered.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
 | PROC-008 | proc | open | normal | null | [Длинный DESIGN.md — систематический источник дрейфа при итеративной доработке](PROC-008-long-design-drift.md) |

@@ -6,7 +6,7 @@ priority: normal
 wave: null
 source: audit-2026-07-01 (B4)
 session: null
-links: [PROC-012]
+links: [PROC-012, PROC-019]
 ---
 
 # DEBT-007. Мёртвые поля в `session_state.json`

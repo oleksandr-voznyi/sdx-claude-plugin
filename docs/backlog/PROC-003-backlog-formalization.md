@@ -6,7 +6,7 @@ priority: high
 wave: null
 source: audit-2026-07-01 (E2)
 session: fw-backlog-20260719
-links: [ADR-015, DEBT-033]
+links: [ADR-015]
 ---
 
 # PROC-003. Формализация бэклога: структура, префиксы, команды, волны

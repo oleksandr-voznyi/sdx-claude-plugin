@@ -1,0 +1,10 @@
+{
+  "session_id": "grooming-sdx-2-0-20260831",
+  "type": "grooming",
+  "track": "doc",
+  "stage": "Discovery",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/grooming-sdx-2-0-20260831",
+  "artifacts": [],
+  "history": []
+}

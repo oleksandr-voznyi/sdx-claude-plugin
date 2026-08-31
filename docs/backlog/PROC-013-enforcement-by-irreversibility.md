@@ -6,7 +6,7 @@ priority: high
 wave: 2
 source: intake sdx-runtime-rethink-20260830 (тезис Т9)
 session: null
-links: [PROC-012, FEAT-006, DEBT-003, DEBT-014, DEBT-015, BUG-001, BUG-006]
+links: [PROC-012, FEAT-006, DEBT-003, DEBT-014, DEBT-015, BUG-001, BUG-006, ADR-016]
 ---
 
 # PROC-013. Enforcement по необратимости, а не по порядку этапов
@@ -29,3 +29,5 @@ links: [PROC-012, FEAT-006, DEBT-003, DEBT-014, DEBT-015, BUG-001, BUG-006]
 Идёт вместе с `PROC-012` (снимает те же скрипты). Замещающий механизм — `FEAT-006`, волна 3;
 между волнами 2 и 3 существует окно без замены — либо принять его осознанно, либо сдвинуть
 `FEAT-006` в волну 2.
+Пересматривает `ADR-016` (единственный писатель `stage` + deny-хук): снимаемый `stage-gate` —
+его механизм.

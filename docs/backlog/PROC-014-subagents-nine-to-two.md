@@ -6,7 +6,7 @@ priority: normal
 wave: 2
 source: intake sdx-runtime-rethink-20260830 (срез сокращений)
 session: null
-links: [PROC-015, PROC-010, DEBT-017, DEBT-030]
+links: [PROC-015, PROC-010, DEBT-017, DEBT-030, IDEA-005]
 ---
 
 # PROC-014. Субагенты: девять → два

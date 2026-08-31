@@ -6,7 +6,7 @@ priority: normal
 wave: 5
 source: intake sdx-runtime-rethink-20260830 (тезис Т1)
 session: null
-links: [PROC-019, PROC-021, PROC-016]
+links: [PROC-019, PROC-021, PROC-016, PROC-023]
 ---
 
 # DEBT-031. Жизненный цикл обрывается на L5: нет Operate / Evolve / Retire

@@ -3,7 +3,7 @@ id: PROC-015
 type: proc
 status: open
 priority: low
-wave: 2
+wave: 6
 source: intake sdx-runtime-rethink-20260830 (срез сокращений)
 session: null
 links: [PROC-014, DEBT-030, IDEA-006, ADR-008, ADR-019]

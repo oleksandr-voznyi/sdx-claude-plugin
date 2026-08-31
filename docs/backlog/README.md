@@ -26,47 +26,46 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 Записи `FEAT-003`…`FEAT-014`, `PROC-012`…`PROC-021`, `DEBT-031`, `IDEA-009`…`IDEA-011` порождены
 разбором `intake sdx-runtime-rethink-20260830` (переосмысление SDX в контексте `AIBoK-structure.md`
 и `Constructor-concept.md`: durable-механики, модель полномочий, карта освоенности областей).
-Их поле `wave` задаёт **собственную** шкалу 1–5 этого разбора, которая пока не сведена с волнами
-8–10 ранее накопленных записей — сведение обеих нумераций в одну шкалу отложено в `grooming`.
+Груминг `grooming-sdx-2-0-20260831` свёл обе нумерации в **одну шкалу 1–6**: волны 8–10 прежних
+записей упразднены, десять записей, живущих в снимаемой машинерии треков, переведены в `deferred`
+в ожидании волны 2, а уцелевшие получили места на новой шкале. Волна 1 — основание (durable-механики
+и живость enforcement), 2 — атомарный снос с заменой, 3 — контракт и цикл, 4 — освоенность областей,
+5 — позиционирование и жизненный цикл, 6 — внутренняя экономика (субагенты, тиры), отделённая от
+атомарного набора.
 
 ## Открытые
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
+| BUG-003 | bug | open | high | 1 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) |
+| DEBT-010 | debt | open | high | 1 | [Тихая деградация хуков не видна пользователю](DEBT-010-silent-hook-degradation-invisible.md) |
 | FEAT-003 | feat | open | high | 1 | [Реестр задач прогона как источник истины вместо прозаического `PLAN.md`](FEAT-003-run-task-ledger.md) |
 | FEAT-004 | feat | open | high | 1 | [Журнал прогона пишет харнесс, а не модель](FEAT-004-harness-written-journal.md) |
 | FEAT-014 | feat | open | high | 1 | [Self-test enforcement-слоя как условие входа в автономный режим](FEAT-014-enforcement-selftest-autonomy-precondition.md) |
 | PROC-019 | proc | open | high | 1 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) |
+| PROC-023 | proc | open | high | 1 | [Триада SDX прозаична, а формат спецификаций процессов обязан компилироваться](PROC-023-triad-prose-vs-compilable-spec.md) |
+| FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
 | PROC-012 | proc | open | high | 2 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) |
 | PROC-013 | proc | open | high | 2 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) |
+| PROC-017 | proc | open | high | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
 | FEAT-005 | feat | open | high | 3 | [Stop-хук как тик планировщика прогона](FEAT-005-stop-hook-scheduler-tick.md) |
-| FEAT-006 | feat | open | high | 3 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
+| PROC-016 | proc | open | high | 3 | [Гейт по контракту вместо гейта по существованию](PROC-016-contract-gates-instead-of-existence.md) |
 | PROC-020 | proc | open | high | 3 | [Инвариант: агент не автономен в прогоне, меняющем механизм собственного надзора](PROC-020-no-autonomy-over-own-supervision.md) |
 | FEAT-009 | feat | open | high | 4 | [Карта освоенности областей проекта (`declared` + `observed`)](FEAT-009-area-readiness-map.md) |
 | FEAT-010 | feat | open | high | 4 | [Асимметричная выдача полномочий](FEAT-010-asymmetric-authority-function.md) |
+| IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
-| PROC-014 | proc | open | normal | 2 | [Субагенты: девять → два](PROC-014-subagents-nine-to-two.md) |
-| PROC-017 | proc | open | normal | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
-| PROC-018 | proc | open | normal | 2 | [Авторежим гейтов по умолчанию (инверсия ADR-014)](PROC-018-auto-gate-mode-by-default.md) |
+| DEBT-026 | debt | open | normal | 1 | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
 | FEAT-008 | feat | open | normal | 4 | [Компенсации и бюджет прогона](FEAT-008-compensations-and-run-budget.md) |
 | FEAT-011 | feat | open | normal | 4 | [Храповик знания: остановка обязана произвести долговременный артефакт](FEAT-011-knowledge-ratchet.md) |
 | FEAT-013 | feat | open | normal | 4 | [Инвалидация `observed` при смене версии и изменении области мимо SDX](FEAT-013-observed-invalidation.md) |
 | DEBT-031 | debt | open | normal | 5 | [Жизненный цикл обрывается на L5: нет Operate / Evolve / Retire](DEBT-031-lifecycle-stops-at-l5.md) |
-| PROC-016 | proc | open | normal | 5 | [Гейт по контракту вместо гейта по существованию](PROC-016-contract-gates-instead-of-existence.md) |
+| IDEA-010 | idea | open | normal | 5 | [Карта освоенности как продуктовый артефакт диагностики](IDEA-010-readiness-map-as-product-artifact.md) |
+| PROC-018 | proc | open | normal | 5 | [Авторежим гейтов по умолчанию (инверсия ADR-014)](PROC-018-auto-gate-mode-by-default.md) |
 | PROC-021 | proc | open | normal | 5 | [Позиционирование SDX как design-time двойника ядра Конструктора](PROC-021-sdx-as-design-time-twin.md) |
-| BUG-003 | bug | open | normal | 8 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) |
-| BUG-005 | bug | open | normal | 9 | [Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) |
-| DEBT-003 | debt | open | normal | 10 | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) |
-| DEBT-007 | debt | open | normal | 10 | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) |
-| DEBT-009 | debt | open | normal | 10 | [Discovery на standard-треке не имеет определённого артефакта](DEBT-009-discovery-standard-no-artifact.md) |
-| DEBT-010 | debt | open | normal | 10 | [Тихая деградация хуков не видна пользователю](DEBT-010-silent-hook-degradation-invisible.md) |
-| DEBT-014 | debt | open | normal | null | [stage-gate на Verification не пускает тесты хуков — конвенция репозитория не совпадает с allow-паттерном](DEBT-014-stage-gate-blocks-hook-tests.md) |
-| DEBT-015 | debt | open | normal | null | [Пробелы тестового покрытия нового stage-enforcement](DEBT-015-stage-guard-coverage-gaps.md) |
-| DEBT-023 | debt | open | normal | null | [Гейт `/sdx:proto` не показывает содержимое новых файлов прототипа](DEBT-023-proto-gate-new-files-diff.md) |
-| DEBT-025 | debt | open | normal | null | [Ручной прогон трека `vibe` не выполнен — покрытие ключевых критериев видимое](DEBT-025-vibe-manual-test-not-executed.md) |
-| DEBT-026 | debt | open | normal | null | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) |
+| PROC-014 | proc | open | normal | 6 | [Субагенты: девять → два](PROC-014-subagents-nine-to-two.md) |
 | DEBT-029 | debt | open | normal | null | [Три ветки `/sdx:audit` не исполнялись: исход `CLEAN`, правило `-N`, штатная конфигурация инструментов агента](DEBT-029-audit-run-unexercised-branches.md) |
 | DEBT-030 | debt | open | normal | null | [Значение `model` во frontmatter агентов не валидируется ничем — тихий сбой в рантайме](DEBT-030-agent-model-tier-not-validated.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
@@ -76,20 +75,26 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии без protocol'а разрешения гонок](PROC-010-parallel-subagents-shared-session-files.md) |
 | PROC-011 | proc | open | normal | null | [Синхронизацию DESIGN с кодом нельзя вести параллельно с правкой кода](PROC-011-design-sync-after-code-not-parallel.md) |
 | PROC-022 | proc | open | normal | null | [Границы типа `intake`: вправе ли он дополнять существующие записи и вести слой сверки против закрытых](PROC-022-intake-vs-audit-backlog-operations.md) |
-| PROC-015 | proc | open | low | 2 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
+| PROC-015 | proc | open | low | 6 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
-| DEBT-016 | debt | open | low | null | [`stage-write-guard.sh` не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
-| DEBT-024 | debt | open | low | null | [Инвариант ADR-001 «трек не привязан жёстко к типу» сужен дважды без пометки](DEBT-024-adr-001-invariant-narrowed-twice.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
 | DEBT-032 | debt | open | low | null | [П.4 Closeout-чек-листа требует поля `session` там, где конвенция бэклога отводит `source`](DEBT-032-closeout-session-field-convention-drift.md) |
 | IDEA-007 | idea | open | low | null | [Автоматический пуш записей бэклога в GitHub Issues](IDEA-007-backlog-github-issues-sync.md) |
+| BUG-005 | bug | deferred | normal | null | [Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) |
+| DEBT-003 | debt | deferred | normal | null | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) |
+| DEBT-007 | debt | deferred | normal | null | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) |
+| DEBT-009 | debt | deferred | normal | null | [Discovery на standard-треке не имеет определённого артефакта](DEBT-009-discovery-standard-no-artifact.md) |
+| DEBT-014 | debt | deferred | normal | null | [stage-gate на Verification не пускает тесты хуков — конвенция репозитория не совпадает с allow-паттерном](DEBT-014-stage-gate-blocks-hook-tests.md) |
+| DEBT-015 | debt | deferred | normal | null | [Пробелы тестового покрытия нового stage-enforcement](DEBT-015-stage-guard-coverage-gaps.md) |
+| DEBT-023 | debt | deferred | normal | null | [Гейт `/sdx:proto` не показывает содержимое новых файлов прототипа](DEBT-023-proto-gate-new-files-diff.md) |
+| DEBT-025 | debt | deferred | normal | null | [Ручной прогон трека `vibe` не выполнен — покрытие ключевых критериев видимое](DEBT-025-vibe-manual-test-not-executed.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
 | IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
-| IDEA-005 | idea | deferred | normal | null | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | IDEA-009 | idea | deferred | normal | null | [Калибровка постановщика по расхождению `declared` / `observed`](IDEA-009-declarant-calibration.md) |
-| IDEA-010 | idea | deferred | normal | null | [Карта освоенности как продуктовый артефакт диагностики](IDEA-010-readiness-map-as-product-artifact.md) |
+| DEBT-016 | debt | deferred | low | null | [`stage-write-guard.sh` не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) |
+| DEBT-024 | debt | deferred | low | null | [Инвариант ADR-001 «трек не привязан жёстко к типу» сужен дважды без пометки](DEBT-024-adr-001-invariant-narrowed-twice.md) |
 | IDEA-001 | idea | deferred | low | null | [REQ-CACHE-1 (Фаза 2) остаётся актуальным](IDEA-001-req-cache-1-deterministic-context-order.md) |
 | IDEA-006 | idea | deferred | low | null | [Опциональный escalate-тир параллельного Execution](IDEA-006-parallel-escalate-tier.md) |
 | IDEA-008 | idea | deferred | low | null | [Инструмент сравнения прогонов аудита (тренд находок во времени)](IDEA-008-audit-run-comparison.md) |

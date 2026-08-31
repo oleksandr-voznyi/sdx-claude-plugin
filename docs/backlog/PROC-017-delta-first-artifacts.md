@@ -6,7 +6,7 @@ priority: high
 wave: 2
 source: intake sdx-runtime-rethink-20260830 (практика SDD 2026)
 session: null
-links: [PROC-012, PROC-016, PROC-008, PROC-011, ADR-002, ADR-003, ADR-012]
+links: [PROC-012, PROC-016, PROC-008, PROC-011, ADR-002, ADR-003, ADR-012, PROC-023]
 ---
 
 # PROC-017. Delta-first: дельта — первичный артефакт, мёрж механический

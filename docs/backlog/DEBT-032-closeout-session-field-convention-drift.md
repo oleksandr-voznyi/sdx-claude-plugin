@@ -6,7 +6,7 @@ priority: low
 wave: null
 source: наблюдение Closeout сессии sdx-runtime-rethink-20260830
 session: null
-links: [ADR-015, ADR-017, PROC-003, DEBT-024]
+links: [ADR-015, ADR-017, PROC-003, DEBT-024, PROC-024, DEBT-033]
 ---
 
 # DEBT-032. П.4 Closeout-чек-листа требует поля `session` там, где конвенция бэклога отводит `source`

@@ -6,7 +6,7 @@ priority: high
 wave: 3
 source: intake sdx-runtime-rethink-20260830 (практика SDD 2026)
 session: null
-links: [PROC-017, PROC-012, DEBT-031, ADR-016]
+links: [PROC-017, PROC-012, DEBT-031, ADR-016, PROC-023]
 ---
 
 # PROC-016. Гейт по контракту вместо гейта по существованию

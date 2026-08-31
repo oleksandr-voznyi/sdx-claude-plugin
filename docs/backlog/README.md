@@ -44,6 +44,11 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 У **закрытых** записей поле `wave` не трогалось: их значения принадлежат прежним шкалам, отражают
 историю планирования на момент закрытия и вне этой истории не интерпретируются.
 
+Записи `PROC-023`, `PROC-024` и `DEBT-033` порождены разбором
+`intake intake-constructor-concept-20260831` — вторым разбором тех же двух документов
+(`Constructor-concept.md`, `AIBoK-structure.md`), оформившим находки, которые предшествующий
+груминг обнаружил, но завести не мог по границам своего типа.
+
 ## Открытые
 
 | ID | type | status | priority | wave | Название |
@@ -54,6 +59,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | FEAT-004 | feat | open | high | 1 | [Журнал прогона пишет харнесс, а не модель](FEAT-004-harness-written-journal.md) |
 | FEAT-014 | feat | open | high | 1 | [Self-test enforcement-слоя как условие входа в автономный режим](FEAT-014-enforcement-selftest-autonomy-precondition.md) |
 | PROC-019 | proc | open | high | 1 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) |
+| PROC-023 | proc | open | high | 1 | [Триада SDX прозаична, а формат спецификаций процессов обязан компилироваться](PROC-023-triad-prose-vs-compilable-spec.md) |
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
 | PROC-012 | proc | open | high | 2 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) |
 | PROC-013 | proc | open | high | 2 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) |
@@ -78,6 +84,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-014 | proc | open | normal | 7 | [Субагенты: девять → два](PROC-014-subagents-nine-to-two.md) |
 | DEBT-029 | debt | open | normal | null | [Три ветки `/sdx:audit` не исполнялись: исход `CLEAN`, правило `-N`, штатная конфигурация инструментов агента](DEBT-029-audit-run-unexercised-branches.md) |
 | DEBT-030 | debt | open | normal | null | [Значение `model` во frontmatter агентов не валидируется ничем — тихий сбой в рантайме](DEBT-030-agent-model-tier-not-validated.md) |
+| DEBT-033 | debt | open | normal | null | [Конвенция тела записи бэклога описана в шести местах и разошлась; верны две редакции из шести](DEBT-033-backlog-body-convention-scattered.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
 | PROC-008 | proc | open | normal | null | [Длинный DESIGN.md — систематический источник дрейфа при итеративной доработке](PROC-008-long-design-drift.md) |
@@ -85,6 +92,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии без protocol'а разрешения гонок](PROC-010-parallel-subagents-shared-session-files.md) |
 | PROC-011 | proc | open | normal | null | [Синхронизацию DESIGN с кодом нельзя вести параллельно с правкой кода](PROC-011-design-sync-after-code-not-parallel.md) |
 | PROC-022 | proc | open | normal | null | [Границы типа `intake`: вправе ли он дополнять существующие записи и вести слой сверки против закрытых](PROC-022-intake-vs-audit-backlog-operations.md) |
+| PROC-024 | proc | open | normal | null | [Коллизия: п.4 Closeout требует заводить записи там, где тип `grooming` их создавать не вправе](PROC-024-closeout-record-creation-vs-grooming-ban.md) |
 | PROC-015 | proc | open | low | 7 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |

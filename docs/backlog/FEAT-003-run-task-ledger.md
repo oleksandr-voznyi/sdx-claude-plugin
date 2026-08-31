@@ -6,7 +6,7 @@ priority: high
 wave: 1
 source: intake sdx-runtime-rethink-20260830 (тезис Т2)
 session: null
-links: [PROC-019, FEAT-005, FEAT-006, FEAT-008, PROC-017, PROC-023]
+links: [PROC-019, FEAT-005, FEAT-006, FEAT-008, PROC-017]
 ---
 
 # FEAT-003. Реестр задач прогона как источник истины вместо прозаического `PLAN.md`

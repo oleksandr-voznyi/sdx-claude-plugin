@@ -6,7 +6,7 @@ priority: high
 wave: 2
 source: intake sdx-runtime-rethink-20260830 (тезис Т3)
 session: null
-links: [PROC-013, FEAT-007, FEAT-009, FEAT-010, PROC-020, IDEA-002, PROC-023]
+links: [PROC-013, FEAT-007, FEAT-009, FEAT-010, PROC-020, IDEA-002]
 ---
 
 # FEAT-006. Модель полномочий: классы риска действий, `deny` → `ask`/`defer`
@@ -45,7 +45,9 @@ links: [PROC-013, FEAT-007, FEAT-009, FEAT-010, PROC-020, IDEA-002, PROC-023]
 ## Зависимости и порядок
 Замещает снятый `stage-gate` (`PROC-013`). Полноценно работает только с `FEAT-009`/`FEAT-010`.
 
-## Решение груминга `grooming-sdx-2-0-20260831`
+## Решения груминга
+*Сессия `grooming-sdx-2-0-20260831`.*
+
 **Перенесён из волны 3 в волну 2**, в атомарный набор сноса: `PROC-013` снимает `stage-gate`, а
 эта запись — его замена, и разрыв между ними по волнам и есть окно без надзора.
 

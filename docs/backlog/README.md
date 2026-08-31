@@ -3,7 +3,9 @@
 Каталог `docs/backlog/` — постоянный трекаемый бэклог фреймворка. Каждая запись — отдельный
 файл `<ID>-<slug>.md` с машиночитаемым YAML frontmatter (интеграционная точка будущего плагина
 портфельного управления) и телом в свободной прозе (`## Суть`, `## Рекомендация`, для закрытых/
-отложенных записей — `## Резолюция`). Идентификатор строится по схеме `<PREFIX>-<NNN>` со
+отложенных записей — `## Резолюция`, для записей, чьи атрибуты пересматривала сессия типа
+`grooming`, — `## Решения груминга` с указанием сессии первой строкой; имя раздела повторяемое,
+несколько грумингов дописывают его, а не плодят новые заголовки). Идентификатор строится по схеме `<PREFIX>-<NNN>` со
 сквозной нумерацией внутри префикса: `FEAT-` (новая функциональность), `BUG-` (дефекты/
 противоречия), `DEBT-` (техдолг, дрейф документов, недоспецификация), `IDEA-` (roadmap-идеи),
 `PROC-` (процессные изменения).
@@ -26,12 +28,14 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 Записи `FEAT-003`…`FEAT-014`, `PROC-012`…`PROC-021`, `DEBT-031`, `IDEA-009`…`IDEA-011` порождены
 разбором `intake sdx-runtime-rethink-20260830` (переосмысление SDX в контексте `AIBoK-structure.md`
 и `Constructor-concept.md`: durable-механики, модель полномочий, карта освоенности областей).
-Груминг `grooming-sdx-2-0-20260831` свёл обе нумерации в **одну шкалу 1–6**: волны 8–10 прежних
-записей упразднены, десять записей, живущих в снимаемой машинерии треков, переведены в `deferred`
+Груминг `grooming-sdx-2-0-20260831` свёл обе нумерации в **одну шкалу 1–7** среди открытых и
+отложенных записей: волны 8–10 у них упразднены, десять записей, живущих в снимаемой машинерии треков, переведены в `deferred`
 в ожидании волны 2, а уцелевшие получили места на новой шкале. Волна 1 — основание (durable-механики
 и живость enforcement), 2 — атомарный снос с заменой, 3 — контракт и цикл, 4 — освоенность областей,
-5 — позиционирование и жизненный цикл, 6 — внутренняя экономика (субагенты, тиры), отделённая от
-атомарного набора.
+5 — позиционирование и жизненный цикл, 6 — процедура абляции как предусловие, 7 — внутренняя
+экономика (субагенты, тиры), отделённая от атомарного набора и измеряемая, а не декларируемая.
+У **закрытых** записей поле `wave` не трогалось: их значения принадлежат прежним шкалам, отражают
+историю планирования на момент закрытия и вне этой истории не интерпретируются.
 
 ## Открытые
 
@@ -43,7 +47,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | FEAT-004 | feat | open | high | 1 | [Журнал прогона пишет харнесс, а не модель](FEAT-004-harness-written-journal.md) |
 | FEAT-014 | feat | open | high | 1 | [Self-test enforcement-слоя как условие входа в автономный режим](FEAT-014-enforcement-selftest-autonomy-precondition.md) |
 | PROC-019 | proc | open | high | 1 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) |
-| PROC-023 | proc | open | high | 1 | [Триада SDX прозаична, а формат спецификаций процессов обязан компилироваться](PROC-023-triad-prose-vs-compilable-spec.md) |
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
 | PROC-012 | proc | open | high | 2 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) |
 | PROC-013 | proc | open | high | 2 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) |
@@ -65,7 +68,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | IDEA-010 | idea | open | normal | 5 | [Карта освоенности как продуктовый артефакт диагностики](IDEA-010-readiness-map-as-product-artifact.md) |
 | PROC-018 | proc | open | normal | 5 | [Авторежим гейтов по умолчанию (инверсия ADR-014)](PROC-018-auto-gate-mode-by-default.md) |
 | PROC-021 | proc | open | normal | 5 | [Позиционирование SDX как design-time двойника ядра Конструктора](PROC-021-sdx-as-design-time-twin.md) |
-| PROC-014 | proc | open | normal | 6 | [Субагенты: девять → два](PROC-014-subagents-nine-to-two.md) |
+| PROC-014 | proc | open | normal | 7 | [Субагенты: девять → два](PROC-014-subagents-nine-to-two.md) |
 | DEBT-029 | debt | open | normal | null | [Три ветки `/sdx:audit` не исполнялись: исход `CLEAN`, правило `-N`, штатная конфигурация инструментов агента](DEBT-029-audit-run-unexercised-branches.md) |
 | DEBT-030 | debt | open | normal | null | [Значение `model` во frontmatter агентов не валидируется ничем — тихий сбой в рантайме](DEBT-030-agent-model-tier-not-validated.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
@@ -75,7 +78,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-010 | proc | open | normal | null | [Параллельные субагенты Execution пишут в общие файлы сессии без protocol'а разрешения гонок](PROC-010-parallel-subagents-shared-session-files.md) |
 | PROC-011 | proc | open | normal | null | [Синхронизацию DESIGN с кодом нельзя вести параллельно с правкой кода](PROC-011-design-sync-after-code-not-parallel.md) |
 | PROC-022 | proc | open | normal | null | [Границы типа `intake`: вправе ли он дополнять существующие записи и вести слой сверки против закрытых](PROC-022-intake-vs-audit-backlog-operations.md) |
-| PROC-015 | proc | open | low | 6 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
+| PROC-015 | proc | open | low | 7 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |

@@ -17,8 +17,8 @@ links: [PROC-013, PROC-017, DEBT-003, DEBT-007, DEBT-009, DEBT-014, DEBT-015, DE
 старте. Вокруг этого выбора выросла машинерия: `/sdx:retrack`, `/sdx:backtrack`, evidence-based
 forward-skip guard, `SDX_STAGE_MATRIX`, sanity-тесты сверки матрицы с прозой, `stage-write-guard`,
 а также негативный sanity-сценарий, страхующий от возврата уже отменённой ранговой механики
-`SDX_CANON_ORDER`/`canon_rank` (сама механика из `sdx-stage.sh` удалена полностью —
-`sdx/protocol.md:132`; в наличии только тест на её отсутствие).
+`SDX_CANON_ORDER`/`canon_rank` (сама механика из `sdx-stage.sh` удалена полностью — см. `ADR-016`
+и раздел «Forward-skip guard в `retrack`» протокола; в наличии только тест на её отсутствие).
 
 Практика SDD за 2026 сошлась на противоположном: «fluid not rigid», отказ от фазовых гейтов,
 delta-модель вместо фазовой.

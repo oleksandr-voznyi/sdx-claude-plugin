@@ -36,8 +36,8 @@ links: [PROC-013, FEAT-007, FEAT-009, FEAT-010, PROC-020, IDEA-002]
 незнание фейлится закрыто.
 
 > **Провенанс.** Само поле `permissionDecision` в `PreToolUse` репозиторием используется, но ровно
-> с одним значением — `deny` (`sdx/hooks/stage-gate.sh`, `sdx/hooks/prod-guard.sh`,
-> `sdx/protocol.md:184,194`). Значения `allow`/`ask`/`defer`, семантика `defer` для неинтерактивных
+> с одним значением — `deny` (`sdx/hooks/stage-gate.sh`, `sdx/hooks/prod-guard.sh`, раздел
+> «Маршрутизация enforcement» протокола, `ADR-016`). Значения `allow`/`ask`/`defer`, семантика `defer` для неинтерактивных
 > `-p` прогонов и приоритет решений `deny > defer > ask > allow` взяты из внешнего справочного
 > материала разбора `intake sdx-runtime-rethink-20260830`, в репозиторий не входящего, и из
 > репозитория непроверяемы: трактовать как **допущение** и сверить на этапе `DESIGN`.

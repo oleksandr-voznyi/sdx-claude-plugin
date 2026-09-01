@@ -307,7 +307,7 @@ cmd_next() {
     # target stage. Without this check, `next --to "Execution"` would silently succeed on a
     # no_code session even though `init`/forward `next` both refuse the same stage.
     if [ "$no_code" = "true" ] && is_excluded_by_no_code "$to_target"; then
-      echo "SDX sdx-stage: no_code=true исключает этап '$to_target' из активного набора (REQ-SCALE-4) — переход --to на этот этап недоступен." >&2
+      echo "SDX sdx-stage: no_code=true исключает этап '$to_target' из активного набора (REQ-SCALE-4) — переход --to на этот этап недоступен. Если объём сессии перерос процессную работу — сними флаг (`no_code: true -> false` в session_state.json, одноразовая эскалация) и повтори." >&2
       exit 1
     fi
 

@@ -3,12 +3,20 @@
 #
 # HOW TO ACTIVATE:
 #   cp .claude/sdx/verify-cmd.sh.template .claude/sdx/verify-cmd.sh
-#   chmod +x .claude/sdx/verify-cmd.sh
+#   # then EDIT the copy for your stack — see the warning below
 #
-# Until chmod +x is applied, stop-gate treats this file as non-executable
-# and falls back to autodetect (composer/npm/phpunit). If autodetect also
-# finds nothing, stop-gate exits 0 (no-op) — safe default for projects
-# without a test suite.
+# The file's PRESENCE activates it (DEBT-026, amendment to ADR-4, 2026-09-01).
+# The execute bit is not consulted: stop-gate runs the file as `bash <path>`.
+# This template itself is never picked up — it is excluded by its NAME
+# (verify-cmd.sh.template), not by its mode.
+#
+# WARNING: copy and configure in one go. The moment .claude/sdx/verify-cmd.sh
+# exists, it IS the test floor — an unedited copy still carries the PHP example
+# below and will fail in any project that is not PHP.
+#
+# To opt out, delete the file. Stop-gate then falls back to autodetect
+# (composer/npm/phpunit); if that finds nothing too, it exits 0 (no-op) —
+# the safe default for projects without a test suite.
 #
 # Tip: use --fast for a quick unit-only subset under stop-gate; save the full
 # suite for CI. stop-gate is most effective when the run is < ~30 seconds.

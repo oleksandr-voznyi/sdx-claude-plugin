@@ -627,6 +627,33 @@ echo "[T25] REQ-LIMIT-2 regression grep gate: no false promises across selftest.
   fi
 }
 
+# ---- T27 (добавлено на Verification по находке qa) — best-effort write_cache().
+#      Свойство: selftest.sh на SessionStart не имеет права уронить старт CLI из-за того, что
+#      каталог .claude/sdx/ недоступен на запись (read-only чекаут, чужие права, noexec-раздел).
+#      DESIGN.md называет эту ветку обработанной, но ни один сценарий её не исполнял.
+#
+#      Честная граница дискриминации, установленная опытом при добавлении этого сценария:
+#        * краснеет  — если отказ записи кэша сделать фатальным (`mkdir ... || exit 1`);
+#        * НЕ краснеет — если просто снять гард `|| return 0`. Причина: скрипт работает под
+#          `set -uo pipefail` БЕЗ `-e`, поэтому неудачный `mkdir`/`mktemp` сам по себе
+#          исполнение не прерывает, и свойство «exit 0» держится и без гарда.
+#      То есть гард сегодня — defence in depth, а не несущая конструкция; несущим он станет,
+#      если кто-нибудь добавит `set -e` или явный выход. Сценарий охраняет именно СВОЙСТВО
+#      (старт CLI не ломается), а не конкретную строку реализации — и это его предел. ----
+echo "[T27] Unwritable .claude/sdx/ -> selftest still exits 0 and writes no cache"
+tp="$(mktemp -d)"
+mkdir -p "$tp/.claude/sdx"
+chmod 0500 "$tp/.claude/sdx"
+ec=0
+CLAUDE_PROJECT_DIR="$tp" bash "$SELFTEST" >/dev/null 2>&1 || ec=$?
+chmod 0700 "$tp/.claude/sdx"    # вернуть права, иначе rm -rf не сможет
+if [ "$ec" -eq 0 ] && [ ! -f "$tp/.claude/sdx/.cache/selftest.json" ]; then
+  pass "exit 0 with no cache written (best-effort branch taken, CLI start not broken)"
+else
+  fail "Expected exit 0 AND no cache file" "got exit $ec, cache present: $([ -f "$tp/.claude/sdx/.cache/selftest.json" ] && echo yes || echo no)"
+fi
+rm -rf "$tp"
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

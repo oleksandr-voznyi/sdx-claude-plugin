@@ -68,7 +68,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
 | DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
-| DEBT-026 | debt | open | normal | 1 | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
 | FEAT-008 | feat | open | normal | 4 | [Компенсации и бюджет прогона](FEAT-008-compensations-and-run-budget.md) |
@@ -94,6 +93,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-025 | proc | open | normal | null | [В номенклатуре типов сессий нет исследования: работа, производящая документ и не производящая кода](PROC-025-no-session-type-for-research.md) |
 | PROC-026 | proc | open | normal | null | [Груминг пересматривает атрибуты записи, не сверяя её с кодом](PROC-026-grooming-without-code-verification.md) |
 | PROC-015 | proc | open | low | 7 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
+| DEBT-036 | debt | open | normal | null | [Ветка автодетекта тест-команды в `stop-gate` не покрыта автотестами](DEBT-036-stop-gate-autodetect-branch-untested.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
@@ -115,6 +115,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| DEBT-026 | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) | `fix-stop-gate-exec-bit-20260901` |
 | BUG-003 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) | — (сверка с кодом вне сессии; дефект снят `1ade803`, ADR-012) |
 | PROC-012 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) | `refactor-tracks-collapse-20260901` |
 | PROC-013 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) | `refactor-tracks-collapse-20260901` |

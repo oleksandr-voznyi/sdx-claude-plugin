@@ -280,10 +280,11 @@ status: approved
   `sdx/hooks/test-stage-gate.sh`, `sdx/hooks/test-stage-write-guard.sh`, `commands/retrack.md`,
   `commands/backtrack.md`, соответствующие записи `hooks/hooks.json`, поле `track` из
   `sdx/protocol.md`/`SDX_STAGE_MATRIX`/`SDX_CANON_ORDER`.
-- [ ] Не изменены (0 диффа, тот же результат) шесть сьютов, не зависящих от предмета сноса:
-  `test-archive-verify.sh` (24), `test-default-branch.sh` (6), `test-hook-wiring.sh` (6),
-  `test-prod-guard.sh` (9), `test-resolve-session.sh` (3) — суммарно
-  62 сценария без единого изменения.
+- [ ] Не изменены (0 диффа, тот же результат) сьюты, не зависящие от предмета сноса:
+  `test-archive-verify.sh`, `test-default-branch.sh`, `test-hook-wiring.sh`, `test-prod-guard.sh`,
+  `test-resolve-session.sh`. Точное число сценариев в них этой спекой не фиксируется — оно
+  проверяется прогоном, а зафиксированное число разошлось бы с фактом при любой будущей правке
+  этих сьютов по другому поводу.
 - [ ] `test-sdx-stage.sh` и `test-integration-stage-lifecycle.sh` переписаны под единую шкалу +
   флаги (замена, не косметика), остаются зелёными; итоговое число сценариев в них — на усмотрение
   Technical Design/Task Planning (Discovery оценивает ~9 из 61 и ~12 из 19 переживающих буквально

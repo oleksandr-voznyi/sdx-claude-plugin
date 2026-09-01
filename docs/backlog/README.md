@@ -60,8 +60,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | FEAT-014 | feat | open | high | 1 | [Self-test enforcement-слоя как условие входа в автономный режим](FEAT-014-enforcement-selftest-autonomy-precondition.md) |
 | PROC-019 | proc | open | high | 1 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) |
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
-| PROC-012 | proc | open | high | 2 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) |
-| PROC-013 | proc | open | high | 2 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) |
 | PROC-017 | proc | open | high | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
 | FEAT-005 | feat | open | high | 3 | [Stop-хук как тик планировщика прогона](FEAT-005-stop-hook-scheduler-tick.md) |
 | PROC-016 | proc | open | high | 3 | [Гейт по контракту вместо гейта по существованию](PROC-016-contract-gates-instead-of-existence.md) |
@@ -115,6 +113,8 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| PROC-012 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) | `refactor-tracks-collapse-20260901` |
+| PROC-013 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) | `refactor-tracks-collapse-20260901` |
 | DEBT-003 | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) | `refactor-tracks-collapse-20260901` |
 | DEBT-009 | [Discovery на standard-треке не имеет определённого артефакта](DEBT-009-discovery-standard-no-artifact.md) | `refactor-tracks-collapse-20260901` |
 | DEBT-014 | [stage-gate на Verification не пускает тесты хуков](DEBT-014-stage-gate-blocks-hook-tests.md) | `refactor-tracks-collapse-20260901` |

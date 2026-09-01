@@ -1,7 +1,7 @@
 {
   "session_id": "fix-stop-gate-exec-bit-20260901",
   "type": "bug",
-  "stage": "Verification",
+  "stage": "Deployment",
   "gate_mode": "interactive",
   "git_branch": "sdx/fix-stop-gate-exec-bit-20260901",
   "no_code": false,

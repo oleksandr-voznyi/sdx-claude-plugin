@@ -2,7 +2,7 @@
   "session_id": "refactor-tracks-collapse-20260901",
   "type": "refactor",
   "track": "full",
-  "stage": "Business Spec",
+  "stage": "Technical Design",
   "gate_mode": "interactive",
   "git_branch": "sdx/refactor-tracks-collapse-20260901",
   "artifacts": [],

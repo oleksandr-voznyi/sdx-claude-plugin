@@ -10,6 +10,15 @@ set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 plugin_root="${CLAUDE_PLUGIN_ROOT:-$(cd "$here/../.." && pwd)}"
 proj="${CLAUDE_PROJECT_DIR:-.}"
+
+# Guard: this hook may only touch a project that has gone through /sdx:init. The canonical
+# marker of an SDX project (same one /sdx:start step 1 checks) is the existence of
+# `.claude/sdx/`. In a project that never ran /sdx:init this hook MUST be as transparent as
+# prod-guard.sh (`[ -f "$conf" ] || exit 0`) and stop-gate.sh (`[ -z "$sid" ] && exit 0`) —
+# no directory, no file, no stderr output. This check MUST run before any operation that could
+# create a directory or file (mkdir/mktemp/write_cache), so it comes right after $proj is known.
+[ -d "$proj/.claude/sdx" ] || exit 0
+
 # Тест-крючок: позволяет test-selftest.sh подставить фикстур-копии хуков (в т.ч. искусственно
 # медленные/неправильные) без правки продовых hooks_dir по умолчанию.
 hooks_dir="${SDX_SELFTEST_HOOKS_DIR:-$plugin_root/sdx/hooks}"

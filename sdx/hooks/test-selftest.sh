@@ -161,14 +161,14 @@ echo "[T08] run_selftest: RS_* inputs do not survive past the call that set them
 # =============================================================================
 echo "[T09] probe_preflight: green (real preflight.sh) / red (decoy exit 1)"
 {
-  proj_g="$(mktemp -d)"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
+  proj_g="$(mktemp -d)"; mkdir -p "$proj_g/.claude/sdx"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
   RS_PROJ="$proj_g" RS_HOOKS_DIR="$hooks_g" RS_FORCE=1 run_selftest
   cache_g="$proj_g/.claude/sdx/.cache/selftest.json"
   val="$(cache_field "$cache_g" preflight)"
   if [ "$val" = pass ]; then pass "T09 green: real preflight.sh -> preflight=pass"; else fail "T09 green" "preflight=$val"; fi
   rm -rf "$proj_g" "$hooks_g"
 
-  proj_r="$(mktemp -d)"; hooks_r="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r"
+  proj_r="$(mktemp -d)"; mkdir -p "$proj_r/.claude/sdx"; hooks_r="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r"
   printf '#!/usr/bin/env bash\nexit 1\n' > "$hooks_r/preflight.sh"   # decoy: always fails
   RS_PROJ="$proj_r" RS_HOOKS_DIR="$hooks_r" RS_FORCE=1 run_selftest
   cache_r="$proj_r/.claude/sdx/.cache/selftest.json"
@@ -186,20 +186,20 @@ echo "[T09] probe_preflight: green (real preflight.sh) / red (decoy exit 1)"
 # =============================================================================
 echo "[T10] probe_prod_guard: green (real) / red-1 (always empty) / red-2 (always deny)"
 {
-  proj_g="$(mktemp -d)"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
+  proj_g="$(mktemp -d)"; mkdir -p "$proj_g/.claude/sdx"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
   RS_PROJ="$proj_g" RS_HOOKS_DIR="$hooks_g" RS_FORCE=1 run_selftest
   val="$(cache_field "$proj_g/.claude/sdx/.cache/selftest.json" prod_guard)"
   if [ "$val" = pass ]; then pass "T10 green: real prod-guard.sh -> prod_guard=pass"; else fail "T10 green" "prod_guard=$val"; fi
   rm -rf "$proj_g" "$hooks_g"
 
-  proj_r1="$(mktemp -d)"; hooks_r1="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r1"
+  proj_r1="$(mktemp -d)"; mkdir -p "$proj_r1/.claude/sdx"; hooks_r1="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r1"
   printf '#!/usr/bin/env bash\ncat >/dev/null\nexit 0\n' > "$hooks_r1/prod-guard.sh"   # always empty stdout
   RS_PROJ="$proj_r1" RS_HOOKS_DIR="$hooks_r1" RS_FORCE=1 run_selftest
   val="$(cache_field "$proj_r1/.claude/sdx/.cache/selftest.json" prod_guard)"
   if [ "$val" = fail ]; then pass "T10 red-1: decoy always-empty-stdout -> prod_guard=fail"; else fail "T10 red-1" "prod_guard=$val"; fi
   rm -rf "$proj_r1" "$hooks_r1"
 
-  proj_r2="$(mktemp -d)"; hooks_r2="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r2"
+  proj_r2="$(mktemp -d)"; mkdir -p "$proj_r2/.claude/sdx"; hooks_r2="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r2"
   printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf %%s '"'"'{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"decoy"}}'"'"'\nexit 0\n' \
     > "$hooks_r2/prod-guard.sh"   # always deny, even for the "unmatched" probe call
   RS_PROJ="$proj_r2" RS_HOOKS_DIR="$hooks_r2" RS_FORCE=1 run_selftest
@@ -246,13 +246,13 @@ echo "[T11] probe_prod_guard isolation: seeded real conf must NOT influence the 
 # =============================================================================
 echo "[T12] probe_stop_gate: green (real, DEBT-026 0600 verify-cmd.sh) / red (decoy always exit 0)"
 {
-  proj_g="$(mktemp -d)"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
+  proj_g="$(mktemp -d)"; mkdir -p "$proj_g/.claude/sdx"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
   RS_PROJ="$proj_g" RS_HOOKS_DIR="$hooks_g" RS_FORCE=1 run_selftest
   val="$(cache_field "$proj_g/.claude/sdx/.cache/selftest.json" stop_gate)"
   if [ "$val" = pass ]; then pass "T12 green: real stop-gate.sh, DEBT-026 fixture -> stop_gate=pass (exit 2 observed)"; else fail "T12 green" "stop_gate=$val"; fi
   rm -rf "$proj_g" "$hooks_g"
 
-  proj_r="$(mktemp -d)"; hooks_r="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r"
+  proj_r="$(mktemp -d)"; mkdir -p "$proj_r/.claude/sdx"; hooks_r="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$hooks_r/stop-gate.sh"   # decoy: always green
   RS_PROJ="$proj_r" RS_HOOKS_DIR="$hooks_r" RS_FORCE=1 run_selftest
   val="$(cache_field "$proj_r/.claude/sdx/.cache/selftest.json" stop_gate)"
@@ -378,7 +378,7 @@ echo "[T14] probe_stop_gate never triggers \$proj's real verify-cmd.sh"
 # =============================================================================
 echo "[T15] budget: green (normal run under default 2000ms) / red (slow decoy + tight budget)"
 {
-  proj_g="$(mktemp -d)"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
+  proj_g="$(mktemp -d)"; mkdir -p "$proj_g/.claude/sdx"; hooks_g="$(mktemp -d)"; build_real_hooks_fixture "$hooks_g"
   RS_PROJ="$proj_g" RS_HOOKS_DIR="$hooks_g" RS_FORCE=1 run_selftest
   cache_g="$proj_g/.claude/sdx/.cache/selftest.json"
   dur="$(cache_field_raw "$cache_g" duration_ms)"
@@ -390,7 +390,7 @@ echo "[T15] budget: green (normal run under default 2000ms) / red (slow decoy + 
   fi
   rm -rf "$proj_g" "$hooks_g"
 
-  proj_r="$(mktemp -d)"; hooks_r="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r"
+  proj_r="$(mktemp -d)"; mkdir -p "$proj_r/.claude/sdx"; hooks_r="$(mktemp -d)"; build_real_hooks_fixture "$hooks_r"
   printf '#!/usr/bin/env bash\nsleep 1\nexit 2\n' > "$hooks_r/stop-gate.sh"   # artificially slow
   RS_PROJ="$proj_r" RS_HOOKS_DIR="$hooks_r" RS_BUDGET=100 RS_FORCE=1 run_selftest
   redec=$RS_EC
@@ -412,7 +412,7 @@ echo "[T16] cache: 2nd unchanged run is a cache-hit / plugin version bump invali
   fx_plugin="$(mktemp -d)"; mkdir -p "$fx_plugin/.claude-plugin"
   printf '{"version":"9.9.9"}' > "$fx_plugin/.claude-plugin/plugin.json"
   hooks="$(mktemp -d)"; build_real_hooks_fixture "$hooks"
-  proj="$(mktemp -d)"
+  proj="$(mktemp -d)"; mkdir -p "$proj/.claude/sdx"
   cache="$proj/.claude/sdx/.cache/selftest.json"
 
   RS_PROJ="$proj" RS_PLUGIN_ROOT="$fx_plugin" RS_HOOKS_DIR="$hooks" RS_FORCE="" run_selftest
@@ -495,7 +495,7 @@ echo "[T18] jq absent from PATH: (a) no crash, (b) fingerprint non-empty, (c) pr
   for t in bash cat grep sed md5sum cut head tail mkdir mktemp mv rm git timeout chmod date dirname pwd basename printf; do
     src="$(command -v "$t" 2>/dev/null)" && ln -s "$src" "$NOJQ_BIN/$t" 2>/dev/null || true
   done
-  proj="$(mktemp -d)"; hooks="$(mktemp -d)"; build_real_hooks_fixture "$hooks"
+  proj="$(mktemp -d)"; mkdir -p "$proj/.claude/sdx"; hooks="$(mktemp -d)"; build_real_hooks_fixture "$hooks"
   RS_PROJ="$proj" RS_HOOKS_DIR="$hooks" RS_PATH="$NOJQ_BIN" RS_FORCE=1 run_selftest
   cache="$proj/.claude/sdx/.cache/selftest.json"
 
@@ -527,32 +527,68 @@ echo "[T18] jq absent from PATH: (a) no crash, (b) fingerprint non-empty, (c) pr
 
 # =============================================================================
 # T19 — absence of .claude/sdx/sdx-version does not break selftest.sh (REQ-ST-11), symmetry
+#
+# Strengthened per verification_report.md WARN-8 (third review round): the previous version's
+# key assertion, `[ -n "$fp" ]`, is nearly unfalsifiable — compute_fingerprint ALWAYS prints an
+# md5 (even hashed from four ABSENT sentinels), so it really only proved "a cache file got
+# written", not that the sdx-version sentinel does anything. This version isolates
+# sdx-version's OWN contribution: two fixtures identical in every other respect (prod-guard.conf
+# and verify-cmd.sh left absent in both), differing ONLY in whether sdx-version exists, and
+# asserts their fingerprints DIFFER — a property that can genuinely fail if the sentinel were
+# ever dropped from the hash. The red side below proves that with a concrete mutant.
 # =============================================================================
-echo "[T19] sdx-version absence doesn't crash/degrade specially; symmetric with other ABSENT sources"
+build_fingerprint_no_sdxversion_mutant() {
+  local out="$1"
+  sed -e "/file_component \"\$proj\/.claude\/sdx\/sdx-version\"/d" \
+      -e "s/printf '%s|%s|%s|%s' \\\\/printf '%s|%s|%s' \\\\/" \
+      "$SELFTEST" > "$out"
+}
+
+echo "[T19] sdx-version absence doesn't crash/degrade specially; its ABSENT sentinel demonstrably enters the fingerprint"
 {
-  # (1) sdx-version PRESENT, prod-guard.conf ABSENT.
   hooks="$(mktemp -d)"; build_real_hooks_fixture "$hooks"
-  proj1="$(mktemp -d)"; mkdir -p "$proj1/.claude/sdx"
-  printf '2.1.0\n' > "$proj1/.claude/sdx/sdx-version"
-  RS_PROJ="$proj1" RS_HOOKS_DIR="$hooks" RS_FORCE=1 run_selftest
-  status1="$(cache_field "$proj1/.claude/sdx/.cache/selftest.json" selftest_status)"
-  fp1="$(cache_field "$proj1/.claude/sdx/.cache/selftest.json" fingerprint)"
-  ok1=0; [ "$status1" != broken ] && [ -n "$fp1" ] && ok1=1
 
-  # (2) sdx-version ABSENT, prod-guard.conf PRESENT (harmless comment-only content).
-  proj2="$(mktemp -d)"; mkdir -p "$proj2/.claude/sdx"
-  printf '# no active patterns\n' > "$proj2/.claude/sdx/prod-guard.conf"
-  RS_PROJ="$proj2" RS_HOOKS_DIR="$hooks" RS_FORCE=1 run_selftest
-  status2="$(cache_field "$proj2/.claude/sdx/.cache/selftest.json" selftest_status)"
-  fp2="$(cache_field "$proj2/.claude/sdx/.cache/selftest.json" fingerprint)"
-  ok2=0; [ "$status2" != broken ] && [ -n "$fp2" ] && ok2=1
+  # Two fixtures, identical except for sdx-version's presence (prod-guard.conf/verify-cmd.sh
+  # absent in BOTH — isolates the property from the other two fingerprint components).
+  proj_present="$(mktemp -d)"; mkdir -p "$proj_present/.claude/sdx"
+  printf '2.1.0\n' > "$proj_present/.claude/sdx/sdx-version"
+  proj_absent="$(mktemp -d)"; mkdir -p "$proj_absent/.claude/sdx"
 
-  if [ "$ok1" -eq 1 ] && [ "$ok2" -eq 1 ]; then
-    pass "T19: absence of sdx-version (case 2) behaves the same as absence of prod-guard.conf (case 1) — no special-case crash, fingerprint computed, status=$status1/$status2 (not broken)"
+  RS_PROJ="$proj_present" RS_HOOKS_DIR="$hooks" RS_FORCE=1 run_selftest
+  status_p="$(cache_field "$proj_present/.claude/sdx/.cache/selftest.json" selftest_status)"
+  fp_p="$(cache_field "$proj_present/.claude/sdx/.cache/selftest.json" fingerprint)"
+
+  RS_PROJ="$proj_absent" RS_HOOKS_DIR="$hooks" RS_FORCE=1 run_selftest
+  status_a="$(cache_field "$proj_absent/.claude/sdx/.cache/selftest.json" selftest_status)"
+  fp_a="$(cache_field "$proj_absent/.claude/sdx/.cache/selftest.json" fingerprint)"
+
+  wf_p=0; printf '%s' "$fp_p" | grep -Eq '^[0-9a-f]{32}$' && wf_p=1
+  wf_a=0; printf '%s' "$fp_a" | grep -Eq '^[0-9a-f]{32}$' && wf_a=1
+
+  if [ "$status_p" != broken ] && [ "$status_a" != broken ] \
+     && [ "$wf_p" -eq 1 ] && [ "$wf_a" -eq 1 ] && [ "$fp_p" != "$fp_a" ]; then
+    pass "T19: sdx-version present/absent -> neither run is broken, both fingerprints well-formed, AND they differ ($fp_p != $fp_a) — the ABSENT sentinel is not a special-cased no-op"
   else
-    fail "T19" "case1: status=$status1 fp=$fp1 | case2: status=$status2 fp=$fp2"
+    fail "T19" "status_p=$status_p status_a=$status_a wf_p=$wf_p wf_a=$wf_a fp_p=$fp_p fp_a=$fp_a"
   fi
-  rm -rf "$hooks" "$proj1" "$proj2"
+
+  # Red: a mutant compute_fingerprint with the sdx-version component dropped entirely collapses
+  # fp_present == fp_absent — proving this scenario's `fp_p != fp_a` assertion actually
+  # discriminates, unlike the old bare `[ -n "$fp" ]` (which the mutant would still satisfy).
+  mutant="$(mktemp)"; build_fingerprint_no_sdxversion_mutant "$mutant"
+  CLAUDE_PROJECT_DIR="$proj_present" SDX_SELFTEST_HOOKS_DIR="$hooks" SDX_SELFTEST_FORCE=1 \
+    bash "$mutant" >/dev/null 2>&1
+  fp_p_m="$(cache_field "$proj_present/.claude/sdx/.cache/selftest.json" fingerprint)"
+  CLAUDE_PROJECT_DIR="$proj_absent" SDX_SELFTEST_HOOKS_DIR="$hooks" SDX_SELFTEST_FORCE=1 \
+    bash "$mutant" >/dev/null 2>&1
+  fp_a_m="$(cache_field "$proj_absent/.claude/sdx/.cache/selftest.json" fingerprint)"
+  if [ -n "$fp_p_m" ] && [ "$fp_p_m" = "$fp_a_m" ]; then
+    pass "T19 red: mutant compute_fingerprint (sdx-version component dropped) collapses fp_present==fp_absent ($fp_p_m) — this scenario's assertion would have caught it; a bare '[ -n \"\$fp\" ]' would not"
+  else
+    fail "T19 red" "expected fp_p_m == fp_a_m (non-empty) after dropping the sdx-version component, got fp_p_m=$fp_p_m fp_a_m=$fp_a_m"
+  fi
+
+  rm -f "$mutant"; rm -rf "$hooks" "$proj_present" "$proj_absent"
 }
 
 # =============================================================================
@@ -573,7 +609,7 @@ echo "[T19] sdx-version absence doesn't crash/degrade specially; symmetric with 
 # outcome the code cannot actually produce via the literal DESIGN.md recipe.
 echo "[T20] degraded (decoy wrong answer) vs broken (mktemp -d fails -> skip) — distinct messages, both exit 0"
 {
-  proj_d="$(mktemp -d)"; hooks_d="$(mktemp -d)"; build_real_hooks_fixture "$hooks_d"
+  proj_d="$(mktemp -d)"; mkdir -p "$proj_d/.claude/sdx"; hooks_d="$(mktemp -d)"; build_real_hooks_fixture "$hooks_d"
   printf '#!/usr/bin/env bash\ncat >/dev/null\nexit 0\n' > "$hooks_d/prod-guard.sh"   # wrong answer -> fail
   RS_PROJ="$proj_d" RS_HOOKS_DIR="$hooks_d" RS_FORCE=1 run_selftest
   ec_d=$RS_EC
@@ -586,7 +622,7 @@ echo "[T20] degraded (decoy wrong answer) vs broken (mktemp -d fails -> skip) �
   RS_STDERR_DEGRADED="$RS_STDERR"
   rm -rf "$proj_d" "$hooks_d"
 
-  proj_b="$(mktemp -d)"
+  proj_b="$(mktemp -d)"; mkdir -p "$proj_b/.claude/sdx"
   bad_tmp="$(mktemp -u)/definitely-does-not-exist"   # a path guaranteed not to exist, unwritable
   RS_EC=0
   RS_STDERR="$(
@@ -623,7 +659,7 @@ echo "[T21] BUG-008 pin: a probed hook at mode 0600 still passes (bash <path> ig
   # refactor ever changes the invocation to direct execution (`"$hooks_dir/x.sh"` without
   # `bash`), THIS test will start failing/skipping on a 0600 fixture — that is the intended
   # tripwire: it forces a conscious DESIGN.md review instead of a silent behaviour drift.
-  proj="$(mktemp -d)"; hooks="$(mktemp -d)"; build_real_hooks_fixture "$hooks"
+  proj="$(mktemp -d)"; mkdir -p "$proj/.claude/sdx"; hooks="$(mktemp -d)"; build_real_hooks_fixture "$hooks"
   chmod 0600 "$hooks/stop-gate.sh"
   RS_PROJ="$proj" RS_HOOKS_DIR="$hooks" RS_FORCE=1 run_selftest
   val="$(cache_field "$proj/.claude/sdx/.cache/selftest.json" stop_gate)"
@@ -633,6 +669,56 @@ echo "[T21] BUG-008 pin: a probed hook at mode 0600 still passes (bash <path> ig
     fail "T21" "stop_gate=$val (bit stripped should NOT have changed the probe outcome)"
   fi
   rm -rf "$proj" "$hooks"
+}
+
+# ---- T28 (добавлено на Verification, третий круг, находка F1 verification_report.md) ----
+#      Свойство: в проекте БЕЗ `.claude/sdx/` (никогда не проходил /sdx:init, к SDX отношения не
+#      имеет) selftest.sh обязан быть полностью прозрачен, по образцу prod-guard.sh
+#      (`[ -f "$conf" ] || exit 0`) и stop-gate.sh (`[ -z "$sid" ] && exit 0`): exit 0 И ни один
+#      файл/каталог не создан — ни `.claude/`, ни `.claude/sdx/`, ни кэш. T09/T10/T12/T15/T16/
+#      T18/T20/T21 выше намеренно превращены в SDX-проекты (`mkdir -p ".../.claude/sdx"`) именно
+#      потому, что голый `mktemp -d` больше не значит «проект, где кэш имеет право появиться» —
+#      это и есть слепое пятно, которое допустило F1 (см. verification_report.md).
+#
+#      build_f1_guard_mutant — копия РЕАЛЬНОГО selftest.sh с единственной ранней guard-строкой
+#      (`[ -d "$proj/.claude/sdx" ] || exit 0`) вырезанной — воспроизводит ровно то поведение,
+#      которое было до фикса F1.
+build_f1_guard_mutant() {
+  local out="$1"
+  grep -v '^\[ -d "\$proj/\.claude/sdx" \] || exit 0$' "$SELFTEST" > "$out"
+}
+
+echo "[T28] Non-SDX project (no .claude/sdx/): selftest.sh exits 0 and materializes NOTHING (F1)"
+{
+  proj="$(mktemp -d)"
+  before="$(find "$proj" -mindepth 1 | sort)"
+
+  ec=0
+  out="$(CLAUDE_PROJECT_DIR="$proj" SDX_SELFTEST_HOOKS_DIR="$SCRIPT_DIR" SDX_SELFTEST_FORCE=1 \
+         bash "$SELFTEST" 2>&1 >/dev/null)"
+  ec=$?
+  after="$(find "$proj" -mindepth 1 | sort)"
+
+  if [ "$ec" -eq 0 ] && [ -z "$after" ] && [ "$before" = "$after" ] && [ -z "$out" ]; then
+    pass "T28 green: no .claude/sdx/ -> exit 0, zero files/dirs created (find before==after==empty), no stderr"
+  else
+    fail "T28 green" "ec=$ec before='$before' after='$after' stderr='$out'"
+  fi
+  rm -rf "$proj"
+
+  # Red: the exact mutation the F1 fix removes — strip the early guard line — against the SAME
+  # kind of fixture (no .claude/sdx/). Pre-F1 behaviour resurfaces: the cache file (and its
+  # parent dirs) get created even though the project never ran /sdx:init.
+  proj2="$(mktemp -d)"
+  mutant="$(mktemp)"; build_f1_guard_mutant "$mutant"
+  CLAUDE_PROJECT_DIR="$proj2" SDX_SELFTEST_HOOKS_DIR="$SCRIPT_DIR" SDX_SELFTEST_FORCE=1 \
+    bash "$mutant" >/dev/null 2>&1
+  if [ -f "$proj2/.claude/sdx/.cache/selftest.json" ]; then
+    pass "T28 red: removing the early guard line resurrects F1 — cache materialized in a non-SDX project"
+  else
+    fail "T28 red" "mutant (guard line stripped) did NOT create .claude/sdx/.cache/selftest.json — this scenario would not have caught F1"
+  fi
+  rm -f "$mutant"; rm -rf "$proj2"
 }
 
 # =============================================================================

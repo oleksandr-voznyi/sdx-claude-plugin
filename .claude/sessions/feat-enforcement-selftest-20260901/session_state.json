@@ -1,7 +1,7 @@
 {
   "session_id": "feat-enforcement-selftest-20260901",
   "type": "feature",
-  "stage": "Deployment",
+  "stage": "Closeout",
   "gate_mode": "interactive",
   "git_branch": "sdx/feat-enforcement-selftest-20260901",
   "no_code": false,

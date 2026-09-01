@@ -68,6 +68,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | FEAT-010 | feat | open | high | 4 | [Асимметричная выдача полномочий](FEAT-010-asymmetric-authority-function.md) |
 | IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
+| DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
 | DEBT-026 | debt | open | normal | 1 | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
@@ -82,6 +83,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-029 | debt | open | normal | null | [Три ветки `/sdx:audit` не исполнялись: исход `CLEAN`, правило `-N`, штатная конфигурация инструментов агента](DEBT-029-audit-run-unexercised-branches.md) |
 | DEBT-030 | debt | open | normal | null | [Значение `model` во frontmatter агентов не валидируется ничем — тихий сбой в рантайме](DEBT-030-agent-model-tier-not-validated.md) |
 | DEBT-033 | debt | open | normal | null | [Конвенция тела записи бэклога описана в шести местах и разошлась; верны две редакции из шести](DEBT-033-backlog-body-convention-scattered.md) |
+| DEBT-035 | debt | open | normal | null | [Два инварианта флагов enforced только прозой команд](DEBT-035-flag-invariants-prose-only.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
 | PROC-008 | proc | open | normal | null | [Длинный DESIGN.md — систематический источник дрейфа при итеративной доработке](PROC-008-long-design-drift.md) |

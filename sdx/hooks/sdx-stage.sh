@@ -313,8 +313,8 @@ cmd_next() {
     echo "OK $stage -> $to_target"
 
     # Mark every stage strictly after the target, through the end of the canonical order,
-    # as outdated — NOT bounded by the departing (current) stage (REQ-BACKTRACK-2/W-1
-    # prescedent, preserved literally).
+    # as outdated — NOT bounded by the departing (current) stage (REQ-NAV-2; the pre-ADR-020
+    # REQ-BACKTRACK-2 behaviour is preserved literally under the new requirement id).
     local i s row artifact foldable path
     i=0
     while IFS= read -r s; do

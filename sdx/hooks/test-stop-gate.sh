@@ -285,14 +285,16 @@ fi
 cleanup
 
 
-# ---- Scenario 13: transparent on stage=Prototype (vibe track), even with a failing
+# ---- Scenario 13: transparent on a NON-canonical stage name (legacy "Prototype"), even with a failing
 #                   verify command configured — regression guard for the intentional
 #                   [UNCHANGED] decision on the Execution|Verification enforcement branch
-#                   (DESIGN "Enforcement-слой" / ADR-018). Mirrors scenario [2], but with
+#                   (DESIGN "Enforcement-слой" / ADR-018). Post-ADR-020 "Prototype" is no
+#                   longer a canonical stage, so this now also guards REQ-COMPAT legacy
+#                   names. Mirrors scenario [2], but with
 #                   a verify-cmd.sh that WOULD fail if the hook actually ran it, so this
 #                   test goes red the moment someone adds "Prototype" to the enforcement
 #                   case branch. sdx/hooks/stop-gate.sh itself is not modified for this. ----
-echo "[13] Transparent on stage=Prototype (vibe track), with a verify-cmd.sh that would fail if run"
+echo "[13] Transparent on legacy non-canonical stage 'Prototype', with a verify-cmd.sh that would fail if run"
 setup_stop_repo "sdx/test-stop" "Prototype"
 mkdir -p "$TMPPROJ/.claude/sdx"
 # A verify command that always fails — must never be invoked while stage=Prototype

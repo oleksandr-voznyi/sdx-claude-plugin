@@ -6,7 +6,7 @@ priority: high
 wave: 2
 source: intake sdx-runtime-rethink-20260830 (тезис Т9)
 session: null
-links: [PROC-013, PROC-017, DEBT-003, DEBT-007, DEBT-009, DEBT-014, DEBT-015, DEBT-016, DEBT-023, DEBT-024, DEBT-025, BUG-005, IDEA-005, ADR-001, ADR-016, ADR-017, ADR-018]
+links: [PROC-013, PROC-017, DEBT-003, DEBT-007, DEBT-009, DEBT-014, DEBT-015, DEBT-016, DEBT-023, DEBT-024, DEBT-025, BUG-005, IDEA-005, ADR-001, ADR-016, ADR-017, ADR-018, PROC-025]
 ---
 
 # PROC-012. Треки: пять → одна шкала + два режима

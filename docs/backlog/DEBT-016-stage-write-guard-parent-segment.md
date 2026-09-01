@@ -1,11 +1,11 @@
 ---
 id: DEBT-016
 type: debt
-status: deferred
+status: closed
 priority: low
 wave: null
 source: session (sdx/fw-stage-guard-20260720), WARN верификации
-session: null
+session: refactor-tracks-collapse-20260901
 links: [ADR-016, DEBT-003, PROC-012]
 ---
 
@@ -37,3 +37,5 @@ Deny-хук сравнивает путь операции с путём `sessio
 Отсрочка защищена тем, что линия 1.7.0 заморожена, тегирована и содержит дефект как есть: у
 пользователей 1.7.0 поведение не меняется, а на 2.0 запись либо исчезает вместе с предметом, либо
 возвращается в `open`, если снос будет отклонён или сокращён.
+
+**Закрыта поставкой `refactor-tracks-collapse-20260901` (задача T-3).** `stage-write-guard.sh` не разрешал сегмент `..` в пути — скрипт удалён целиком.

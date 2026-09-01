@@ -1,11 +1,11 @@
 ---
 id: DEBT-014
 type: debt
-status: deferred
+status: closed
 priority: normal
 wave: null
 source: session (sdx/fw-stage-guard-20260720), находка qa на Verification
-session: null
+session: refactor-tracks-collapse-20260901
 links: [BUG-001, DEBT-003, PROC-012, PROC-013]
 ---
 
@@ -43,3 +43,5 @@ links: [BUG-001, DEBT-003, PROC-012, PROC-013]
 Отсрочка защищена тем, что линия 1.7.0 заморожена, тегирована и содержит дефект как есть: у
 пользователей 1.7.0 поведение не меняется, а на 2.0 запись либо исчезает вместе с предметом, либо
 возвращается в `open`, если снос будет отклонён или сокращён.
+
+**Закрыта поставкой `refactor-tracks-collapse-20260901` (задача T-3).** `stage-gate` не пускал тесты хуков на `Verification` — хук удалён целиком вместе со своим `stage-gate.allow`. Ложное срабатывание невозможно за отсутствием срабатывающего.

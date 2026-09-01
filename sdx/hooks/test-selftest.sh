@@ -518,6 +518,112 @@ echo "[T21] BUG-008 pin: a probed hook at mode 0600 still passes (bash <path> ig
   rm -rf "$proj" "$hooks"
 }
 
+# =============================================================================
+# T24 — commands/status.md structural checks for the new step 5 (REQ-HEALTH-1/2/3,
+# grep-based, lives here rather than a dedicated test-*.sh because status.md is a prose
+# instruction, not an executable script — DESIGN.md "Тестовая стратегия" / PLAN.md T24)
+# =============================================================================
+echo "[T24] commands/status.md: step 5 structural checks present, positioned after step 4"
+{
+  STATUS_MD="$ROOT/commands/status.md"
+
+  # status_checks <file> — counts how many of the four REQ-HEALTH-1 structural checks (jq
+  # present, prod-guard.conf present+non-empty, verify-cmd.sh present+executable, branch <->
+  # session match) are present in <file>. Returns 0-4.
+  status_checks() {
+    local f="$1" n=0
+    grep -qF 'command -v jq >/dev/null 2>&1 && echo present || echo MISSING' "$f" && n=$((n + 1))
+    grep -qF '[ -s .claude/sdx/prod-guard.conf ] && echo "present, non-empty" || echo "missing or empty"' "$f" && n=$((n + 1))
+    grep -qF '[ -x .claude/sdx/verify-cmd.sh ] && echo "present, executable"' "$f" && n=$((n + 1))
+    grep -qF 'соответствие ветки: сравни `git branch --show-current` с `sdx/<session_id>` из `session_state.json`' "$f" && n=$((n + 1))
+    echo "$n"
+  }
+
+  n_checks="$(status_checks "$STATUS_MD")"
+  has_no_rerun=0
+  grep -qF 'НЕ запускай `selftest.sh` повторно' "$STATUS_MD" && has_no_rerun=1
+  has_age=0
+  grep -qF 'возраст `ts`' "$STATUS_MD" && has_age=1
+
+  # Positional check (REQ-LIMIT-3): step 5 marker must appear strictly AFTER the step 4 marker —
+  # step 4's own text is asserted byte-identical separately (git diff review, PLAN.md T23 DoD),
+  # this only pins ORDER, i.e. step 5 was appended after, not inserted before/inside step 4.
+  line4="$(grep -nF '4. **(факультативно) Активные сессии' "$STATUS_MD" | head -1 | cut -d: -f1)"
+  line5="$(grep -nF '5. **Здоровье enforcement' "$STATUS_MD" | head -1 | cut -d: -f1)"
+
+  if [ "$n_checks" -eq 4 ] && [ "$has_no_rerun" -eq 1 ] && [ "$has_age" -eq 1 ] \
+     && [ -n "$line4" ] && [ -n "$line5" ] && [ "$line5" -gt "$line4" ]; then
+    pass "T24 green: 4/4 structural checks + no-rerun phrase + ts-age wording present, step 5 (line $line5) after step 4 (line $line4)"
+  else
+    fail "T24 green" "n_checks=$n_checks no_rerun=$has_no_rerun age=$has_age line4=$line4 line5=$line5"
+  fi
+
+  # Red side (demonstrates the grep gate actually discriminates, DESIGN.md "Красный: временно
+  # убрать любой из четырёх пунктов ... → тест обязан упасть"): a copy of the real file with the
+  # branch-check line stripped out must score 3/4, not 4/4 — the same predicate the green
+  # assertion above relies on.
+  mutated="$(mktemp)"
+  grep -v 'соответствие ветки: сравни' "$STATUS_MD" > "$mutated"
+  n_red="$(status_checks "$mutated")"
+  if [ "$n_red" -eq 3 ]; then
+    pass "T24 red: stripping the branch-check line drops the count to 3/4 — gate discriminates (would fail the green assertion above)"
+  else
+    fail "T24 red" "expected 3 structural checks after removing the branch-check line, got $n_red"
+  fi
+  rm -f "$mutated"
+}
+
+# =============================================================================
+# T25 — regression grep gate for REQ-LIMIT-2 across all three files touched by this delivery
+# (closing task of the plan — runs last, after all texts are in final form)
+# =============================================================================
+echo "[T25] REQ-LIMIT-2 regression grep gate: no false promises across selftest.sh / test-selftest.sh / status.md"
+{
+  # Forbidden phrases assembled from array elements that never sit adjacent to each other in
+  # THIS file's own source text (each half lives in a separate array literal) — so grepping this
+  # very file (T25's target list includes test-selftest.sh itself, per DESIGN.md) cannot produce
+  # a spurious self-match purely because the pattern definition mentions the banned words.
+  part_a=("блокирует" "отключает" "понижает" "снижает" "ограничивает" "блокирует" "блокирует" "меняет")
+  part_b=("автоном" "автоном" "уровень доступа" "уровень доступа" "автоном" "SessionStart" "запуск CLI" "доступные классы риска")
+
+  forbidden=""
+  for i in "${!part_a[@]}"; do
+    phrase="${part_a[$i]} ${part_b[$i]}"
+    forbidden="${forbidden:+$forbidden|}$phrase"
+  done
+
+  targets=("$ROOT/sdx/hooks/selftest.sh" "$ROOT/sdx/hooks/test-selftest.sh" "$ROOT/commands/status.md")
+
+  hit=0
+  for t in "${targets[@]}"; do
+    if grep -riE "$forbidden" "$t" >/dev/null 2>&1; then
+      hit=1
+      fail "T25 green" "forbidden phrase found in $t"
+    fi
+  done
+  if [ "$hit" -eq 0 ]; then
+    pass "T25 green: zero matches for forbidden gate/blocking claims across all three files"
+  fi
+
+  # Red: temporarily inject one forbidden phrase into a scratch copy of each target and confirm
+  # the same grep discriminates it (DESIGN.md "Красный: временно вставить одну из запрещённых
+  # формулировок ... → тест обязан упасть").
+  red_ok=1
+  for t in "${targets[@]}"; do
+    scratch="$(mktemp)"
+    cp "$t" "$scratch"
+    printf '\n%s\n' "${part_a[0]} ${part_b[0]}" >> "$scratch"
+    if ! grep -riE "$forbidden" "$scratch" >/dev/null 2>&1; then
+      red_ok=0
+      fail "T25 red" "injecting a forbidden phrase into a copy of $t did NOT trip the gate"
+    fi
+    rm -f "$scratch"
+  done
+  if [ "$red_ok" -eq 1 ]; then
+    pass "T25 red: injecting a forbidden phrase into a scratch copy of each of the 3 files trips the gate"
+  fi
+}
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

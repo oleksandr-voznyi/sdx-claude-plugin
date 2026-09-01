@@ -6,12 +6,17 @@
 # the check actually discriminates, so each scenario demonstrably flips to red via a concrete
 # mutation (decoy hook, seeded config, env override), not just asserted "should be true".
 #
-# Runs self-contained: everything happens under mktemp -d fixtures (or, where the DESIGN
-# explicitly calls for it — T13 — against THIS repo's own real session, with careful
-# backup/restore so no observable state survives the test run). No test in this file depends on
-# hooks/hooks.json, ${CLAUDE_PLUGIN_ROOT}, or an installed copy of the plugin — selftest.sh is
-# invoked directly (`bash sdx/hooks/selftest.sh`), exactly like every other test-*.sh in this
-# directory (see PLAN.md "Ограничение среды исполнения").
+# Runs self-contained: everything happens under mktemp -d fixtures, INCLUDING T13's
+# real-session-isolation check — it builds its own throwaway git repo shaped like a real SDX
+# session (branch sdx/<id>, .claude/sessions/<id>/session_state.json, seeded .stopgate.*)
+# rather than touching THIS repo's own live session, so the property it proves (probe_stop_gate
+# never reaches an active session's .stopgate.*) holds independent of which branch this suite
+# happens to run on, and never risks corrupting live session state that a concurrently running
+# stop-gate.sh may have open for writing (see F1 in verification_report.md — the reason this is
+# a fixture now, not the real session). No test in this file depends on hooks/hooks.json,
+# ${CLAUDE_PLUGIN_ROOT}, or an installed copy of the plugin — selftest.sh is invoked directly
+# (`bash sdx/hooks/selftest.sh`), exactly like every other test-*.sh in this directory (see
+# PLAN.md "Ограничение среды исполнения").
 #
 # Usage: bash sdx/hooks/test-selftest.sh
 set -uo pipefail
@@ -41,10 +46,58 @@ build_real_hooks_fixture() {
   cp "$SCRIPT_DIR/lib/resolve-session.sh" "$dir/lib/resolve-session.sh"
 }
 
+# build_session_fixture <dir> <sid>
+#   Makes <dir> LOOK LIKE a real, on-disk SDX session — a git repo checked out on branch
+#   sdx/<sid> (no commit needed: `git branch --show-current` works pre-commit, same as
+#   probe_stop_gate's own internal fixture), plus .claude/sessions/<sid>/session_state.json
+#   with stage=Execution. This is exactly what resolve_sid()/stop-gate.sh's stage gate require
+#   to treat <dir> as "the active session" rather than a transparent no-op — used by T13/T14 so
+#   their fixtures create genuine conditions for the property under test, instead of a project
+#   dir that stop-gate.sh would ignore regardless of any isolation bug (see W1).
+build_session_fixture() {
+  local dir="$1" sid="$2"
+  ( cd "$dir" && git init -q && git checkout -q -b "sdx/$sid" ) 2>/dev/null
+  mkdir -p "$dir/.claude/sessions/$sid" "$dir/.claude/sdx"
+  printf '{"stage":"Execution"}' > "$dir/.claude/sessions/$sid/session_state.json"
+}
+
+# build_stop_gate_isolation_mutant <out_file>
+#   Writes a copy of the REAL selftest.sh to <out_file> with probe_stop_gate() replaced by a
+#   version that talks to $proj directly instead of building its own isolated `tp` fixture —
+#   i.e. exactly the REQ-ST-5 regression T13/T14 exist to catch. Used only to demonstrate that
+#   those tests' green assertions actually discriminate (a concrete red side), never as
+#   something shipped or invoked via run_selftest/$SELFTEST.
+build_stop_gate_isolation_mutant() {
+  local out="$1"
+  awk '
+    /^probe_stop_gate\(\) \{/ {
+      skip = 1
+      print "probe_stop_gate() {   # MUTANT (T13/T14 red side, see test-selftest.sh): uses $proj directly"
+      print "  local rc=0"
+      print "  CLAUDE_PROJECT_DIR=\"$proj\" bash \"$hooks_dir/stop-gate.sh\" >/dev/null 2>/dev/null || rc=$?"
+      print "  [ \"$rc\" -eq 2 ] && echo pass || echo fail"
+      print "}"
+      next
+    }
+    skip && /^}/ { skip = 0; next }
+    skip { next }
+    { print }
+  ' "$SELFTEST" > "$out"
+}
+
 # run_selftest — invokes selftest.sh with the env vars named below (empty string == unset,
 # selftest.sh's `${VAR:-default}` resolution treats both the same way). Captures stderr into
 # RS_STDERR (stdout is never used by selftest.sh, per DESIGN.md — discarded), exit code into
 # RS_EC. Reads: RS_PROJ RS_PLUGIN_ROOT RS_HOOKS_DIR RS_BUDGET RS_FORCE RS_PATH.
+#
+# Isolation (W7): callers pass RS_* via prefix assignment before this FUNCTION call
+# (`RS_PROJ=… run_selftest`). Because run_selftest is a shell function — not an external
+# command — bash does not scope those assignments to the call; they become ordinary shell
+# variables that would otherwise survive after return and leak into whichever later scenario
+# forgets to set the same name explicitly (e.g. T18's RS_PATH override outliving its own
+# `rm -rf "$NOJQ_BIN"` and poisoning T19/T21's PATH). The trailing `unset` below closes that
+# gap: every RS_* input is gone the instant this function returns, so each call site is only
+# ever affected by the assignments it wrote on its own line.
 RS_EC=0
 RS_STDERR=""
 run_selftest() {
@@ -59,6 +112,7 @@ run_selftest() {
     bash "$SELFTEST" 2>&1 >/dev/null
   )"
   RS_EC=$?
+  unset RS_PROJ RS_PLUGIN_ROOT RS_HOOKS_DIR RS_BUDGET RS_FORCE RS_PATH
 }
 
 # cache_field <file> <field>  — extract a quoted-string field's value (grep -o, no jq).
@@ -72,6 +126,35 @@ cache_field_raw() {
 
 echo "=== test-selftest.sh ==="
 echo ""
+
+# =============================================================================
+# T08 — run_selftest: RS_* prefix assignments never leak across calls (W7, harness-internal —
+# guards this file's own test isolation, not selftest.sh's behaviour)
+# =============================================================================
+echo "[T08] run_selftest: RS_* inputs do not survive past the call that set them"
+{
+  probe_dir="$(mktemp -d)"
+  decoy_path="/nonexistent-leak-probe-$$"
+  RS_PROJ="$probe_dir" RS_HOOKS_DIR="$SCRIPT_DIR" RS_PATH="$decoy_path" RS_FORCE=1 run_selftest
+  rm -rf "$probe_dir"
+  if [ -z "${RS_PROJ:-}" ] && [ -z "${RS_HOOKS_DIR:-}" ] && [ -z "${RS_PATH:-}" ] && [ -z "${RS_FORCE:-}" ]; then
+    pass "T08: RS_PROJ/RS_HOOKS_DIR/RS_PATH/RS_FORCE all unset immediately after run_selftest returns"
+  else
+    fail "T08" "leaked: RS_PROJ=${RS_PROJ:-<unset>} RS_HOOKS_DIR=${RS_HOOKS_DIR:-<unset>} RS_PATH=${RS_PATH:-<unset>} RS_FORCE=${RS_FORCE:-<unset>}"
+  fi
+}
+# Honest limit on the red side (same spirit as T27's note below): the mutation is deleting the
+# trailing `unset RS_PROJ ... RS_PATH` line in run_selftest itself, verified manually (temporarily
+# blanking that line, running this suite, restoring it — not left as in-file automated code,
+# since a same-file test editing its own already-parsed function body mid-run isn't meaningful).
+# On THIS repo's bash (5.3.9, both normal and --posix mode — checked directly:
+# `f(){ :; }; FOO=x f; echo "${FOO:-<unset>}"` prints `<unset>` either way), prefix assignments
+# to a shell FUNCTION already do NOT persist after it returns, so removing the `unset` line does
+# NOT turn T08 red here — the leak W7 describes is real for POSIX-mode/older bash (e.g. 3.2, the
+# version macOS ships), a class of environment this repo's dev machine cannot reproduce, not for
+# a defect this assertion can currently discriminate. The `unset` line is kept anyway as
+# unconditional defense-in-depth (correct regardless of bash version/mode, costs nothing), and
+# T08 stays as a permanent sanity check — it just cannot presently be shown red on this machine.
 
 # =============================================================================
 # T09 — probe_preflight reacts to the probed script's behaviour (REQ-ST-2)
@@ -178,82 +261,105 @@ echo "[T12] probe_stop_gate: green (real, DEBT-026 0600 verify-cmd.sh) / red (de
 }
 
 # =============================================================================
-# T13 — probe_stop_gate isolation from the REAL active session's .stopgate.* (REQ-ST-5)
+# T13 — probe_stop_gate isolation from an active session's .stopgate.* (REQ-ST-5)
+#
+# Rewritten per verification_report.md F1: the previous version ran against THIS repo's own
+# real, live session — while this very suite is (on the normal red/green path) executing
+# *inside* stop-gate.sh's own `>"$outfile"` redirection of the enclosing verify-cmd.sh run, so
+# overwriting-then-restoring the real .stopgate.out clobbered a file descriptor stop-gate.sh
+# still had open, truncating the diagnostic output a red Stop shows the user. The property
+# under test does not require the real session at all: probe_stop_gate builds its OWN isolated
+# `tp` fixture internally and never reads $proj, so a fixture that merely LOOKS like a real
+# session (build_session_fixture) exercises the identical code path — and, unlike the real
+# session, keeps working after Closeout (closes W2 too).
 # =============================================================================
-echo "[T13] probe_stop_gate isolation: real session's .stopgate.* must survive byte-for-byte"
+echo "[T13] probe_stop_gate isolation: a real-shaped SDX session's .stopgate.* survive byte-for-byte"
 {
-  real_branch="$(git -C "$ROOT" branch --show-current 2>/dev/null || true)"
-  case "$real_branch" in
-    sdx/*)
-      real_sid="${real_branch#sdx/}"
-      sess_dir="$ROOT/.claude/sessions/$real_sid"
-      if [ -d "$sess_dir" ]; then
-        backup_dir="$(mktemp -d)"
-        for f in "$sess_dir"/.stopgate.*; do
-          [ -e "$f" ] && cp -p "$f" "$backup_dir/$(basename "$f")"
-        done
-        cache_real="$ROOT/.claude/sdx/.cache/selftest.json"
-        cache_existed=0
-        if [ -f "$cache_real" ]; then cache_existed=1; cp -p "$cache_real" "$backup_dir/__cache.bak"; fi
+  fx="$(mktemp -d)"; sid="t13fixture"
+  build_session_fixture "$fx" "$sid"
+  sess_dir="$fx/.claude/sessions/$sid"
+  # DEBT-026 form verify-cmd.sh: if probe_stop_gate were ever pointed at $fx directly (the bug
+  # this test exists to catch), stop-gate.sh would find a real test command here and actually
+  # run it, touching .stopgate.count/.out/.ok — not silently no-op on "no known test command".
+  printf '#!/bin/bash\nexit 1\n' > "$fx/.claude/sdx/verify-cmd.sh"
+  chmod 0600 "$fx/.claude/sdx/verify-cmd.sh"
 
-        printf 'SENTINEL-COUNT\n' > "$sess_dir/.stopgate.count"
-        printf 'SENTINEL-OUT\n' > "$sess_dir/.stopgate.out"
-        printf 'SENTINEL-OK\n' > "$sess_dir/.stopgate.ok"
-        b_count="$(md5sum "$sess_dir/.stopgate.count" | cut -d' ' -f1)"
-        b_out="$(md5sum "$sess_dir/.stopgate.out" | cut -d' ' -f1)"
-        b_ok="$(md5sum "$sess_dir/.stopgate.ok" | cut -d' ' -f1)"
+  # .stopgate.count must be a bare integer (stop-gate.sh:83 does arithmetic `$(( $(cat guard) +
+  # 1 ))` under `set -u`; a non-numeric seed would abort the real stop-gate.sh with "unbound
+  # variable" before it ever got a chance to touch the file — masking, not proving, isolation).
+  # "7" is picked to be recognizably a seed (stop-gate.sh would only ever naturally write 1-4).
+  printf '7\n' > "$sess_dir/.stopgate.count"
+  printf 'SEED-OUT\n' > "$sess_dir/.stopgate.out"
+  printf 'SEED-OK\n' > "$sess_dir/.stopgate.ok"
+  b_count="$(md5sum "$sess_dir/.stopgate.count" | cut -d' ' -f1)"
+  b_out="$(md5sum "$sess_dir/.stopgate.out" | cut -d' ' -f1)"
+  b_ok="$(md5sum "$sess_dir/.stopgate.ok" | cut -d' ' -f1)"
 
-        # Real CLAUDE_PROJECT_DIR, real branch/session — exactly what DESIGN.md prescribes.
-        RS_PROJ="$ROOT" RS_HOOKS_DIR="$SCRIPT_DIR" RS_FORCE=1 run_selftest
+  RS_PROJ="$fx" RS_HOOKS_DIR="$SCRIPT_DIR" RS_FORCE=1 run_selftest
 
-        a_count="$(md5sum "$sess_dir/.stopgate.count" | cut -d' ' -f1)"
-        a_out="$(md5sum "$sess_dir/.stopgate.out" | cut -d' ' -f1)"
-        a_ok="$(md5sum "$sess_dir/.stopgate.ok" | cut -d' ' -f1)"
+  a_count="$(md5sum "$sess_dir/.stopgate.count" | cut -d' ' -f1)"
+  a_out="$(md5sum "$sess_dir/.stopgate.out" | cut -d' ' -f1)"
+  a_ok="$(md5sum "$sess_dir/.stopgate.ok" | cut -d' ' -f1)"
+  if [ "$b_count" = "$a_count" ] && [ "$b_out" = "$a_out" ] && [ "$b_ok" = "$a_ok" ]; then
+    pass "T13 green: real selftest.sh leaves a real-shaped session's .stopgate.count/.out/.ok byte-for-byte unchanged"
+  else
+    fail "T13 green: a real-shaped session's .stopgate.* files were modified by selftest.sh" \
+         "count $b_count->$a_count out $b_out->$a_out ok $b_ok->$a_ok"
+  fi
 
-        if [ "$b_count" = "$a_count" ] && [ "$b_out" = "$a_out" ] && [ "$b_ok" = "$a_ok" ]; then
-          pass "T13: real .stopgate.count/.out/.ok byte-for-byte unchanged after selftest run"
-        else
-          fail "T13: real .stopgate.* files were modified by selftest.sh" \
-               "count $b_count->$a_count out $b_out->$a_out ok $b_ok->$a_ok"
-        fi
-
-        # Restore real session state exactly as found.
-        rm -f "$sess_dir/.stopgate.count" "$sess_dir/.stopgate.out" "$sess_dir/.stopgate.ok"
-        for f in "$backup_dir"/.stopgate.*; do
-          [ -e "$f" ] && cp -p "$f" "$sess_dir/$(basename "$f")"
-        done
-        if [ "$cache_existed" -eq 1 ]; then
-          cp -p "$backup_dir/__cache.bak" "$cache_real"
-        else
-          rm -f "$cache_real"
-        fi
-        rm -rf "$backup_dir"
-      else
-        echo "  SKIP: no session dir for current branch's sid — T13 requires the real session context"
-      fi
-      ;;
-    *)
-      echo "  SKIP: not on an sdx/<id> branch — T13 requires the real session context"
-      ;;
-  esac
+  # Red: probe_stop_gate mutated to talk to $proj directly instead of its own isolated `tp`
+  # (build_stop_gate_isolation_mutant) — exactly the REQ-ST-5 regression this test guards
+  # against — DOES clobber the seeded .stopgate.count. Proves the green assertion above
+  # actually discriminates, not just "nothing happened to touch anywhere".
+  mutant="$(mktemp)"; build_stop_gate_isolation_mutant "$mutant"
+  CLAUDE_PROJECT_DIR="$fx" SDX_SELFTEST_HOOKS_DIR="$SCRIPT_DIR" SDX_SELFTEST_FORCE=1 \
+    bash "$mutant" >/dev/null 2>&1
+  a2_count="$(md5sum "$sess_dir/.stopgate.count" 2>/dev/null | cut -d' ' -f1)"
+  if [ "$a2_count" != "$b_count" ]; then
+    pass "T13 red: probe_stop_gate mutated to use \$proj directly DOES clobber .stopgate.count — isolation check discriminates"
+  else
+    fail "T13 red" "mutant left .stopgate.count untouched — the green assertion above would not have caught this regression"
+  fi
+  rm -f "$mutant"; rm -rf "$fx"
 }
 
 # =============================================================================
 # T14 — probe_stop_gate never runs the REAL project's verify-cmd.sh (REQ-ST-6)
+#
+# Rewritten per verification_report.md W1: the previous fixture was a bare mktemp -d with no
+# git repo, no sdx/<id> branch and no session_state.json, so resolve_sid() would return empty
+# and stop-gate.sh would exit 0 before ever reaching verify-cmd.sh REGARDLESS of any isolation
+# bug — the green assertion could not discriminate. build_session_fixture gives $proj the same
+# real shape T13 now uses, so a genuine REQ-ST-6 regression (probe_stop_gate reading $proj
+# instead of its own tp) would actually reach and execute this marker-touching verify-cmd.sh.
 # =============================================================================
 echo "[T14] probe_stop_gate never triggers \$proj's real verify-cmd.sh"
 {
-  proj="$(mktemp -d)"
-  mkdir -p "$proj/.claude/sdx"
-  printf '#!/usr/bin/env bash\ntouch "%s/ran.marker"\nexit 0\n' "$proj" > "$proj/.claude/sdx/verify-cmd.sh"
-  chmod +x "$proj/.claude/sdx/verify-cmd.sh"
-  RS_PROJ="$proj" RS_HOOKS_DIR="$SCRIPT_DIR" RS_FORCE=1 run_selftest
-  if [ ! -e "$proj/ran.marker" ]; then
-    pass "T14: \$proj's real verify-cmd.sh (marker-touching) was NOT invoked by the stop_gate probe"
+  fx="$(mktemp -d)"; sid="t14fixture"
+  build_session_fixture "$fx" "$sid"
+  printf '#!/usr/bin/env bash\ntouch "%s/ran.marker"\nexit 0\n' "$fx" > "$fx/.claude/sdx/verify-cmd.sh"
+  chmod +x "$fx/.claude/sdx/verify-cmd.sh"
+
+  RS_PROJ="$fx" RS_HOOKS_DIR="$SCRIPT_DIR" RS_FORCE=1 run_selftest
+  if [ ! -e "$fx/ran.marker" ]; then
+    pass "T14 green: \$proj's real, marker-touching verify-cmd.sh — reachable via a properly-shaped sdx/<id> session — was NOT invoked by the stop_gate probe"
   else
-    fail "T14: real verify-cmd.sh of \$proj was executed by selftest.sh" "ran.marker present"
+    fail "T14 green: real verify-cmd.sh of \$proj was executed by selftest.sh" "ran.marker present"
   fi
-  rm -rf "$proj"
+
+  # Red: prove the fixture genuinely creates conditions for the marker to fire. The same
+  # $proj-direct mutant as T13's red side, run against this fixture, DOES trigger ran.marker —
+  # so this fixture (unlike the pre-fix one) would actually have caught the REQ-ST-6 regression
+  # it targets.
+  mutant="$(mktemp)"; build_stop_gate_isolation_mutant "$mutant"
+  CLAUDE_PROJECT_DIR="$fx" SDX_SELFTEST_HOOKS_DIR="$SCRIPT_DIR" SDX_SELFTEST_FORCE=1 \
+    bash "$mutant" >/dev/null 2>&1
+  if [ -e "$fx/ran.marker" ]; then
+    pass "T14 red: probe_stop_gate mutated to use \$proj directly DOES run the marker-touching verify-cmd.sh — fixture discriminates (W1 fix)"
+  else
+    fail "T14 red" "mutant did not trigger ran.marker — this fixture would not have caught the REQ-ST-6 regression it targets"
+  fi
+  rm -f "$mutant"; rm -rf "$fx"
 }
 
 # =============================================================================

@@ -103,3 +103,32 @@ diff /tmp/before_status.txt /tmp/after_status.txt && echo "NO CHANGES" || echo "
 плагина реально работает (это единственная точка, которую дев-сьют `test-selftest.sh` в принципе
 не может проверить — см. DESIGN.md «Ограничение среды исполнения»: тесты вызывают `selftest.sh`
 напрямую, минуя `hooks.json`/установленную копию плагина).
+
+---
+
+## Результаты прогона (Verification, 2026-09-01)
+
+Исполнено оркестратором на ветке `sdx/feat-enforcement-selftest-20260901`, плагин 2.1.0.
+
+**Шаги 1–4 — PASS.**
+- Контрольные суммы до исполнения шага 5 команды `/sdx:status`:
+  ```
+  8ea9624b8fdb9e5ca28dbeb976e7ac97  .claude/sdx/.cache/selftest.json
+  5c1d2c74bb29021ab974015e4a67e253  .claude/sdx/prod-guard.conf
+  bab5a818f338dd20a1400edb987b7279  .claude/sdx/verify-cmd.sh
+  ```
+- Пройден алгоритм шага 5 дословно: четыре структурных факта вычислены живьём
+  (`jq present`, `prod-guard.conf present, non-empty`, `verify-cmd.sh present, executable`,
+  ветка `sdx/feat-enforcement-selftest-20260901` совпала со `state`), вердикт прочитан
+  ТОЛЬКО из кэша: `status=ok preflight=pass prod_guard=pass stop_gate=pass 263ms/2000ms
+  exceeded=false ts=2026-09-01T16:41:17Z`.
+- Контрольные суммы после — **идентичны** (`diff` пуст). `REQ-HEALTH-3` подтверждён:
+  вызов не инициировал новый прогон и не изменил состояние.
+- Побочно подтверждён кэш-хит: предшествующий прямой вызов `selftest.sh` не переписал `ts`,
+  потому что отпечаток совпал.
+
+**Шаг 5 (реальная проводка `SessionStart` установленной копии плагина) — НЕ ИСПОЛНЕН.**
+По условию исполним только после мёржа и `/plugin marketplace update sdx`: до этого
+`${CLAUDE_PLUGIN_ROOT}` указывает на копию плагина без `selftest.sh` в `hooks.json`.
+Это то же ограничение среды, что зафиксировано в `DESIGN.md` и в `PROC-020`; на Closeout
+оформляется записью бэклога, а не выдаётся за пройденное.

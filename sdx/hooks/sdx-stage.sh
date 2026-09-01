@@ -70,8 +70,12 @@ stage_names() {
 }
 
 # stage_row <stage> -> "artifact|fail_marker|foldable", empty if <stage> is not canonical.
+# NOTE: the `$1 &&` guard is required, not cosmetic — SDX_STAGE_TABLE is a heredoc-style
+# string starting with a newline, so awk's first record has an empty $1. Without the guard,
+# stage_row("") would match that empty leading record instead of correctly returning empty
+# (see stage_exists() below for the same asymmetry, which was an actual production bug).
 stage_row() {
-  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' -v s="$1" '$1==s{print $2"|"$3"|"$4; exit}'
+  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' -v s="$1" '$1 && $1==s{print $2"|"$3"|"$4; exit}'
 }
 
 # stage_index <stage> -> 1-based position within the canonical order, empty if not found.
@@ -81,8 +85,15 @@ stage_index() {
 
 # stage_exists <stage> -> exit 0 if <stage> is one of the nine canonical names, exit 1
 # otherwise.
+# NOTE (bug found by QA at Verification): SDX_STAGE_TABLE is a heredoc-style string that
+# starts with a newline, so its first awk record has an empty $1. The old pattern `$1==s`
+# was unconditional, so stage_exists("") matched that empty leading record and reported the
+# empty string as an existing stage — `next` (forward mode, no --to) would then silently
+# "heal" a corrupted/absent `.stage` by treating index 0+1=1 as a valid candidate (Discovery)
+# instead of diagnosing REQ-COMPAT-3. The `$1 &&` guard makes this symmetric with
+# stage_names()/stage_index() below, which already skip the empty leading record correctly.
 stage_exists() {
-  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' -v s="$1" '$1==s{f=1} END{exit !f}'
+  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' -v s="$1" '$1 && $1==s{f=1} END{exit !f}'
 }
 
 # is_excluded_by_no_code <stage> -> exit 0 if no_code==true excludes <stage> unconditionally

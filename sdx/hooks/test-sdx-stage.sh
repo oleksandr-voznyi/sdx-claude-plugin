@@ -3,7 +3,7 @@
 # REQ-NAV-1..2). Runs self-contained: creates temporary "project" dirs, exercises the CLI,
 # cleans up. Usage: bash sdx/hooks/test-sdx-stage.sh
 #
-# Scenario 27 (REQ-TEST-1) cross-checks the canonical stage_names() order against the
+# Scenario 29 (REQ-TEST-1) cross-checks the canonical stage_names() order against the
 # human-readable stage-order projection table in sdx/protocol.md — see that scenario below.
 set -uo pipefail
 
@@ -224,15 +224,23 @@ fi
 cleanup
 
 # ---- Scenario 11: init — REQ-FLAG-3, both flags true -> exit 2 ----
-echo "[11] init: no_code=true AND no_gates=true -> exit 2"
+# The fixture below uses stage="Execution" ON PURPOSE: it is the one stage value for which
+# the LATER REQ-SCALE-4 check ("no_code=true excludes starting on stage 'Execution'") would
+# ALSO independently produce exit 2 if the REQ-FLAG-3 check itself were broken/removed — so
+# checking only the exit code here is tautological and would not actually discriminate
+# whether REQ-FLAG-3 fired. The assertion therefore also pins down the MESSAGE: it must be
+# specifically about the no_code/no_gates contradiction (REQ-FLAG-3's own wording), and must
+# NOT be REQ-SCALE-4's ("исключает старт") or REQ-SCALE-5's ("допускает старт") wording,
+# which are the two other checks that could otherwise mask REQ-FLAG-3 going unreachable.
+echo "[11] init: no_code=true AND no_gates=true -> exit 2, message names the flag conflict (REQ-FLAG-3), not a stage-exclusion check"
 TMPPROJ="$(mktemp -d)"
 out="$(run_stage init "t11" "proto" "Execution" "interactive" "sdx/t11" "true" "true" 2>&1 1>/dev/null)"
 ec=$?
 sf="$(state_file t11)"
-if [ "$ec" -eq 2 ] && [ ! -f "$sf" ]; then
-  pass "exit 2, no state file created"
+if [ "$ec" -eq 2 ] && [ ! -f "$sf" ]    && printf '%s' "$out" | grep -q 'no_code и no_gates'    && ! printf '%s' "$out" | grep -q 'исключает старт'    && ! printf '%s' "$out" | grep -q 'допускает старт'; then
+  pass "exit 2, no state file created, message names the no_code/no_gates conflict specifically"
 else
-  fail "Expected exit 2, no file" "ec=$ec out='$out'"
+  fail "Expected exit 2, no file, message about the flag conflict (REQ-FLAG-3), not a stage check" "ec=$ec out='$out'"
 fi
 cleanup
 
@@ -473,13 +481,56 @@ else
 fi
 cleanup
 
-# ---- Scenario 27 (REQ-TEST-1): sanity — canonical stage_names() order matches the
+# ---- Scenario 27 (REQ-COMPAT-3, forward mode): current stage is an empty string "" ----
+# Regression test for a real bug found by QA at Verification: stage_exists() used an
+# unconditional `$1==s` awk pattern, which matched SDX_STAGE_TABLE's empty leading heredoc
+# record when s=="" — `next` (forward, no --to) would then silently treat index 0+1=1 as a
+# valid candidate and advance to Discovery instead of diagnosing REQ-COMPAT-3. next --to
+# already handled this correctly (scenario 26 covers a legacy-name variant of that path); this
+# scenario locks down that plain `next` is symmetric with it for a *corrupted* (not merely
+# legacy-named) current stage.
+echo "[27] REQ-COMPAT-3: stage='' (empty string), forward next -> exit 2, file untouched, not silently healed to Discovery"
+TMPPROJ="$(mktemp -d)"
+mkdir -p "$TMPPROJ/.claude/sessions/t27"
+jq -n '{session_id:"t27", type:"feature", stage:"", gate_mode:"interactive", git_branch:"sdx/t27", no_code:false, no_gates:false, artifacts:[], history:[]}'   > "$TMPPROJ/.claude/sessions/t27/session_state.json"
+sf="$(state_file t27)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage next "t27" 2>&1 1>/dev/null)"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 2 ] && [ "$before_sum" = "$after_sum" ] && printf '%s' "$out" | grep -qi 'нераспознан\|устарел'; then
+  pass "empty stage diagnosed with exit 2, file untouched, not healed to Discovery"
+else
+  fail "Expected diagnostic exit 2 on empty stage, not a silent heal" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 28 (REQ-COMPAT-3, forward mode): .stage key is entirely absent from the JSON ----
+# Same bug, second manifestation: `jq -r '.stage // empty'` on a missing key also yields the
+# empty string, going through the identical broken stage_exists("") path.
+echo "[28] REQ-COMPAT-3: .stage key absent from session_state.json, forward next -> exit 2, file untouched"
+TMPPROJ="$(mktemp -d)"
+mkdir -p "$TMPPROJ/.claude/sessions/t28"
+jq -n '{session_id:"t28", type:"feature", gate_mode:"interactive", git_branch:"sdx/t28", no_code:false, no_gates:false, artifacts:[], history:[]}'   > "$TMPPROJ/.claude/sessions/t28/session_state.json"
+sf="$(state_file t28)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage next "t28" 2>&1 1>/dev/null)"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 2 ] && [ "$before_sum" = "$after_sum" ] && printf '%s' "$out" | grep -qi 'нераспознан\|устарел'; then
+  pass "missing .stage key diagnosed with exit 2, file untouched, not healed to Discovery"
+else
+  fail "Expected diagnostic exit 2 on missing .stage key, not a silent heal" "ec=$ec out='$out'"
+fi
+cleanup
+
+# ---- Scenario 29 (REQ-TEST-1): sanity — canonical stage_names() order matches the
 # human-readable stage-order projection table in sdx/protocol.md. The single machine-
 # readable source of truth is SDX_STAGE_TABLE inside this script; sdx/protocol.md keeps a
 # projection of the same order for humans (section "Единая шкала этапов и режимы-флаги").
 # This scenario fails on ANY divergence — a skipped/added/reordered stage name in either
 # place — by comparing the two ordered lists line by line. ----
-echo "[27] REQ-TEST-1 sanity: stage_names() order matches sdx/protocol.md's stage-order table"
+echo "[29] REQ-TEST-1 sanity: stage_names() order matches sdx/protocol.md's stage-order table"
 PROTOCOL_MD="$SCRIPT_DIR/../protocol.md"
 if [ ! -f "$PROTOCOL_MD" ]; then
   fail "sdx/protocol.md not found for REQ-TEST-1 cross-check" "expected at $PROTOCOL_MD"

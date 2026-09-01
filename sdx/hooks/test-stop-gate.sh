@@ -385,6 +385,25 @@ else
 fi
 cleanup
 
+# ---- Scenario 18: the template must never be picked up as the runner. Before this delivery two
+#                   independent barriers excluded it — its NAME and its mode (it ships 100644).
+#                   The mode barrier is now gone by design, which makes the name the ONLY thing
+#                   standing between an unconfigured template and a live test floor. Guard it:
+#                   widening the condition to a glob (verify-cmd.sh*) must turn this red. ----
+echo "[18] verify-cmd.sh.template alone is NOT picked up as the runner (name, not mode, excludes it)"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+# The template as shipped: non-executable, and carrying a command that would fail loudly if run.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh.template"
+chmod 0644 "$TMPPROJ/.claude/sdx/verify-cmd.sh.template"
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ ! -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.count" ]; then
+  pass "exit 0 and no loop-guard counter (the template was not treated as a test command)"
+else
+  fail "Expected exit 0 with no loop-guard counter (template must not activate the floor)" "got exit $RUN_EC, counter present: $([ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.count" ] && echo yes || echo no)"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

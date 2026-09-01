@@ -2,7 +2,7 @@
   "name": "sdx",
   "displayName": "SDX (Spec-Driven X)",
   "version": "2.2.0",
-  "description": "Spec-Driven Development framework: session lifecycle (/sdx:start … /sdx:archive), project audit (/sdx:audit), role subagents (ba, architect, lead-dev, developer, qa, reviewer, auditor, tech-writer, devops), a single stage scale with two mode flags (no_code / no_gates), and a deterministic enforcement layer guarding the irreversible (stop-gate, prod-guard, archive-verify).",
+  "description": "Spec-Driven Development framework: session lifecycle (/sdx:start … /sdx:archive), project audit (/sdx:audit), role subagents (ba, architect, lead-dev, developer, qa, reviewer, auditor, tech-writer, devops), a single stage scale with two mode flags (no_code / no_gates), and a deterministic enforcement layer guarding the irreversible (stop-gate, prod-guard, archive-verify) with a self-test proving the layer is alive.",
   "author": {
     "name": "Oleksandr Voznyi"
   },

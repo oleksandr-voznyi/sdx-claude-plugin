@@ -97,7 +97,7 @@
 
 ### Блок A — governance-фундамент
 
-- [ ] **[DOC] T-1. `docs/DECISIONS.md` — новая запись ADR-020**
+- [x] **[DOC] T-1. `docs/DECISIONS.md` — новая запись ADR-020**
   Добавить в конец журнала решений ADR-020 «Единая шкала этапов + два режима-флага вместо пяти
   адаптивных треков» — текст по DESIGN, раздел «ADR-020» (Контекст → Решение (6 пунктов) →
   «Явное разведение имён» (`stage-gate` vs stage-gates из `Constructor-concept.md`) → Обоснование →
@@ -113,7 +113,7 @@
 
 ### Блок B — ядро механики (атомарная пара `[CODE][TEST]`)
 
-- [ ] **[CODE][TEST] T-2. `sdx/hooks/sdx-stage.sh` + `sdx/hooks/test-sdx-stage.sh` (без сценария
+- [x] **[CODE][TEST] T-2. `sdx/hooks/sdx-stage.sh` + `sdx/hooks/test-sdx-stage.sh` (без сценария
   REQ-TEST-1) + `sdx/hooks/test-integration-stage-lifecycle.sh` — одной задачей**
   Реализация: `SDX_STAGE_TABLE` (9 строк `stage|artifact|fail_marker|foldable`, `foldable=yes` для
   всех четырёх планировочных этапов — см. «Принятые решения»), хелперы `stage_names`/`stage_row`/
@@ -155,7 +155,7 @@
 
 ### Блок C — снятие enforcement порядка процесса (атомарно)
 
-- [ ] **[INFRA] T-3. Удаление `stage-gate.sh`/`stage-write-guard.sh` + их тестов +
+- [x] **[INFRA] T-3. Удаление `stage-gate.sh`/`stage-write-guard.sh` + их тестов +
   `stage-gate.allow` + правка `hooks/hooks.json` — одной задачей**
   Удалить целиком: `sdx/hooks/stage-gate.sh` (76 строк), `sdx/hooks/stage-write-guard.sh`
   (353 строки), `sdx/hooks/test-stage-gate.sh` (216 строк, 12 сценариев),
@@ -180,7 +180,7 @@
 
 ### Блок D — адаптация стоп-гейта (атомарная пара `[CODE][TEST]`)
 
-- [ ] **[CODE][TEST] T-4. `sdx/hooks/stop-gate.sh` + `sdx/hooks/test-stop-gate.sh` — одной
+- [x] **[CODE][TEST] T-4. `sdx/hooks/stop-gate.sh` + `sdx/hooks/test-stop-gate.sh` — одной
   задачей (REQ-ENF-2)**
   Точное место правки — `sdx/hooks/stop-gate.sh`, текущие строки 21-27, `case`-блок внутри ветки
   `Execution|Verification)`: добавить чтение `no_gates="$(jq -r '.no_gates // false' "$state"

@@ -307,6 +307,26 @@ else
 fi
 cleanup
 
+
+# ---- Scenario 14: transparent when no_gates == true on stage=Execution, even with a failing
+#                   verify command configured — REQ-ENF-2 regression guard: no_gates prototyping
+#                   now shares the "Execution" stage name with ordinary coding (REQ-SCALE-5), so
+#                   this is the only signal left that distinguishes the two. Mirrors [13], which
+#                   guarded the retired "Prototype" stage name. ----
+echo "[14] Transparent when no_gates == true on stage=Execution, with a verify-cmd.sh that would fail if run"
+setup_stop_repo "sdx/test-stop" "Execution"
+printf '{"stage":"Execution","no_gates":true}' > "$TMPPROJ/.claude/sessions/test-stop/session_state.json"
+mkdir -p "$TMPPROJ/.claude/sdx"
+printf '#!/bin/bash\nexit 1\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+if [ "$RUN_EC" -eq 0 ]; then
+  pass "exit 0 (no_gates prototyping stays transparent even with a failing verify command configured)"
+else
+  fail "Expected exit 0 (no_gates == true must stay outside the enforcement branch)" "got exit $RUN_EC"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

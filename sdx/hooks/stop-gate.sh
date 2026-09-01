@@ -94,11 +94,23 @@ outfile="$proj/.claude/sessions/${sid}/.stopgate.out"
 # Run the verify command under a timeout (R-2/FND-2): a hung/watch-mode runner must
 # not block turn-end indefinitely. timeout's non-zero rc is treated as red (block);
 # the loop-guard above still returns control to the human after 3 attempts.
-# Per-project runner: executed directly (path never enters a shell string, see DEBT-026).
+# Per-project runner: passed as its own argv element, never interpolated into a shell string
+# (a project path with a space or a metacharacter would otherwise be split or interpreted).
+#
+# The mode bit no longer ACTIVATES the runner (DEBT-026) but still selects HOW to invoke it:
+#   executable  -> run directly, so the kernel honours the shebang and a runner written in
+#                  python/zsh/... keeps working exactly as before this change;
+#   not executable -> interpret as bash. This is the case DEBT-026 exists for: a mode bit
+#                  stripped by an installer (BUG-008) must not silently remove the floor.
+# Both paths keep the floor; neither consults the mode to decide WHETHER to enforce.
 # Autodetect commands are static strings composed here, so `bash -c` stays correct for them.
 run_verify() {
   if [ -n "$runner" ]; then
-    ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash "$runner" >"$outfile" 2>&1 )
+    if [ -x "$runner" ]; then
+      ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" "$runner" >"$outfile" 2>&1 )
+    else
+      ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash "$runner" >"$outfile" 2>&1 )
+    fi
   else
     ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash -c "$cmd" >"$outfile" 2>&1 )
   fi

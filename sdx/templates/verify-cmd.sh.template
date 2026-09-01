@@ -6,7 +6,9 @@
 #   # then EDIT the copy for your stack — see the warning below
 #
 # The file's PRESENCE activates it (DEBT-026, amendment to ADR-4, 2026-09-01).
-# The execute bit is not consulted: stop-gate runs the file as `bash <path>`.
+# The execute bit does not decide WHETHER it runs — only HOW: executable, and stop-gate
+# execs it directly so this shebang applies (write the runner in any language you like);
+# not executable, and stop-gate interprets it as bash.
 # This template itself is never picked up — it is excluded by its NAME
 # (verify-cmd.sh.template), not by its mode.
 #

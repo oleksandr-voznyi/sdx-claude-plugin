@@ -404,6 +404,27 @@ else
 fi
 cleanup
 
+# ---- Scenario 19: an executable runner keeps its own interpreter. Activation no longer depends
+#                   on the mode bit (DEBT-026), but invocation still does: an executable runner is
+#                   exec'd directly so the kernel honours its shebang. Forcing `bash <path>`
+#                   unconditionally would turn every python/zsh/... runner permanently red.
+#                   The fixture uses a fake interpreter that exits 0 while the runner body says
+#                   `exit 1`, so the two invocation paths give opposite results. ----
+echo "[19] Executable runner is exec'd directly: its shebang interpreter is honoured, not forced to bash"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMPPROJ/fakeint"     # ignores the script, always green
+chmod +x "$TMPPROJ/fakeint"
+printf '#!%s\nexit 1\n' "$TMPPROJ/fakeint" > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok" ]; then
+  pass "exit 0 with .stopgate.ok (the shebang interpreter ran; bash would have hit 'exit 1')"
+else
+  fail "Expected exit 0 AND .stopgate.ok (executable runner must not be forced through bash)" "got exit $RUN_EC, .stopgate.ok present: $([ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok" ] && echo yes || echo no)"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

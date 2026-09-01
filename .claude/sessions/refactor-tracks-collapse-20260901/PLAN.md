@@ -203,7 +203,7 @@
 
 ### Блок E — легализация прототипа (перенос раньше удаления донора)
 
-- [ ] **[DOC] T-5. `commands/proto.md` — перенос легализации из `retrack.md` + точечные замены**
+- [x] **[DOC] T-5. `commands/proto.md` — перенос легализации из `retrack.md` + точечные замены**
   Шаг 1: сначала дословно перенести содержательный блок легализации из `commands/retrack.md` шаг 3
   (вычисление диффа от `prototype_baseline.txt`, spec-after реверс-инжиниринг через `ba`/
   `architect`/опционально `lead-dev`, первый коммит кода прототипа с пост-проверкой, второй коммит
@@ -228,7 +228,7 @@
   проверен тестами, иначе описание шага (а) не будет соответствовать факту).
   Покрывает: REQ-LEGAL-2, REQ-LEGAL-3, REQ-LEGAL-4, REQ-FLAG-4.
 
-- [ ] **[INFRA] T-6. Удаление `commands/retrack.md` + `commands/backtrack.md`**
+- [x] **[INFRA] T-6. Удаление `commands/retrack.md` + `commands/backtrack.md`**
   Удалить оба файла целиком — их содержание либо перенесено (легализация — T-5), либо поглощено
   `next --to` (откат — T-2). Файлы: `commands/retrack.md` (удалён), `commands/backtrack.md`
   (удалён).
@@ -243,7 +243,7 @@
 
 ### Блок F — команды `/sdx:*`, зависящие от протокола (по одной задаче на файл)
 
-- [ ] **[DOC] T-7. `commands/start.md`**
+- [x] **[DOC] T-7. `commands/start.md`**
   Шаг 3 «Триаж трека» → «Назначение флагов и стартового этапа»: пять типов
   (`grooming`/`retro`/`postmortem`/`intake`/`audit`) жёстко задают `no_code=true` без диалога
   (REQ-FLAG-2); тип `proto` жёстко задаёт `no_gates=true`, стартовый `stage` всегда `"Execution"`
@@ -258,7 +258,7 @@
   Зависимости: T-2 (сигнатура `init`).
   Покрывает: REQ-FLAG-2, REQ-LEGAL-3, REQ-SCALE-2.
 
-- [ ] **[DOC] T-8. `commands/next.md`**
+- [x] **[DOC] T-8. `commands/next.md`**
   `argument-hint` → `[--to <stage>]`. Шаг 1 — «набор активных этапов берётся из профиля трека» →
   «определяется каноническим порядком плюс флагами — гейт уже учитывает это внутри `sdx-stage.sh`».
   Шаг 2 scope-check — «предложи `/sdx:retrack`» → «предложи создать полноценный артефакт
@@ -271,7 +271,7 @@
   Зависимости: T-2 (контракт `next`/`next --to`).
   Покрывает: REQ-NAV-1, REQ-SCALE-6, REQ-SCALE-9.
 
-- [ ] **[DOC] T-9. `commands/archive.md`**
+- [x] **[DOC] T-9. `commands/archive.md`**
   Шаг 2, гейт входа: `track == "vibe"` → `no_gates == true`; while-цикл входа в `Closeout`
   переиспользуется дословно по форме (структурное свойство «нет пути» не меняется). Пп.2/3/4
   чек-листа: track-условные ветки («на треке `doc`») → `no_code`-условные («при `no_code ==
@@ -287,7 +287,7 @@
   Покрывает: REQ-SCALE-7, REQ-COMPAT-3 (текстовый механизм; исполнение — вне PLAN, см. «Не входит
   в план»), REQ-NAV-3 (частично — Closeout-контракт).
 
-- [ ] **[DOC] T-10. `commands/manual.md`**
+- [x] **[DOC] T-10. `commands/manual.md`**
   Шаг 1 — поле `track` убирается из читаемых полей `session_state.json` (не использовалось в теле
   команды помимо чтения); ссылки на `/sdx:backtrack` заменяются на `/sdx:next --to <stage>`.
   Файлы: `commands/manual.md`.
@@ -295,7 +295,7 @@
   Зависимости: T-2.
   Покрывает: REQ-FLAG-1, REQ-NAV-3.
 
-- [ ] **[DOC] T-11. `commands/verify.md`**
+- [x] **[DOC] T-11. `commands/verify.md`**
   Шаг 1 — таблица объёма верификации по треку → по флагам/объёму дельты (`no_code` определяет,
   вызывается ли `qa`; объём дельты определяет полноту сверки против `SPEC.md`/`DESIGN.md` vs
   `change_note.md` — REQ-SCALE-8). Фраза «Трека `vibe` в этом перечислении нет» → «при `no_gates ==
@@ -307,7 +307,7 @@
   Зависимости: T-2, T-8 (ссылается на контракт `--to`, финализированный в T-8).
   Покрывает: REQ-SCALE-8.
 
-- [ ] **[DOC] T-12. `commands/status.md`**
+- [x] **[DOC] T-12. `commands/status.md`**
   Шаг 3 — строка вывода `Track` заменяется на `No-code`/`No-gates` (или объединённую строку
   режима); «для трека `vibe`» → «при `no_gates == true`». Файлы: `commands/status.md`.
   Критерий готовности: `grep -c '"track"\|Track:' commands/status.md` == 0; новая строка вывода
@@ -315,7 +315,7 @@
   Зависимости: T-2.
   Покрывает: REQ-FLAG-1.
 
-- [ ] **[DOC] T-13. `commands/switch.md`**
+- [x] **[DOC] T-13. `commands/switch.md`**
   Шаг 2 — «трека `vibe` на стадии `Prototype`» → «при `no_gates == true` на этапе `Execution`»
   (норма инкрементальных коммитов, исключение переносится на флаг, ADR-005/REQ-SESS-1 — CLAUDE.md
   §4 не редактируется этой задачей, только `switch.md`). Файлы: `commands/switch.md`.
@@ -325,7 +325,7 @@
   поведение `stop-gate.sh`, хотя `switch.md` сам этот хук не вызывает).
   Покрывает: REQ-FLAG-1 (структурное следствие переноса исключения ADR-005).
 
-- [ ] **[DOC] T-14. `commands/import.md`**
+- [x] **[DOC] T-14. `commands/import.md`**
   Шаг 2 — «Триаж трека: по умолчанию `full`… `standard`» → «Оценка объёма: по умолчанию полный
   набор этапов, для небольшой самодостаточной утилиты — облегчённый (`Business Spec`/`Technical
   Design` сворачиваются в `change_note.md`)»; вызов `init` без `<track>`. Файлы: `commands/import.md`.
@@ -335,7 +335,7 @@
   Зависимости: T-2, T-7 (единый принцип назначения флагов на старте, тот же, что `start.md`).
   Покрывает: REQ-SCALE-2.
 
-- [ ] **[DOC] T-15. `commands/reconcile.md`**
+- [x] **[DOC] T-15. `commands/reconcile.md`**
   Строка 49 — ссылка на `SDX_STAGE_MATRIX` заменяется на ссылку на `SDX_STAGE_TABLE`. Файлы:
   `commands/reconcile.md`.
   Критерий готовности: `grep -c 'SDX_STAGE_MATRIX' commands/reconcile.md` == 0;
@@ -343,7 +343,7 @@
   Зависимости: T-2 (имя источника истины должно уже существовать в коде).
   Покрывает: — (терминологическая когерентность, не отдельное REQ).
 
-- [ ] **[DOC] T-16. `commands/init.md`**
+- [x] **[DOC] T-16. `commands/init.md`**
   Строка 44 — снять деплой `sdx/templates/stage-gate.allow` → `.claude/sdx/stage-gate.allow` из
   списка разворачиваемых per-project шаблонов (файл-источник удалён в T-3). Файлы:
   `commands/init.md`.

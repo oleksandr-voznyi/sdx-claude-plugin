@@ -1,3 +1,5 @@
+<!-- SDX-OUTDATED: устарело откатом /sdx:backtrack --to "Business Spec" (2026-09-01 03:12:29). Актуализируйте перед продолжением; история версии — `git log -p -- ./.claude/sessions/refactor-tracks-collapse-20260901/DESIGN.md`. -->
+
 # Technical Design: Треки → одна шкала этапов + два режима-флага
 
 ## Архитектурный обзор

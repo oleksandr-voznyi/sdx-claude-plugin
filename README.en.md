@@ -4,7 +4,7 @@
 
 🇷🇺 [Русская версия (каноническая)](README.md)
 
-SDX is a Spec-Driven Development (SDD) framework for Claude Code, packaged as a **plugin**: a session lifecycle (`/sdx:start` → … → `/sdx:archive`), role-based subagents, adaptive ceremony tracks, and a deterministic hook-based enforcement layer. One installed plugin serves every project on the machine — no need to replicate framework files across projects.
+SDX is a Spec-Driven Development (SDD) framework for Claude Code, packaged as a **plugin**: a session lifecycle (`/sdx:start` → … → `/sdx:archive`), role-based subagents, a unified stage scale with scalable ceremony, and a deterministic hook-based enforcement layer. One installed plugin serves every project on the machine — no need to replicate framework files across projects.
 
 > Note: the plugin's working language is Russian (chat, specs, session artifacts) — see the language policy in `CLAUDE.md` §1. Code, comments, and API docs are in English. Multilingual support is on the roadmap (backlog: FEAT-002).
 
@@ -40,59 +40,57 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 
 - `docs/specs/`, `docs/designs/`, `docs/history/plans/`, `docs/backlog/` — permanent triad documents and the tracked backlog;
 - `.claude/sessions/<id>/` — active session artifacts (versioned on the `sdx/<id>` branch);
-- `.claude/sdx/` — enforcement-layer configs: `prod-guard.conf` (block patterns for prod commands), `stage-gate.allow` (extra write allowlist before the Execution gate), `verify-cmd.sh` (test command for the stop-gate), `sdx-version` (marker of the plugin version the project was last reconciled against — written exclusively by `/sdx:reconcile`, checked by `/sdx:start`);
+- `.claude/sdx/` — enforcement-layer configs: `prod-guard.conf` (block patterns for prod commands), `verify-cmd.sh` (test command for the stop-gate), `sdx-version` (marker of the plugin version the project was last reconciled against — written exclusively by `/sdx:reconcile`, checked by `/sdx:start`);
 - targeted `.gitignore` patterns and (optionally) an SDX block in the project's CLAUDE.md.
 
 ## What's inside the plugin
 
 | Path | Contents |
 |------|----------|
-| `commands/` | 17 `/sdx:*` commands (start, next, status, switch, retrack, backtrack, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile, audit) |
+| `commands/` | 15 `/sdx:*` commands (start, next, status, switch, checkpoint, verify, manual, proto, archive, init, export, import, backlog, reconcile, audit) |
 | `agents/` | 9 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops`, `auditor` |
 | `hooks/hooks.json` | Enforcement-layer wiring (SessionStart / PreToolUse / Stop) |
-| `sdx/protocol.md` | Session protocol: state, tracks, gates, Closeout, import/export |
-| `sdx/hooks/` | Hook scripts (stage-gate, stop-gate, prod-guard, preflight, archive-verify) and their tests (`test-*.sh`) |
+| `sdx/protocol.md` | Session protocol: state, unified stage scale and flags, gates, Closeout, import/export |
+| `sdx/hooks/` | Hook scripts (stop-gate, prod-guard, preflight) and their tests (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` are CLI scripts invoked by commands, not `hooks.json` wiring |
 | `sdx/templates/` | Templates for per-project configs and the CLAUDE.md SDX block |
 
 Hooks are safe by default: outside an `sdx/<id>` branch and without per-project configs they are transparent (no-op), so a user-scope installation does not interfere with projects that don't use SDX.
 
-## Adaptive tracks (flow profiles)
+## Unified stage scale and mode flags
 
-The SDX lifecycle scales with task size: each session follows one of **five adaptive tracks**, defining active stages and gates.
+The SDX lifecycle scales with task size through one canonical order of **nine stages**, not a choice among separate profiles: `Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout`. A stage's activity for a given session is determined by two orthogonal mechanisms — delta size (which artifact to produce: a full one or one folded into `change_note.md`) and two independent boolean state flags, `no_code` and `no_gates`, which can only narrow the active set.
 
-| Track | Purpose | Session types | Stages |
-|-------|---------|---------------|--------|
-| **patch** | Bugfix or small fix without logic changes | `bug` | Execution → Verification → Closeout |
-| **standard** | Small feature or refactor | `feature`, `refactor` | Discovery → Change → Execution → Verification → Closeout |
-| **full** | Large feature affecting contracts or architecture | `feature`, `refactor`, `init`, `import` | Discovery → Business Spec → Technical Design → Task Planning → Execution → Documentation → Verification → Deployment → Closeout |
-| **doc** | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements, audit-report triage | `grooming`, `retro`, `postmortem`, `intake`, `audit` (rigidly bound, no triage) | Discovery → Update → Verification → Closeout |
-| **vibe** | Extreme prototyping: a fast, code-first hypothesis check without TDD/`PLAN.md`/commits until an explicit decision | `proto` (rigidly bound, no triage) | Prototype (no `Closeout`) |
+| Flag | Purpose | Session types | Active set |
+|------|---------|---------------|-----------|
+| — (both `false`) | Regular work: bugfix, feature, refactor — from a point fix to a large task touching contracts/architecture | `bug`, `feature`, `refactor`, `init`, `import` | Full canonical order; for a small delta, planning stages fold into `change_note.md` (minimum — `Execution → Verification → Closeout`) |
+| `no_code = true` | Process work without code: backlog grooming, retrospective, incident review, intake of new requirements, audit-report triage | `grooming`, `retro`, `postmortem`, `intake`, `audit` (rigidly bound, no dialog) | `Discovery → Business Spec/Technical Design (change_note.md) → Verification → Closeout` — `Task Planning`/`Execution`/`Documentation`/`Deployment` are unconditionally excluded |
+| `no_gates = true` | Extreme prototyping: a fast, code-first hypothesis check without TDD/`PLAN.md`/commits until an explicit decision | `proto` (rigidly bound, no dialog) | `Execution` only (no `Closeout`) |
 
-> The "Session types" column reads differently for the linear scale and the parallel tracks: for `patch`/`standard`/`full` the type is only a starting hypothesis, and the track is chosen by **triage** and is adaptive (`/sdx:retrack`); for `doc` and `vibe` the `type → track` binding is **rigid, 1:1, and unconditional** (no track-choice dialog).
+> The "Session types" column reads the same way for all three rows: the `type → flags` binding is rigid and unconditional for the five `no_code`-family types and for `proto` (no choice dialog); for `bug`/`feature`/`refactor`/`init`/`import` both flags start `false`, and delta size is a prosaic judgement, reassessed on every `/sdx:next`.
 
-### The `doc` track and its session types
+### `no_code` and its session types
 
-The `doc` track handles work on the backlog and SDX process itself. All five session types follow the same stages; the difference lies in the nature of input and output:
+The `no_code` flag handles work on the backlog and SDX process itself. All five session types follow the same active set of planning stages; the difference lies in the nature of input and output:
 
 - **`grooming`** — review of existing backlog entries: update status, priority, wave. This is a **redistribution** of attributes across existing entries.
 - **`retro`** — review of completed sessions over a period: identify patterns and conclusions, expressed as new backlog entries.
 - **`postmortem`** — review of an incident (production, process failure, critical defect): timeline, root cause, action plan.
 - **`intake`** — processing a significant new block of external requirements (epic, batch of bug reports, product material): breakdown into backlog entries. This is **creation** of new entries from external material.
-- **`audit`** — triage of an already-produced `/sdx:audit` report. The `/sdx:audit` command itself is a read-only "as-is" project audit run outside sessions: a parallel fan-out across nine vectors (architecture, triad integrity, requirement traceability, code quality, tests, documentation, deployment, security, process) builds a cumulative report in `docs/history/audit/`; each vector gets one of three outcomes — findings, clean, or **not applicable** (the vector structurally has no subject) — and the report itself gates nothing. The `audit` session type takes that already-existing report as input and **verifies** its findings against the backlog: it enriches open entries, spawns new entries for previously unrecorded findings, and files a separate regression entry when a finding matches an already-closed entry. It produces no permanent analysis document — the second type on this track without one, alongside `grooming` (the subject of the review is already a permanent document — the report itself).
+- **`audit`** — triage of an already-produced `/sdx:audit` report. The `/sdx:audit` command itself is a read-only "as-is" project audit run outside sessions: a parallel fan-out across nine vectors (architecture, triad integrity, requirement traceability, code quality, tests, documentation, deployment, security, process) builds a cumulative report in `docs/history/audit/`; each vector gets one of three outcomes — findings, clean, or **not applicable** (the vector structurally has no subject) — and the report itself gates nothing. The `audit` session type takes that already-existing report as input and **verifies** its findings against the backlog: it enriches open entries, spawns new entries for previously unrecorded findings, and files a separate regression entry when a finding matches an already-closed entry. It produces no permanent analysis document — the second `no_code`-family type without one, alongside `grooming` (the subject of the review is already a permanent document — the report itself).
 
 **The distinction between `intake`, `grooming`, and `audit`:** `intake` **generates** new entries from external material (create), `grooming` then **redistributes** priority and wave across what has accumulated without creating new entries (update), `audit` **verifies** the accumulated backlog against a fresh as-is project report — enriching existing entries, spawning new ones for previously unrecorded findings, and separately flagging a regression when a finding matches an already-closed entry (verify). All three work with the same `docs/backlog/`, but in different operational directions.
 
-Each doc session must produce at least one observable backlog change and pass a lightweight verification. For `retro`, `postmortem`, and `intake`, a permanent analysis document is additionally created in `docs/history/`; `grooming` and `audit` produce no such document.
+Each `no_code` session must produce at least one observable backlog change and pass a lightweight verification. For `retro`, `postmortem`, and `intake`, a permanent analysis document is additionally created in `docs/history/`; `grooming` and `audit` produce no such document.
 
-### The `vibe` track and mandatory legalization
+### `no_gates` and mandatory legalization
 
-The `vibe` track is an extreme-prototyping mode (ADR-018): its only session type is `proto`, and the `proto → vibe` binding is rigid and unconditional (no track-choice dialog) — much like all four `doc` types are locked to their track, unlike `patch`/`standard`/`full`, where the type is only a starting hypothesis and the track is decided by triage.
+`no_gates` is an extreme-prototyping mode (ADR-018): its only session type is `proto`, and the `proto → no_gates = true` binding is rigid and unconditional (no choice dialog) — much like all five `no_code`-family types are rigidly bound to their flag.
 
-On the `Prototype` stage code is written in one continuous pass: no `PLAN.md`, no `change_note.md`, and — the single named exception to the incremental-commit norm (ADR-005) — no intermediate code commits. Once done, the `/sdx:proto` gate unconditionally asks the user to decide: **reject** the prototype (a targeted rollback of just the prototype's files back to the baseline snapshot) or **accept** it and legalize the session via `/sdx:retrack standard|full`. `vibe` has no `Closeout` of its own: a session on this track cannot be closed or merged into the main branch without legalization (REQ-VIBE-8) — `/sdx:archive` stops on such a session and points to `/sdx:proto`/`/sdx:retrack`.
+While `no_gates == true`, code is written in one continuous pass: no `PLAN.md`, no `change_note.md`, and — the single named exception to the incremental-commit norm (ADR-005) — no intermediate code commits. Once done, the `/sdx:proto` gate unconditionally asks the user to decide: **reject** the prototype (a targeted rollback to the baseline snapshot) or **accept** it and legalize the session (reverse-engineer `SPEC.md`/`DESIGN.md` from the already-written code, clear the flag). A session with `no_gates == true` has no `Closeout` of its own: it cannot be closed or merged into the main branch without legalization (REQ-VIBE-8) — `/sdx:archive` stops on such a session and points to `/sdx:proto`.
 
 ## Rules and documentation
 
-- Process, tracks, gates, and the session closeout contract: `sdx/protocol.md`.
+- Process, the unified stage scale, gates, and the session closeout contract: `sdx/protocol.md`.
 - Framework architecture decisions (ADR): `docs/DECISIONS.md`.
 - Development history: `docs/history/`.
 

@@ -3,10 +3,8 @@
 # REQ-NAV-1..2). Runs self-contained: creates temporary "project" dirs, exercises the CLI,
 # cleans up. Usage: bash sdx/hooks/test-sdx-stage.sh
 #
-# NOTE: the REQ-TEST-1 sanity scenario (canonical stage_names() cross-checked against the
-# stage-order projection in sdx/protocol.md) is deliberately NOT part of this file yet — it
-# is added by a later task, once sdx/protocol.md carries the new projection in its final
-# form (see PLAN.md "Принятые решения").
+# Scenario 27 (REQ-TEST-1) cross-checks the canonical stage_names() order against the
+# human-readable stage-order projection table in sdx/protocol.md — see that scenario below.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -474,6 +472,30 @@ else
   fail "Expected exit 2 on legacy current stage under --to" "ec=$ec out='$out'"
 fi
 cleanup
+
+# ---- Scenario 27 (REQ-TEST-1): sanity — canonical stage_names() order matches the
+# human-readable stage-order projection table in sdx/protocol.md. The single machine-
+# readable source of truth is SDX_STAGE_TABLE inside this script; sdx/protocol.md keeps a
+# projection of the same order for humans (section "Единая шкала этапов и режимы-флаги").
+# This scenario fails on ANY divergence — a skipped/added/reordered stage name in either
+# place — by comparing the two ordered lists line by line. ----
+echo "[27] REQ-TEST-1 sanity: stage_names() order matches sdx/protocol.md's stage-order table"
+PROTOCOL_MD="$SCRIPT_DIR/../protocol.md"
+if [ ! -f "$PROTOCOL_MD" ]; then
+  fail "sdx/protocol.md not found for REQ-TEST-1 cross-check" "expected at $PROTOCOL_MD"
+else
+  # stage_names() is not exposed as a subcommand — extract the same ordered list directly
+  # from SDX_STAGE_TABLE via awk, exactly like the function itself does, to avoid depending
+  # on an extra CLI surface just for this test.
+  script_order="$(awk -F'|' '$1{print $1}' <<<"$(sed -n "/^SDX_STAGE_TABLE='/,/^'/p" "$SCRIPT" | sed '1d;$d')")"
+  protocol_order="$(grep -E '^\| [0-9] \| ' "$PROTOCOL_MD" | awk -F'|' '{gsub(/^ +| +$/, "", $3); print $3}')"
+  if [ "$script_order" = "$protocol_order" ]; then
+    pass "canonical stage order in sdx-stage.sh matches sdx/protocol.md's projection table"
+  else
+    fail "stage order mismatch between sdx-stage.sh (SDX_STAGE_TABLE) and sdx/protocol.md" \
+      "script: [$script_order] protocol: [$protocol_order]"
+  fi
+fi
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

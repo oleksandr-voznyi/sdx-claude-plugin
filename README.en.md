@@ -40,7 +40,7 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 
 - `docs/specs/`, `docs/designs/`, `docs/history/plans/`, `docs/backlog/` — permanent triad documents and the tracked backlog;
 - `.claude/sessions/<id>/` — active session artifacts (versioned on the `sdx/<id>` branch);
-- `.claude/sdx/` — enforcement-layer configs: `prod-guard.conf` (block patterns for prod commands), `verify-cmd.sh` (test command for the stop-gate), `sdx-version` (marker of the plugin version the project was last reconciled against — written exclusively by `/sdx:reconcile`, checked by `/sdx:start`);
+- `.claude/sdx/` — enforcement-layer configs: `prod-guard.conf` (block patterns for prod commands), `verify-cmd.sh` (test command for the stop-gate), `sdx-version` (marker of the plugin version the project was last reconciled against — written exclusively by `/sdx:reconcile`, checked by `/sdx:start`), `.cache/` (untracked cache of self-test results, gitignored);
 - targeted `.gitignore` patterns and (optionally) an SDX block in the project's CLAUDE.md.
 
 ## What's inside the plugin
@@ -51,7 +51,7 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 | `agents/` | 9 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops`, `auditor` |
 | `hooks/hooks.json` | Enforcement-layer wiring (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Session protocol: state, unified stage scale and flags, gates, Closeout, import/export |
-| `sdx/hooks/` | Hook scripts (stop-gate, prod-guard, preflight) and their tests (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` are CLI scripts invoked by commands, not `hooks.json` wiring |
+| `sdx/hooks/` | Hook scripts (stop-gate, prod-guard, preflight, selftest) and their tests (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` are CLI scripts invoked by commands, not `hooks.json` wiring |
 | `sdx/templates/` | Templates for per-project configs and the CLAUDE.md SDX block |
 
 Hooks are safe by default: outside an `sdx/<id>` branch and without per-project configs they are transparent (no-op), so a user-scope installation does not interfere with projects that don't use SDX.

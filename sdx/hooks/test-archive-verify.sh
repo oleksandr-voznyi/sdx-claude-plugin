@@ -433,6 +433,37 @@ else
 fi
 strip_cleanup
 
+# ---- Scenario 12: invariant 1 is self-diagnosing. The message must name the offending paths,
+#      and for untracked ones point at the likely cause. Motivation: a consumer whose project
+#      predates a new targeted .gitignore pattern (this happened with the self-test cache) got
+#      "рабочее дерево не чистое" and went looking for uncommitted edits that did not exist. ----
+echo "[12] Invariant 1 names the offending paths and hints at /sdx:reconcile for untracked ones"
+setup_clean_repo
+touch "$TMPPROJ/some-untracked-artifact"
+out="$(CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK" test-sid 2>&1 || true)"
+has_path=0; has_hint=0
+case "$out" in *"some-untracked-artifact"*) has_path=1 ;; esac
+case "$out" in *"/sdx:reconcile"*) has_hint=1 ;; esac
+if [ "$has_path" -eq 1 ] && [ "$has_hint" -eq 1 ]; then
+  pass "message lists the path and names /sdx:reconcile as the likely fix"
+else
+  fail "invariant 1 message is not self-diagnosing" "path listed: $has_path, reconcile hint: $has_hint"
+fi
+cleanup
+
+# ---- Scenario 13: the hint is specific to untracked files, not printed for a tracked edit —
+#      otherwise it would misdirect on the ordinary "you forgot to commit" case. ----
+echo "[13] A tracked modification triggers invariant 1 WITHOUT the untracked hint"
+setup_clean_repo
+printf 'changed\n' >> "$TMPPROJ/.gitignore"
+out="$(CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$HOOK" test-sid 2>&1 || true)"
+if printf '%s' "$out" | grep -q 'не чистое' && ! printf '%s' "$out" | grep -q '/sdx:reconcile'; then
+  pass "tracked edit reported without the untracked-specific hint"
+else
+  fail "hint shown for a tracked modification" "would misdirect the ordinary forgot-to-commit case"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

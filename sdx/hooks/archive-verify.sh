@@ -26,8 +26,18 @@ fail=0
 
 # Invariant 1: main worktree clean (session files already git-rm'd on branch pre-merge,
 #              variant A -> nothing dirty here).
-if [ -n "$(git -C "$proj" status --porcelain)" ]; then
-  echo "[FAIL] рабочее дерево не чистое — есть незакоммиченные изменения." >&2; fail=1
+dirty="$(git -C "$proj" status --porcelain)"
+if [ -n "$dirty" ]; then
+  # Показываем сами пути, а не только факт: самая частая причина отказа здесь — не забытая
+  # правка, а untracked-файл, для которого в проекте нет targeted-паттерна .gitignore (так
+  # вёл себя кэш self-test в проектах, инициализированных до 2.1.0). Без перечня пользователь
+  # идёт искать несуществующие незакоммиченные изменения.
+  echo "[FAIL] рабочее дерево не чистое — есть незакоммиченные или неигнорируемые файлы:" >&2
+  printf '%s\n' "$dirty" | head -10 | sed 's/^/         /' >&2
+  case "$dirty" in
+    *'??'*) echo "         Строки с '??' — untracked. Если это служебные файлы SDX, в проекте не хватает targeted-паттерна .gitignore: прогоните /sdx:reconcile." >&2 ;;
+  esac
+  fail=1
 fi
 
 # Invariant 5: branch sdx/<id> provably merged into the DEFAULT branch.

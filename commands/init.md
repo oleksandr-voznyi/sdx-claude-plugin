@@ -25,6 +25,11 @@ description: Инициализация SDX фреймворка в сущест
    #      передаётся ревьюеру файлом — BUG-004). НЕ версионируется (REQ-SESS-2).
    .claude/sessions/*/delivery.diff
 
+   # SDX: кэш результата self-test enforcement-слоя (пишется хуком SessionStart,
+   #      регенерируется при следующем несовпадении отпечатка). НЕ версионируется:
+   #      untracked-файл здесь ронял бы инвариант 1 Closeout (archive-verify).
+   .claude/sdx/.cache/
+
    # SDX: переносимые бандлы import/export (транспортные артефакты).
    .sdx/bundles/
 

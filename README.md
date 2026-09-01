@@ -38,7 +38,7 @@ claude plugin install sdx@sdx --scope user
 
 - `docs/specs/`, `docs/designs/`, `docs/history/plans/`, `docs/backlog/` — постоянные документы триады и трекаемый бэклог;
 - `.claude/sessions/<id>/` — артефакты активных сессий (версионируются на ветке `sdx/<id>`);
-- `.claude/sdx/` — конфиги enforcement-слоя: `prod-guard.conf` (блок-паттерны прод-команд), `verify-cmd.sh` (тест-команда для stop-gate), `sdx-version` (маркер версии плагина, на которой проект последний раз сверен — пишет исключительно `/sdx:reconcile`, сверяет `/sdx:start`);
+- `.claude/sdx/` — конфиги enforcement-слоя: `prod-guard.conf` (блок-паттерны прод-команд), `verify-cmd.sh` (тест-команда для stop-gate), `sdx-version` (маркер версии плагина, на которой проект последний раз сверен — пишет исключительно `/sdx:reconcile`, сверяет `/sdx:start`), `.cache/` (нетрекаемый кэш результата self-test, gitignored);
 - targeted-паттерны в `.gitignore` и (по желанию) SDX-блок в CLAUDE.md проекта.
 
 ## Состав плагина
@@ -49,7 +49,7 @@ claude plugin install sdx@sdx --scope user
 | `agents/` | 9 субагентов: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops`, `auditor` |
 | `hooks/hooks.json` | Проводка enforcement-слоя (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Протокол сессий: состояние, единая шкала этапов и флаги, гейты, Closeout, import/export |
-| `sdx/hooks/` | Скрипты хуков (stop-gate, prod-guard, preflight) и их тесты (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` — вызываемые командами CLI-скрипты, не проводка `hooks.json` |
+| `sdx/hooks/` | Скрипты хуков (stop-gate, prod-guard, preflight, selftest) и их тесты (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` — вызываемые командами CLI-скрипты, не проводка `hooks.json` |
 | `sdx/templates/` | Шаблоны per-project конфигов и SDX-блока для CLAUDE.md |
 
 Хуки safe-by-default: вне ветки `sdx/<id>` и без per-project конфигов они прозрачны (no-op), поэтому user-scope установка не мешает проектам, не использующим SDX.

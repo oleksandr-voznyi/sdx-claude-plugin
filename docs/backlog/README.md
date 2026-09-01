@@ -53,7 +53,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
-| BUG-003 | bug | open | high | 1 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) |
 | DEBT-010 | debt | open | high | 1 | [Тихая деградация хуков не видна пользователю](DEBT-010-silent-hook-degradation-invisible.md) |
 | FEAT-003 | feat | open | high | 1 | [Реестр задач прогона как источник истины вместо прозаического `PLAN.md`](FEAT-003-run-task-ledger.md) |
 | FEAT-004 | feat | open | high | 1 | [Журнал прогона пишет харнесс, а не модель](FEAT-004-harness-written-journal.md) |
@@ -93,6 +92,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-022 | proc | open | normal | null | [Границы типа `intake`: вправе ли он дополнять существующие записи и вести слой сверки против закрытых](PROC-022-intake-vs-audit-backlog-operations.md) |
 | PROC-024 | proc | open | normal | null | [Коллизия: п.4 Closeout требует заводить записи там, где тип `grooming` их создавать не вправе](PROC-024-closeout-record-creation-vs-grooming-ban.md) |
 | PROC-025 | proc | open | normal | null | [В номенклатуре типов сессий нет исследования: работа, производящая документ и не производящая кода](PROC-025-no-session-type-for-research.md) |
+| PROC-026 | proc | open | normal | null | [Груминг пересматривает атрибуты записи, не сверяя её с кодом](PROC-026-grooming-without-code-verification.md) |
 | PROC-015 | proc | open | low | 7 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
@@ -115,6 +115,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| BUG-003 | [`/sdx:switch` делает `git add -A` с авто-коммитом](BUG-003-switch-git-add-a-autocommit.md) | — (сверка с кодом вне сессии; дефект снят `1ade803`, ADR-012) |
 | PROC-012 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) | `refactor-tracks-collapse-20260901` |
 | PROC-013 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) | `refactor-tracks-collapse-20260901` |
 | DEBT-003 | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) | `refactor-tracks-collapse-20260901` |

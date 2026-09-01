@@ -281,14 +281,20 @@ echo "[T13] probe_stop_gate isolation: a real-shaped SDX session's .stopgate.* s
   # DEBT-026 form verify-cmd.sh: if probe_stop_gate were ever pointed at $fx directly (the bug
   # this test exists to catch), stop-gate.sh would find a real test command here and actually
   # run it, touching .stopgate.count/.out/.ok — not silently no-op on "no known test command".
-  printf '#!/bin/bash\nexit 1\n' > "$fx/.claude/sdx/verify-cmd.sh"
+  # GREEN verify command, deliberately: a red run leaves .stopgate.ok untouched (stop-gate.sh
+  # writes the green-run cache only on success), which would leave the .ok assertion below with
+  # no red side at all. With a green command the mutant clears .count, rewrites .out and writes
+  # .ok — so all three assertions discriminate, not just one.
+  printf '#!/bin/bash\nexit 0\n' > "$fx/.claude/sdx/verify-cmd.sh"
   chmod 0600 "$fx/.claude/sdx/verify-cmd.sh"
 
   # .stopgate.count must be a bare integer (stop-gate.sh:83 does arithmetic `$(( $(cat guard) +
   # 1 ))` under `set -u`; a non-numeric seed would abort the real stop-gate.sh with "unbound
   # variable" before it ever got a chance to touch the file — masking, not proving, isolation).
-  # "7" is picked to be recognizably a seed (stop-gate.sh would only ever naturally write 1-4).
-  printf '7\n' > "$sess_dir/.stopgate.count"
+  # It must ALSO stay below the loop-guard threshold: seeded at 7 the mutant would take the
+  # `n > 3` early return (stop-gate.sh:85-89) and never reach run_verify(), leaving .out/.ok
+  # untouched and their assertions vacuously green. "1" keeps the mutant on the full path.
+  printf '1\n' > "$sess_dir/.stopgate.count"
   printf 'SEED-OUT\n' > "$sess_dir/.stopgate.out"
   printf 'SEED-OK\n' > "$sess_dir/.stopgate.ok"
   b_count="$(md5sum "$sess_dir/.stopgate.count" | cut -d' ' -f1)"
@@ -309,16 +315,21 @@ echo "[T13] probe_stop_gate isolation: a real-shaped SDX session's .stopgate.* s
 
   # Red: probe_stop_gate mutated to talk to $proj directly instead of its own isolated `tp`
   # (build_stop_gate_isolation_mutant) — exactly the REQ-ST-5 regression this test guards
-  # against — DOES clobber the seeded .stopgate.count. Proves the green assertion above
-  # actually discriminates, not just "nothing happened to touch anywhere".
+  # against — DOES clobber the seeded files. All THREE are asserted, not just .count: the green
+  # side above checks three files, so a red side covering one of them would leave the other two
+  # vacuously green. This is why the fixture seeds .stopgate.count below the loop-guard
+  # threshold and uses a GREEN verify command — on that path stop-gate.sh removes .count,
+  # rewrites .out and writes .ok, so every one of the three has a demonstrated red side.
   mutant="$(mktemp)"; build_stop_gate_isolation_mutant "$mutant"
   CLAUDE_PROJECT_DIR="$fx" SDX_SELFTEST_HOOKS_DIR="$SCRIPT_DIR" SDX_SELFTEST_FORCE=1 \
     bash "$mutant" >/dev/null 2>&1
   a2_count="$(md5sum "$sess_dir/.stopgate.count" 2>/dev/null | cut -d' ' -f1)"
-  if [ "$a2_count" != "$b_count" ]; then
-    pass "T13 red: probe_stop_gate mutated to use \$proj directly DOES clobber .stopgate.count — isolation check discriminates"
+  a2_out="$(md5sum "$sess_dir/.stopgate.out" 2>/dev/null | cut -d' ' -f1)"
+  a2_ok="$(md5sum "$sess_dir/.stopgate.ok" 2>/dev/null | cut -d' ' -f1)"
+  if [ "$a2_count" != "$b_count" ] && [ "$a2_out" != "$b_out" ] && [ "$a2_ok" != "$b_ok" ]; then
+    pass "T13 red: mutated probe_stop_gate clobbers all three (.count/.out/.ok) — each green assertion discriminates"
   else
-    fail "T13 red" "mutant left .stopgate.count untouched — the green assertion above would not have caught this regression"
+    fail "T13 red" "mutant left some file untouched (count $b_count->$a2_count out $b_out->$a2_out ok $b_ok->$a2_ok) — those green assertions would not catch the regression"
   fi
   rm -f "$mutant"; rm -rf "$fx"
 }

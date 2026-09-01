@@ -197,7 +197,7 @@ sdx/hooks/selftest.sh` НАПРЯМУЮ из рабочего дерева — �
 
 ### Группа 6 — Documentation-этап (вне Execution)
 
-- [ ] **T26 [DOC]** `sdx/protocol.md`, раздел «Enforcement-слой (хуки)»: новый подраздел
+- [x] **T26 [DOC]** `sdx/protocol.md`, раздел «Enforcement-слой (хуки)»: новый подраздел
   «self-test» (после «Оставшиеся три хука» или интегрированный туда с явной пометкой «четвёртая
   запись `SessionStart`») — фиксирует: периметр (три хука, обоснование исключения `sdx-stage.sh`
   и `test-hook-wiring.sh` из периметра со ссылкой на `DESIGN.md`), место кэша

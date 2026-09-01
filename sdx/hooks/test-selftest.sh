@@ -577,7 +577,7 @@ echo "[T24] commands/status.md: step 5 structural checks present, positioned aft
 # T25 — regression grep gate for REQ-LIMIT-2 across all three files touched by this delivery
 # (closing task of the plan — runs last, after all texts are in final form)
 # =============================================================================
-echo "[T25] REQ-LIMIT-2 regression grep gate: no false promises across selftest.sh / test-selftest.sh / status.md"
+echo "[T25] REQ-LIMIT-2 regression grep gate: no false promises across selftest.sh / test-selftest.sh / status.md / protocol.md"
 {
   # Forbidden phrases assembled from array elements that never sit adjacent to each other in
   # THIS file's own source text (each half lives in a separate array literal) — so grepping this
@@ -592,7 +592,10 @@ echo "[T25] REQ-LIMIT-2 regression grep gate: no false promises across selftest.
     forbidden="${forbidden:+$forbidden|}$phrase"
   done
 
-  targets=("$ROOT/sdx/hooks/selftest.sh" "$ROOT/sdx/hooks/test-selftest.sh" "$ROOT/commands/status.md")
+  # sdx/protocol.md joined the target list at the Documentation stage: it is the most-read
+  # surface describing this mechanism, so a false promise there costs more than in any of the
+  # other three. The gate is about the claim, not about the file type.
+  targets=("$ROOT/sdx/hooks/selftest.sh" "$ROOT/sdx/hooks/test-selftest.sh" "$ROOT/commands/status.md" "$ROOT/sdx/protocol.md")
 
   hit=0
   for t in "${targets[@]}"; do

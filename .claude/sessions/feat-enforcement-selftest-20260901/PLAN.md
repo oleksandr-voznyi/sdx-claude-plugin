@@ -1,10 +1,16 @@
 # Implementation Plan: Self-test enforcement-слоя и блок здоровья в /sdx:status
 
 ## Статус реализации
-Группы 0–5 (T01–T25, 25/26 задач) реализованы и зелёные (`bash .claude/sdx/verify-cmd.sh` — 9/9
-сьютов, включая новый `test-selftest.sh` с T09–T21/T24/T25 и обновлённый `test-hook-wiring.sh`).
-Группа 6 (T26: `sdx/protocol.md`) не начата — выполняется на этапе Documentation, после
-Execution/Verification этой сессии.
+Все 26 задач плана (T01–T26) выполнены. Сверх плана, по находкам верификации, добавлены:
+`T27` (best-effort `write_cache()` при недоступном на запись `.claude/sdx/`), `T28` (гард
+признака SDX-проекта — хук молчит в проектах без `.claude/sdx/`), сценарии `[5a]`/`[5b]` в
+`test-hook-wiring.sh`, сценарии `[12]`/`[13]` в `test-archive-verify.sh`, новый сьют
+`sdx/hooks/test-init-patterns.sh` и правка `sdx/hooks/archive-verify.sh` (самодиагностирующийся
+инвариант 1). Состав поставки шире перечня «Затронутые файлы» ниже именно на эти позиции.
+
+Прогон на момент последнего обновления: `bash .claude/sdx/verify-cmd.sh` — **10/10 сьютов**
+(`test-selftest.sh` 36/36, `test-hook-wiring.sh` 8/8, `test-archive-verify.sh` 26/26,
+`test-init-patterns.sh` 3/3).
 
 ## Чек-лист задач
 

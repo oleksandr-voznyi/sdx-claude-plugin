@@ -30,29 +30,38 @@ echo ""
 # comment. `.claude/settings.local.json` is intentionally in both lists and needs no special case.
 patterns="$(grep -vE '^\s*(#|$)' "$GITIGNORE" 2>/dev/null)"
 
+# Documented exception. `.sdx/worktrees/` belongs to the session-as-worktree model cancelled by
+# ADR-012. The path still exists in this checkout as an EMPTY directory (no files under it —
+# checked while writing this suite), which is exactly the residue commands/reconcile.md
+# classifies as a finding that is never auto-removed. Keeping the pattern here costs nothing and
+# keeps any future leftover out of git; a project initialised today never had worktrees, so
+# /sdx:init deploying it would be cargo cult. The asymmetry is intentional and only in this
+# direction. If the directory is ever removed, drop this exception with it.
+exceptions=".sdx/worktrees/"
+
+# missing_patterns <init-file> — prints the patterns absent from <init-file>, one per line.
+# Extracted so scenario [3] can run the very same comparison against a deliberately damaged
+# copy: a guard whose own logic is never exercised against a failing input proves nothing.
+missing_patterns() {
+  local init_file="$1" p
+  while IFS= read -r p; do
+    [ -z "$p" ] && continue
+    case " $exceptions " in *" $p "*) continue ;; esac
+    grep -qF -- "$p" "$init_file" || printf '%s\n' "$p"
+  done <<< "$patterns"
+}
+
 echo "[1] Every pattern in the repo .gitignore is also in the canonical list of /sdx:init"
 if [ -z "$patterns" ]; then
   fail "no patterns read from .gitignore" "$GITIGNORE unreadable or empty"
 else
-  # Documented exception. `.sdx/worktrees/` belongs to the session-as-worktree model cancelled
-  # by ADR-012. It stays in THIS repo's .gitignore as a safety net: a leftover worktree directory
-  # from that era still exists here, and commands/reconcile.md classifies such leftovers as a
-  # finding that is never auto-removed (they may hold uncommitted work). A project initialised
-  # today never had worktrees, so /sdx:init deploying the pattern would be cargo cult. The
-  # asymmetry is intentional and only in this direction.
-  exceptions=".sdx/worktrees/"
-
-  missing=""
-  n=0
-  skipped=0
-  while IFS= read -r p; do
-    [ -z "$p" ] && continue
-    case " $exceptions " in *" $p "*) skipped=$((skipped + 1)); continue ;; esac
-    n=$((n + 1))
-    grep -qF -- "$p" "$INIT_MD" || missing="${missing:+$missing }$p"
-  done <<< "$patterns"
+  # Same helper the red-side scenario [3] exercises — one comparison, two inputs.
+  missing="$(missing_patterns "$INIT_MD" | tr '\n' ' ')"
+  skipped="$(printf '%s\n' "$exceptions" | grep -c . || true)"
+  total="$(printf '%s\n' "$patterns" | grep -c . || true)"
+  n=$((total - skipped))   # проверено = всего минус документированные исключения
   if [ -z "$missing" ]; then
-    pass "all $n pattern(s) present in commands/init.md ($skipped documented exception(s) skipped)"
+    pass "all $n checked pattern(s) present in commands/init.md ($total total, $skipped documented exception(s) skipped)"
   else
     fail "pattern(s) missing from commands/init.md" "$missing"
   fi
@@ -71,6 +80,16 @@ if [ "$inb" -eq 2 ]; then
 else
   fail "self-test cache pattern missing from one of the lists" "found in $inb of 2"
 fi
+
+echo "[3] The comparison itself discriminates: a damaged canonical list is reported"
+scratch="$(mktemp)"
+grep -vF -- '.claude/sdx/.cache/' "$INIT_MD" > "$scratch"
+dmg="$(missing_patterns "$scratch")"
+rm -f "$scratch"
+case "$dmg" in
+  *".claude/sdx/.cache/"*) pass "removing .cache/ from a copy of init.md is reported as missing" ;;
+  *) fail "comparison did not report the removed pattern" "got: '$dmg' — the guard would not have caught the real defect it was written for" ;;
+esac
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

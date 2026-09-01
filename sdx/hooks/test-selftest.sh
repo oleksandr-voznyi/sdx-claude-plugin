@@ -802,6 +802,14 @@ echo "[T25] REQ-LIMIT-2 regression grep gate: no false promises across selftest.
 
   hit=0
   for t in "${targets[@]}"; do
+    # Deliberate limit of this gate, established by trying the stricter variant and reverting
+    # it. Matching is literal: a bigram split by inline-code markup (the markdown form used
+    # throughout these files) is NOT seen, and neither affirmative nor negated phrasing is
+    # distinguished. Stripping backticks first does make the gate stricter — and immediately
+    # turns it against correct prose, including the sentence documenting the gate itself,
+    # because a naive matcher cannot tell a promise from its denial. So the gate stays a
+    # backstop against an accidental literal promise, not a proof that none exists; the actual
+    # guarantee for REQ-LIMIT-2 is fresh-eyes review reading the texts.
     if grep -riE "$forbidden" "$t" >/dev/null 2>&1; then
       hit=1
       fail "T25 green" "forbidden phrase found in $t"

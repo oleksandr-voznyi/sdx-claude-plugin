@@ -301,6 +301,16 @@ cmd_next() {
       exit 1
     fi
 
+    # REQ-SCALE-4 (unconditional exclusion, direction-independent): --to must not be able to
+    # land a no_code==true session on an excluded stage just because the move happens to be a
+    # backtrack — the exclusion is not a property of direction, it is a property of the
+    # target stage. Without this check, `next --to "Execution"` would silently succeed on a
+    # no_code session even though `init`/forward `next` both refuse the same stage.
+    if [ "$no_code" = "true" ] && is_excluded_by_no_code "$to_target"; then
+      echo "SDX sdx-stage: no_code=true исключает этап '$to_target' из активного набора (REQ-SCALE-4) — переход --to на этот этап недоступен." >&2
+      exit 1
+    fi
+
     local idx_target idx_current
     idx_target="$(stage_index "$to_target")"
     idx_current="$(stage_index "$stage")"

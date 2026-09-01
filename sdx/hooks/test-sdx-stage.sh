@@ -353,20 +353,35 @@ fi
 cleanup
 
 # ---- Scenario 19: next --to — idempotent re-marking, including two different foldable
-# stages pointing at the SAME change_note.md, does not duplicate the banner ----
-echo "[19] next --to: repeated marking of the same change_note.md via two foldable stages does not duplicate the banner"
+# stages pointing at the SAME change_note.md, does not duplicate the banner. Both halves
+# below are LIVE: count1 exercises intra-call dedup (Business Spec + Technical Design +
+# Task Planning are all foldable stages hit by ONE --to call), count2 exercises cross-call
+# dedup by genuinely returning to that file via a SECOND, separate --to call reached through
+# real forward movement (plain `next`, which --to itself cannot do — --to only ever moves
+# backward, so a prior version of this scenario tried to "move forward again" with --to
+# itself, which is rejected and silently no-ops, leaving the second half dead/tautological).
+echo "[19] next --to: repeated marking of the same change_note.md, both within one --to call and across two separate --to calls, never duplicates the banner"
 setup_sdx_repo "t19" "Task Planning"
 printf '# note\n' > "$TMPPROJ/.claude/sessions/t19/change_note.md"
+# First --to call: Task Planning -> Discovery marks Business Spec/Technical Design/Task
+# Planning (three foldable stages, same file) in one pass.
 run_stage next "t19" --to "Discovery" > /dev/null
 count1="$(grep -c '<!-- SDX-OUTDATED' "$TMPPROJ/.claude/sessions/t19/change_note.md")"
-# Move forward again then back to a DIFFERENT foldable stage to re-trigger marking logic.
-run_stage next "t19" --to "Business Spec" > /dev/null 2>&1
-run_stage next "t19" --to "Discovery" > /dev/null
+# Genuinely move forward again via plain `next` (fold-credit still satisfies the gate, since
+# change_note.md is non-empty) all the way back to Execution, then issue a SECOND, separate
+# --to call targeting a DIFFERENT foldable stage (Business Spec) — this re-triggers marking
+# via Technical Design + Task Planning a second time, on the SAME file, from a fresh script
+# invocation (not merely a second row in the same loop as count1).
+run_stage next "t19" > /dev/null   # Discovery -> Business Spec
+run_stage next "t19" > /dev/null   # Business Spec -> Technical Design
+run_stage next "t19" > /dev/null   # Technical Design -> Task Planning
+run_stage next "t19" > /dev/null   # Task Planning -> Execution
+run_stage next "t19" --to "Business Spec" > /dev/null
 count2="$(grep -c '<!-- SDX-OUTDATED' "$TMPPROJ/.claude/sessions/t19/change_note.md")"
-if [ "$count1" -eq 1 ] && [ "$count2" -eq 1 ]; then
-  pass "banner never duplicated across repeated marking of the same file"
+if [ "$count1" -eq 1 ] && [ "$count2" -eq 1 ] && [ "$(jq -r '.stage' "$(state_file t19)")" = "Business Spec" ]; then
+  pass "banner never duplicated, neither within one --to call nor across two separate --to calls"
 else
-  fail "Expected exactly one banner occurrence" "count1=$count1 count2=$count2"
+  fail "Expected exactly one banner occurrence in both halves" "count1=$count1 count2=$count2"
 fi
 cleanup
 
@@ -524,29 +539,113 @@ else
 fi
 cleanup
 
-# ---- Scenario 29 (REQ-TEST-1): sanity — canonical stage_names() order matches the
-# human-readable stage-order projection table in sdx/protocol.md. The single machine-
-# readable source of truth is SDX_STAGE_TABLE inside this script; sdx/protocol.md keeps a
-# projection of the same order for humans (section "Единая шкала этапов и режимы-флаги").
-# This scenario fails on ANY divergence — a skipped/added/reordered stage name in either
-# place — by comparing the two ordered lists line by line. ----
-echo "[29] REQ-TEST-1 sanity: stage_names() order matches sdx/protocol.md's stage-order table"
+# ---- Scenario 29 (REQ-TEST-1): sanity — canonical stage_names() order AND, per stage, the
+# gate-artifact/FAIL-marker/fold-credit columns match the human-readable projection table in
+# sdx/protocol.md ("Единая шкала этапов и режимы-флаги"). The single machine-readable source
+# of truth is SDX_STAGE_TABLE inside this script; sdx/protocol.md's table is a projection of
+# ALL FOUR columns (#/Этап/Гейт-артефакт/FAIL-маркер/Fold-credit) for humans — a prior version
+# of this scenario compared ONLY the ordered stage-name column, so protocol.md and the script
+# could silently disagree on e.g. which file gates a stage, or whether a stage carries a
+# FAIL-marker/fold-credit, without this sanity check ever noticing. This scenario fails on ANY
+# divergence in any of the four columns, for any stage.
+#
+# Normalization needed because the two tables render the same values differently for humans
+# vs. the script's compact pipe format:
+#   artifact    — protocol.md wraps filenames in backticks (stripped) and spells "no gate" as
+#                 an em-dash + parenthetical ("— (нет объективного гейта)"), normalized to "-"
+#                 to match the script's own placeholder.
+#   fail_marker — protocol.md spells it "да (`^### \[FAIL\]`)" / "нет" / em-dash for stages
+#                 with no gate at all; normalized to yes/no/no respectively.
+#   foldable    — protocol.md spells it "да" / "нет" / em-dash for stages with no gate at all;
+#                 normalized to yes/no/no respectively.
+echo "[29] REQ-TEST-1 sanity: stage_names() order AND artifact/FAIL-marker/fold-credit columns match sdx/protocol.md's stage table"
 PROTOCOL_MD="$SCRIPT_DIR/../protocol.md"
 if [ ! -f "$PROTOCOL_MD" ]; then
   fail "sdx/protocol.md not found for REQ-TEST-1 cross-check" "expected at $PROTOCOL_MD"
 else
-  # stage_names() is not exposed as a subcommand — extract the same ordered list directly
-  # from SDX_STAGE_TABLE via awk, exactly like the function itself does, to avoid depending
-  # on an extra CLI surface just for this test.
-  script_order="$(awk -F'|' '$1{print $1}' <<<"$(sed -n "/^SDX_STAGE_TABLE='/,/^'/p" "$SCRIPT" | sed '1d;$d')")"
-  protocol_order="$(grep -E '^\| [0-9] \| ' "$PROTOCOL_MD" | awk -F'|' '{gsub(/^ +| +$/, "", $3); print $3}')"
-  if [ "$script_order" = "$protocol_order" ]; then
-    pass "canonical stage order in sdx-stage.sh matches sdx/protocol.md's projection table"
+  # stage_names() is not exposed as a subcommand — extract the same ordered table directly
+  # from SDX_STAGE_TABLE, exactly as the script's own helpers read it, to avoid depending on
+  # an extra CLI surface just for this test. Already in "stage|artifact|fail_marker|foldable"
+  # form, one row per line, no normalization needed on this side.
+  script_rows="$(sed -n "/^SDX_STAGE_TABLE='/,/^'/p" "$SCRIPT" | sed '1d;$d')"
+  # protocol.md side: same four columns, normalized to the script's vocabulary (see comment
+  # block above). LC_ALL=C.UTF-8 (or the environment's own UTF-8 locale) is relied upon for
+  # the em-dash ("—", U+2014) comparisons below to work byte-for-byte consistently.
+  protocol_rows="$(awk -F'|' '
+    /^\| [0-9]+ \| /{
+      name=$3; artifact=$4; failm=$5; fold=$6
+      gsub(/^ +| +$/, "", name)
+      gsub(/^ +| +$/, "", artifact)
+      gsub(/^ +| +$/, "", failm)
+      gsub(/^ +| +$/, "", fold)
+      gsub(/`/, "", artifact)
+      if (artifact ~ /^—/) artifact = "-"
+      fm = (failm ~ /^да/) ? "yes" : "no"
+      fc = (fold == "да") ? "yes" : "no"
+      print name "|" artifact "|" fm "|" fc
+    }
+  ' "$PROTOCOL_MD")"
+  if [ "$script_rows" = "$protocol_rows" ]; then
+    pass "canonical stage order + artifact/FAIL-marker/fold-credit columns match sdx/protocol.md's projection table"
   else
-    fail "stage order mismatch between sdx-stage.sh (SDX_STAGE_TABLE) and sdx/protocol.md" \
-      "script: [$script_order] protocol: [$protocol_order]"
+    fail "stage table mismatch between sdx-stage.sh (SDX_STAGE_TABLE) and sdx/protocol.md" \
+      "script: [$script_rows] protocol: [$protocol_rows]"
   fi
 fi
+
+# ---- Scenario 30b (REQ-NAV-2, upper-bound discrimination): an artifact belonging to a
+# stage LATER than the DEPARTING (current) stage — a legitimate leftover from an earlier
+# full cycle through the canonical order, e.g. a previous Technical Design pass whose
+# DESIGN.md survives while the session is currently sitting back on Business Spec — must
+# still be marked outdated on backtrack. REQ-NAV-2 bounds marking by the END of the
+# canonical order, NOT by the departing stage's own index; a regression that narrowed the
+# loop to "stages between target and the departing stage" would leave this DESIGN.md
+# untouched while still passing scenario 18 (there, every existing artifact sits AT OR
+# BEFORE the departing stage, so that scenario cannot tell the two bounds apart).
+echo "[30b] next --to: artifact belonging to a stage LATER than the departing (current) stage is marked outdated too"
+setup_sdx_repo "t30b" "Business Spec"
+printf '# spec\n' > "$TMPPROJ/.claude/sessions/t30b/SPEC.md"
+# DESIGN.md is Technical Design's artifact (canonical index 3) — LATER than the departing
+# stage Business Spec (canonical index 2). Its presence here models a leftover from an
+# earlier cycle; the session has since been backtracked to Business Spec by other means
+# without touching DESIGN.md, which is exactly the "artifact exists past current stage"
+# case the reviewer's finding requires a test for.
+printf '# design\n' > "$TMPPROJ/.claude/sessions/t30b/DESIGN.md"
+out="$(run_stage next "t30b" --to "Discovery")"
+ec=$?
+design_first="$(head -1 "$TMPPROJ/.claude/sessions/t30b/DESIGN.md")"
+if [ "$ec" -eq 0 ] \
+   && printf '%s' "$design_first" | grep -q '<!-- SDX-OUTDATED' \
+   && printf '%s' "$out" | grep -q "OUTDATED: .*DESIGN.md"; then
+  pass "artifact of a stage later than the departing stage (DESIGN.md, idx 3 > departing idx 2) marked outdated"
+else
+  fail "Expected marking to extend past the departing stage's own index" "ec=$ec out='$out' design1='$design_first'"
+fi
+cleanup
+
+# ---- Scenario 30 (REQ-SCALE-4, backtrack direction): next --to targeting an EXCLUDED
+# stage while no_code==true must be refused even though the move is a genuine backtrack
+# (idx_target < idx_current) — the exclusion is a property of the TARGET stage, not of
+# direction. Regression test for a reviewer finding: the exclusion check existed only in
+# cmd_init and was missing from the --to branch of cmd_next, so `next --to "Execution"` on
+# a no_code session passed silently. Verification stage -> --to "Execution" is a legitimate
+# backward move by index alone (7 -> 5), so this specifically discriminates the new check
+# from the pre-existing "forward move rejected" check (scenario 21), which never fires here.
+echo "[30] next --to: no_code=true, target is an excluded stage reached via genuine backtrack -> exit 1, message names REQ-SCALE-4"
+setup_sdx_repo "t30" "Verification" "true" "false"
+sf="$(state_file t30)"
+before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+out="$(run_stage next "t30" --to "Execution" 2>&1 1>/dev/null)"
+ec=$?
+after_sum="$(md5sum "$sf" | cut -d' ' -f1)"
+if [ "$ec" -eq 1 ] && [ "$before_sum" = "$after_sum" ] \
+   && [ "$(jq -r '.stage' "$sf")" = "Verification" ] \
+   && printf '%s' "$out" | grep -q 'REQ-SCALE-4'; then
+  pass "excluded --to target refused under no_code even on a genuine backtrack, message names REQ-SCALE-4"
+else
+  fail "Expected --to rejection of excluded target under no_code" "ec=$ec out='$out'"
+fi
+cleanup
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

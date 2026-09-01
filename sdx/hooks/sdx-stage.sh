@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# SDX sdx-stage (REQ-STAGE-1..5, REQ-BACKTRACK-1..2, REQ-RETRACK-1, REQ-CLOSEOUT-ENTRY-1):
+# SDX sdx-stage (REQ-SCALE-1..9, REQ-FLAG-1..4, REQ-LEGAL-1..4, REQ-COMPAT-1..3, REQ-NAV-1..2):
 # the SOLE writer of `.stage` in session_state.json. NOT a hooks.json hook (no PreToolUse
 # matcher) — a CLI called by /sdx:* commands via the Bash tool, the same pattern already
-# used for archive-verify.sh <id>. Subcommands: init | next | backtrack | retrack.
+# used for archive-verify.sh <id>. Subcommands: init | next.
+#
+# ADR-020 replaces the former two-dimensional stage matrix with a single, canonical ordered
+# table of stage names (SDX_STAGE_TABLE) — one row per stage, no second dimension. Ceremony
+# scaling that used to be a choice of matrix ROW is now expressed by two orthogonal boolean
+# flags (no_code, no_gates) plus "fold-credit" evidence (change_note.md standing in for a
+# planning-stage's own artifact) — see stage_row()/gate_ok() below. The former dedicated
+# subcommands for switching profiles/going back are gone: `next --to <stage>` covers the
+# sole surviving navigational need (moving back to an earlier, already-visited stage).
 #
 # By design (DESIGN.md "Обработка ошибок"), this script accepts <sid> as an explicit
 # argument and does NOT resolve the git branch itself (symmetric with archive-verify.sh) —
@@ -10,10 +18,10 @@
 # lib/resolve-session.sh is therefore intentionally NOT sourced here.
 set -uo pipefail
 
-# jq is required for every subcommand (state is always read/written as JSON). Unlike
-# stage-write-guard.sh (fail-open), this script is fail-CLOSED without jq: it is the sole
-# writer of `stage`, so refusing to touch the file when it cannot safely parse/write JSON
-# is the only way to guarantee no silent corruption. Checked before subcommand dispatch.
+# jq is required for every subcommand (state is always read/written as JSON). This script
+# is fail-CLOSED without jq: it is the sole writer of `stage`, so refusing to touch the
+# file when it cannot safely parse/write JSON is the only way to guarantee no silent
+# corruption. Checked before subcommand dispatch.
 command -v jq >/dev/null 2>&1 || {
   echo "SDX sdx-stage: jq не найден — переход отклонён (fail-closed), файл не изменён. Установите jq." >&2
   exit 2
@@ -22,100 +30,99 @@ command -v jq >/dev/null 2>&1 || {
 proj="${CLAUDE_PROJECT_DIR:-.}"
 
 # ---------------------------------------------------------------------------------------
-# Machine-readable source of truth for "track -> ordered active stages -> gate artifact"
-# (REQ-STAGE-3). sdx/protocol.md keeps a human-readable projection of the same data (see
-# the footnote added there) — it is NOT read by this script; this matrix is authoritative.
+# Machine-readable source of truth for the canonical stage order and gate artifacts
+# (REQ-SCALE-1). sdx/protocol.md keeps a human-readable projection of the same data,
+# verified by a sanity test (REQ-TEST-1) — it is NOT read by this script; this table is
+# authoritative.
 #
-# Row format: track|stage|artifact|fail_marker
+# Row format: stage|artifact|fail_marker|foldable
 #   artifact    — path relative to the session directory; "-" = gate not objectively
-#                 checkable (the condition stays a prosaic judgement of the orchestrator,
-#                 REQ-STAGE-2 "Ограничение").
+#                 checkable (the condition stays a prosaic judgement of the orchestrator).
 #   fail_marker — "yes": additionally requires absence of "^### \[FAIL\]" in the artifact
 #                 (reviewer output format, agents/reviewer.md); "no" — existence+non-empty
 #                 only.
-# Row order WITHIN a track = order of active stages (used by next/backtrack/retrack).
+#   foldable    — "yes": this stage is ALSO (regardless of its own artifact) satisfied by a
+#                 non-empty change_note.md — generalization of the former "Change" stage
+#                 special-case (ADR-016, W-6) onto all four "planning" stages. "no" — only
+#                 the stage's own artifact counts (for "-" there is no gate at all; for
+#                 Verification it must be exactly verification_report.md, never
+#                 change_note.md).
+# Row order = the canonical stage order (REQ-SCALE-1) — the SAME order cross-checked
+# against sdx/protocol.md by the REQ-TEST-1 sanity test.
 # ---------------------------------------------------------------------------------------
-SDX_STAGE_MATRIX='
-full|Discovery|context_report.md|no
-full|Business Spec|SPEC.md|no
-full|Technical Design|DESIGN.md|no
-full|Task Planning|PLAN.md|no
-full|Execution|-|no
-full|Documentation|-|no
-full|Verification|verification_report.md|yes
-full|Deployment|-|no
-full|Closeout|-|no
-standard|Discovery|-|no
-standard|Change|change_note.md|no
-standard|Execution|-|no
-standard|Verification|verification_report.md|yes
-standard|Closeout|-|no
-patch|Execution|change_note.md|no
-patch|Verification|verification_report.md|yes
-patch|Closeout|-|no
-doc|Discovery|-|no
-doc|Update|change_note.md|no
-doc|Verification|verification_report.md|yes
-doc|Closeout|-|no
-vibe|Prototype|-|no
+SDX_STAGE_TABLE='
+Discovery|context_report.md|no|yes
+Business Spec|SPEC.md|no|yes
+Technical Design|DESIGN.md|no|yes
+Task Planning|PLAN.md|no|yes
+Execution|-|no|no
+Documentation|-|no|no
+Verification|verification_report.md|yes|no
+Deployment|-|no|no
+Closeout|-|no|no
 '
 
-# ---- matrix helpers --------------------------------------------------------------------
+# ---- table helpers ----------------------------------------------------------------------
 
-# matrix_stages <track> -> newline-separated list of active stage names, in row order.
-matrix_stages() {
-  printf '%s\n' "$SDX_STAGE_MATRIX" | awk -F'|' -v t="$1" '$1==t{print $2}'
+# stage_names() -> newline-separated list of the nine canonical stage names, in order.
+stage_names() {
+  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' '$1{print $1}'
 }
 
-# matrix_row <track> <stage> -> "artifact|fail_marker", empty if the pair is not in the matrix.
-matrix_row() {
-  printf '%s\n' "$SDX_STAGE_MATRIX" | awk -F'|' -v t="$1" -v s="$2" '$1==t && $2==s{print $3"|"$4; exit}'
+# stage_row <stage> -> "artifact|fail_marker|foldable", empty if <stage> is not canonical.
+# NOTE: the `$1 &&` guard is required, not cosmetic — SDX_STAGE_TABLE is a heredoc-style
+# string starting with a newline, so awk's first record has an empty $1. Without the guard,
+# stage_row("") would match that empty leading record instead of correctly returning empty
+# (see stage_exists() below for the same asymmetry, which was an actual production bug).
+stage_row() {
+  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' -v s="$1" '$1 && $1==s{print $2"|"$3"|"$4; exit}'
 }
 
-# matrix_index <track> <stage> -> 1-based position of stage within track's row order,
-# empty if not found.
-matrix_index() {
-  printf '%s\n' "$SDX_STAGE_MATRIX" | awk -F'|' -v t="$1" -v s="$2" '$1==t{i++; if($2==s){print i; exit}}'
+# stage_index <stage> -> 1-based position within the canonical order, empty if not found.
+stage_index() {
+  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' -v s="$1" '$1{i++; if($1==s){print i; exit}}'
 }
 
-# matrix_stage_exists <stage> -> exit 0 if the stage name occurs in ANY track (union),
-# exit 1 otherwise. Used by backtrack step 1 ("имя не распознано" vs "не активен в треке").
-matrix_stage_exists() {
-  printf '%s\n' "$SDX_STAGE_MATRIX" | awk -F'|' -v s="$1" '$2==s{f=1} END{exit !f}'
+# stage_exists <stage> -> exit 0 if <stage> is one of the nine canonical names, exit 1
+# otherwise.
+# NOTE (bug found by QA at Verification): SDX_STAGE_TABLE is a heredoc-style string that
+# starts with a newline, so its first awk record has an empty $1. The old pattern `$1==s`
+# was unconditional, so stage_exists("") matched that empty leading record and reported the
+# empty string as an existing stage — `next` (forward mode, no --to) would then silently
+# "heal" a corrupted/absent `.stage` by treating index 0+1=1 as a valid candidate (Discovery)
+# instead of diagnosing REQ-COMPAT-3. The `$1 &&` guard makes this symmetric with
+# stage_names()/stage_index() below, which already skip the empty leading record correctly.
+stage_exists() {
+  printf '%s\n' "$SDX_STAGE_TABLE" | awk -F'|' -v s="$1" '$1 && $1==s{f=1} END{exit !f}'
 }
 
-# stage_artifact_ok <stage> <artifact> <fail_marker> <sdir> -> exit 0 if <stage>'s OWN gate
-# is objectively satisfied on disk, exit 1 otherwise. This is the SAME existence+non-empty
-# (+ absent-FAIL-marker where applicable) criteria cmd_next applies to the departing
-# stage's artifact (REQ-STAGE-2) — reused here by cmd_retrack's artifact-floor guard
-# (REQ-RETRACK-2, rewritten per F-1) to check a whole CHAIN of preceding stages, not just
-# one departing stage.
-#
-# Special case: `Change` (patch/standard) is a merged stage — protocol.md "Change ...
-# объединённый этап" — with no single artifact of its own. Two different kinds of evidence
-# both count as "Change done", by construction:
-#   - `change_note.md` non-empty: the native patch/standard artifact, OR
-#   - `SPEC.md` AND `DESIGN.md` both non-empty: the equivalent full-track evidence. This is
-#     not a weakening — retrack.md step 3 ALREADY promotes change_note.md into exactly
-#     these two files, unconditionally, before ever calling this script when escalating
-#     FROM Change; symmetrically, a full-track session that reached (or passed) its own
-#     Business Spec + Technical Design gates has done strictly MORE than a Change stage
-#     would ever require, so denying it credit for that work when deescalating INTO
-#     standard/patch would be pure ceremony, not safety (W-6 fix).
-stage_artifact_ok() {
-  local stage="$1" artifact="$2" fail_marker="$3" sdir="$4"
-  if [ "$stage" = "Change" ]; then
-    [ -s "$sdir/change_note.md" ] && return 0
-    [ -s "$sdir/SPEC.md" ] && [ -s "$sdir/DESIGN.md" ] && return 0
-    return 1
-  fi
+# is_excluded_by_no_code <stage> -> exit 0 if no_code==true excludes <stage> unconditionally
+# (REQ-SCALE-4). A fixed set of names, NOT a column of SDX_STAGE_TABLE — see DESIGN.md
+# "SDX_STAGE_TABLE" section, alternative 2: keeping this as a table column would
+# re-introduce the dimensionality growth this design removes.
+is_excluded_by_no_code() {
+  case "$1" in
+    "Task Planning"|Execution|Documentation|Deployment) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# gate_ok <stage> <sdir> -> exit 0 if <stage>'s own gate is objectively satisfied on disk,
+# exit 1 otherwise. Successor of the old stage_artifact_ok: was a special case only for
+# "Change"; now generalized via the `foldable` column to any of the four planning stages
+# (REQ-SCALE-3, ADR-016 W-6 generalized).
+gate_ok() {
+  local stage="$1" sdir="$2" row artifact fail_marker foldable path
+  row="$(stage_row "$stage")"
+  IFS='|' read -r artifact fail_marker foldable <<<"$row"
   [ "$artifact" = "-" ] && return 0
-  local path="$sdir/$artifact"
-  [ -s "$path" ] || return 1
-  if [ "$fail_marker" = "yes" ] && grep -q '^### \[FAIL\]' "$path"; then
-    return 1
+  path="$sdir/$artifact"
+  if [ -s "$path" ]; then
+    [ "$fail_marker" = "yes" ] && grep -q '^### \[FAIL\]' "$path" && return 1
+    return 0
   fi
-  return 0
+  [ "$foldable" = "yes" ] && [ -s "$sdir/change_note.md" ] && return 0
+  return 1
 }
 
 # ---- atomic state mutation (DESIGN.md "Механика записи stage (атомарность)") -----------
@@ -148,75 +155,118 @@ log_line() {
 }
 
 # mark_outdated <path> <target-stage>
-# HTML-comment banner inserted as the FIRST line of the artifact (REQ-BACKTRACK-2,
-# decision #3 of the plan) — the file is never renamed/moved/truncated. Idempotent: a
-# file already carrying the banner (checked in the first 200 bytes) is left untouched and
-# does not print an OUTDATED line, so repeated backtracks never duplicate the marker.
+# HTML-comment banner inserted as the FIRST line of the artifact — the file is never
+# renamed/moved/truncated. Idempotent: a file already carrying the banner (checked in the
+# first 200 bytes) is left untouched and does not print an OUTDATED line, so repeated
+# `next --to` calls (including two different foldable stages pointing at the same
+# change_note.md) never duplicate the marker.
 mark_outdated() {
   local f="$1" tgt="$2"
   [ -f "$f" ] || return 0
   head -c 200 "$f" | grep -q '<!-- SDX-OUTDATED' && return 0
   local tmp
   tmp="$(mktemp "${f}.XXXXXX")" || return 1
-  { printf '<!-- SDX-OUTDATED: устарело откатом /sdx:backtrack --to "%s" (%s). Актуализируйте перед продолжением; история версии — `git log -p -- %s`. -->\n\n' \
+  { printf '<!-- SDX-OUTDATED: устарело откатом /sdx:next --to "%s" (%s). Актуализируйте перед продолжением; история версии — `git log -p -- %s`. -->\n\n' \
       "$tgt" "$(date '+%Y-%m-%d %H:%M:%S')" "$f"
     cat "$f"
   } > "$tmp" && mv "$tmp" "$f"
   echo "OUTDATED: $f"
 }
 
-# ---- subcommands ------------------------------------------------------------------------
+# ---- subcommands --------------------------------------------------------------------------
 
-# init <sid> <type> <track> <stage> <gate_mode> <git_branch>
-# Sole legitimate creator of session_state.json (REQ-STAGE-1). Refuses to run if the file
-# already exists (exit 2 — init is not for re-initialization) and validates that <stage>
-# is the first active stage of <track> per the matrix. Schema is unchanged (REQ-COMPAT-1):
-# session_id, type, track, stage, gate_mode, git_branch, artifacts:[], history:[].
+# init <sid> <type> <stage> <gate_mode> <git_branch> <no_code> <no_gates>
+# Sole legitimate creator of session_state.json (REQ-FLAG-1). Refuses to run if the file
+# already exists (exit 2 — init is not for re-initialization). Unlike the old
+# two-dimensional matrix, there is no "first active stage of a profile" to validate
+# against — any of the nine canonical names is a legitimate starting point, subject only
+# to the two flag constraints below (REQ-SCALE-9: activity is never declared up front).
 cmd_init() {
-  if [ "$#" -ne 6 ]; then
-    echo "SDX sdx-stage: использование: sdx-stage.sh init <sid> <type> <track> <stage> <gate_mode> <git_branch>" >&2
+  if [ "$#" -ne 7 ]; then
+    echo "SDX sdx-stage: использование: sdx-stage.sh init <sid> <type> <stage> <gate_mode> <git_branch> <no_code> <no_gates>" >&2
     exit 2
   fi
-  local sid="$1" type="$2" track="$3" stage="$4" gate_mode="$5" git_branch="$6"
+  local sid="$1" type="$2" stage="$3" gate_mode="$4" git_branch="$5" no_code="$6" no_gates="$7"
   sdir="$proj/.claude/sessions/$sid"
   state="$sdir/session_state.json"
   log="$sdir/session.log"
 
+  # Step 1: no_code/no_gates literals.
+  case "$no_code" in
+    true|false) ;;
+    *) echo "SDX sdx-stage: no_code должен быть 'true' или 'false', получено '$no_code'." >&2; exit 2 ;;
+  esac
+  case "$no_gates" in
+    true|false) ;;
+    *) echo "SDX sdx-stage: no_gates должен быть 'true' или 'false', получено '$no_gates'." >&2; exit 2 ;;
+  esac
+
+  # Step 2 (REQ-FLAG-3): both flags true is a contradiction, not just a disallowed
+  # combination — no_gates is specifically about code ("один промпт без церемонии" with
+  # code as output), while no_code excludes code by definition.
+  if [ "$no_code" = "true" ] && [ "$no_gates" = "true" ]; then
+    echo "SDX sdx-stage: no_code и no_gates не могут оба быть true — предмет no_gates специфичен про код, no_code по определению код исключает." >&2
+    exit 2
+  fi
+
+  # Step 3: <stage> must be one of the nine canonical names.
+  if ! stage_exists "$stage"; then
+    echo "SDX sdx-stage: '$stage' не распознан как имя этапа протокола SDX." >&2
+    exit 2
+  fi
+
+  # Step 4 (REQ-SCALE-5): no_gates==true has exactly one legitimate starting stage.
+  if [ "$no_gates" = "true" ] && [ "$stage" != "Execution" ]; then
+    echo "SDX sdx-stage: no_gates=true допускает старт исключительно на 'Execution' (получено '$stage')." >&2
+    exit 2
+  fi
+
+  # Step 5 (REQ-SCALE-4): no_code==true excludes starting on an excluded stage — nothing
+  # to execute/plan/deploy without code.
+  if [ "$no_code" = "true" ] && is_excluded_by_no_code "$stage"; then
+    echo "SDX sdx-stage: no_code=true исключает старт на этапе '$stage' — этап недоступен при no_code." >&2
+    exit 2
+  fi
+
+  # Step 6: file already exists -> exit 2 (unchanged, as before).
   if [ -f "$state" ]; then
     echo "SDX sdx-stage: session_state.json для сессии '$sid' уже существует — init не предназначен для повторной инициализации." >&2
     exit 2
   fi
 
-  local first
-  first="$(matrix_stages "$track" | head -1)"
-  if [ -z "$first" ] || [ "$stage" != "$first" ]; then
-    echo "SDX sdx-stage: '$stage' не первый активный этап трека '$track' (ожидался '$first') — init отклонён." >&2
-    exit 2
-  fi
-
   mkdir -p "$sdir"
   if ! jq -n \
-        --arg session_id "$sid" --arg type "$type" --arg track "$track" \
-        --arg stage "$stage" --arg gate_mode "$gate_mode" --arg git_branch "$git_branch" \
-        '{session_id:$session_id, type:$type, track:$track, stage:$stage, gate_mode:$gate_mode, git_branch:$git_branch, artifacts:[], history:[]}' \
+        --arg session_id "$sid" --arg type "$type" --arg stage "$stage" \
+        --arg gate_mode "$gate_mode" --arg git_branch "$git_branch" \
+        --argjson no_code "$no_code" --argjson no_gates "$no_gates" \
+        '{session_id:$session_id, type:$type, stage:$stage, gate_mode:$gate_mode, git_branch:$git_branch, no_code:$no_code, no_gates:$no_gates, artifacts:[], history:[]}' \
         > "$state"; then
     rm -f "$state"
     echo "SDX sdx-stage: jq не смог создать $state." >&2
     exit 2
   fi
 
-  log_line "[START] Инициализация сессии $sid (трек: $track)"
+  log_line "[START] Инициализация сессии $sid"
   echo "OK - -> $stage"
 }
 
-# next <sid>
-# Forward transition (REQ-STAGE-2). No explicit target — the matrix is the sole source of
-# truth for stage order (REQ-STAGE-3), so the target is always "the next active stage of
-# the current track". Gates the DEPARTING (current) stage's artifact before allowing the
-# move. Terminal stage (last active stage of the track, i.e. Closeout) -> exit 0 no-op
-# (REQ-STAGE-4), nothing written.
+# next <sid> [--to <stage>]
+# Two modes of one subcommand, distinguished by the presence of --to.
 cmd_next() {
-  local sid="$1"
+  local sid="$1"; shift
+  local to_target="" has_to=0
+  if [ "${1:-}" = "--to" ]; then
+    has_to=1
+    if [ "$#" -ne 2 ]; then
+      echo "SDX sdx-stage: использование: sdx-stage.sh next <sid> [--to <stage>]" >&2
+      exit 2
+    fi
+    to_target="$2"
+  elif [ "$#" -ne 0 ]; then
+    echo "SDX sdx-stage: использование: sdx-stage.sh next <sid> [--to <stage>]" >&2
+    exit 2
+  fi
+
   sdir="$proj/.claude/sessions/$sid"
   state="$sdir/session_state.json"
   log="$sdir/session.log"
@@ -226,261 +276,128 @@ cmd_next() {
     exit 2
   }
 
-  local track stage
-  track="$(jq -r '.track // empty' "$state")"
+  local no_gates no_code stage
+  no_gates="$(jq -r '.no_gates // false' "$state" 2>/dev/null || echo 'false')"
+  no_code="$(jq -r '.no_code // false' "$state" 2>/dev/null || echo 'false')"
   stage="$(jq -r '.stage // empty' "$state")"
 
-  local stages last
-  stages="$(matrix_stages "$track")"
-  if [ -z "$stages" ]; then
-    echo "SDX sdx-stage: трек '$track' сессии '$sid' не найден в матрице — состояние повреждено." >&2
+  # ---- Priority 0 (REQ-LEGAL-1) — checked FIRST, before parsing --to or reading anything
+  # else. This is the entire mechanism that keeps ADR-018's "no Closeout without
+  # legalization" invariant alive without a matrix row to lean on: while no_gates==true,
+  # NOTHING below this block ever executes. ----
+  if [ "$no_gates" = "true" ]; then
+    if [ "$has_to" -eq 1 ] && [ "$to_target" != "Execution" ]; then
+      echo "SDX sdx-stage: сессия в режиме «без гейтов» (no_gates) — доступен только этап Execution; выход исключительно через легализацию /sdx:proto." >&2
+      exit 1
+    fi
+    echo "OK no-op Execution"
+    return 0
+  fi
+
+  # ---- --to mode (REQ-NAV-1, the sole surviving way to move to an earlier stage) ----
+  if [ "$has_to" -eq 1 ]; then
+    if ! stage_exists "$to_target"; then
+      echo "SDX sdx-stage: '$to_target' не распознан как имя этапа протокола SDX. Проверь опечатку." >&2
+      exit 1
+    fi
+
+    # REQ-SCALE-4 (unconditional exclusion, direction-independent): --to must not be able to
+    # land a no_code==true session on an excluded stage just because the move happens to be a
+    # backtrack — the exclusion is not a property of direction, it is a property of the
+    # target stage. Without this check, `next --to "Execution"` would silently succeed on a
+    # no_code session even though `init`/forward `next` both refuse the same stage.
+    if [ "$no_code" = "true" ] && is_excluded_by_no_code "$to_target"; then
+      echo "SDX sdx-stage: no_code=true исключает этап '$to_target' из активного набора (REQ-SCALE-4) — переход --to на этот этап недоступен. Если объём сессии перерос процессную работу — сними флаг (`no_code: true -> false` в session_state.json, одноразовая эскалация) и повтори." >&2
+      exit 1
+    fi
+
+    local idx_target idx_current
+    idx_target="$(stage_index "$to_target")"
+    idx_current="$(stage_index "$stage")"
+    if [ -z "$idx_current" ]; then
+      echo "SDX sdx-stage: состояние сессии '$sid' использует нераспознанное/устаревшее имя этапа '$stage' — требуется ручная миграция (REQ-COMPAT-3), автоматический переход невозможен." >&2
+      exit 2
+    fi
+
+    if [ "$idx_target" -gt "$idx_current" ]; then
+      echo "SDX sdx-stage: '$to_target' позже текущего этапа '$stage' в каноническом порядке — это не откат. Для движения вперёд используй /sdx:next без аргумента." >&2
+      exit 1
+    fi
+
+    if [ "$idx_target" -eq "$idx_current" ]; then
+      echo "OK no-op $stage"
+      return 0
+    fi
+
+    write_stage "$to_target"
+    log_line "[STAGE_CHANGE] Возврат на этап $to_target"
+    echo "OK $stage -> $to_target"
+
+    # Mark every stage strictly after the target, through the end of the canonical order,
+    # as outdated — NOT bounded by the departing (current) stage (REQ-NAV-2; the pre-ADR-020
+    # REQ-BACKTRACK-2 behaviour is preserved literally under the new requirement id).
+    local i s row artifact foldable path
+    i=0
+    while IFS= read -r s; do
+      i=$((i + 1))
+      [ "$i" -le "$idx_target" ] && continue
+      row="$(stage_row "$s")"
+      IFS='|' read -r artifact _fm foldable <<<"$row"
+      if [ "$artifact" != "-" ]; then
+        path="$sdir/$artifact"
+        mark_outdated "$path" "$to_target"
+      fi
+      if [ "$foldable" = "yes" ]; then
+        mark_outdated "$sdir/change_note.md" "$to_target"
+      fi
+    done < <(stage_names)
+    return 0
+  fi
+
+  # ---- forward mode (plain next, plus hidden no_code auto-skip) ----
+  # REQ-COMPAT-3: an unrecognized/legacy current stage (Change/Update/Prototype) cannot be
+  # advanced automatically — diagnose it explicitly (exit 2) instead of letting gate_ok's
+  # empty-row lookup produce an undefined result.
+  if ! stage_exists "$stage"; then
+    echo "SDX sdx-stage: состояние сессии '$sid' использует нераспознанное/устаревшее имя этапа '$stage' — требуется ручная миграция (REQ-COMPAT-3), автоматический переход невозможен." >&2
     exit 2
   fi
-  last="$(printf '%s\n' "$stages" | tail -1)"
 
+  local last
+  last="$(stage_names | tail -1)"
   if [ "$stage" = "$last" ]; then
     echo "OK no-op $stage"
     return 0
   fi
 
-  local row artifact fail_marker
-  row="$(matrix_row "$track" "$stage")"
-  if [ -z "$row" ]; then
-    echo "SDX sdx-stage: текущий этап '$stage' не найден в треке '$track' матрицы — состояние сессии повреждено." >&2
-    exit 2
-  fi
-  artifact="${row%%|*}"
-  fail_marker="${row##*|}"
-
-  if [ "$artifact" != "-" ]; then
-    local path="$sdir/$artifact"
-    if [ ! -s "$path" ]; then
-      echo "SDX sdx-stage: гейт не пройден — не найден/пуст '$artifact' в .claude/sessions/$sid/. Заверши $stage, затем повтори /sdx:next." >&2
+  if ! gate_ok "$stage" "$sdir"; then
+    local row artifact fail_marker foldable
+    row="$(stage_row "$stage")"
+    IFS='|' read -r artifact fail_marker foldable <<<"$row"
+    if [ "$artifact" != "-" ] && [ -s "$sdir/$artifact" ] && [ "$fail_marker" = "yes" ] \
+       && grep -q '^### \[FAIL\]' "$sdir/$artifact"; then
+      local fix_stage="Execution"
+      [ "$no_code" = "true" ] && fix_stage="Technical Design"
+      echo "SDX sdx-stage: гейт не пройден — '$artifact' содержит находки FAIL. Исправь их и вызови /sdx:next --to \"$fix_stage\"." >&2
       exit 1
     fi
-    if [ "$fail_marker" = "yes" ] && grep -q '^### \[FAIL\]' "$path"; then
-      # Этап исправления зависит от трека: у кодовых треков это Execution, у доп.
-      # треков без Execution (например doc) — предыдущий активный этап, т.е. Update.
-      local fix_stage
-      fix_stage="Execution"
-      if ! printf '%s\n' "$stages" | grep -qx 'Execution'; then
-        local fix_idx
-        fix_idx=$(( $(matrix_index "$track" "$stage") - 1 ))
-        if [ "$fix_idx" -ge 1 ]; then
-          fix_stage="$(printf '%s\n' "$stages" | sed -n "${fix_idx}p")"
-        else
-          # Fallback (no predecessor to name): the FAIL-marked stage is itself the
-          # track's own first active stage. Rather than let `sed -n "0p"` produce an
-          # empty match and emit a blank "/sdx:backtrack --to " hint, point at that
-          # same first active stage — currently unreachable (no track has
-          # fail_marker=yes on its first stage), but a safe, honest answer if one ever did.
-          fix_stage="$(printf '%s\n' "$stages" | head -1)"
-        fi
-      fi
-      echo "SDX sdx-stage: гейт не пройден — '$artifact' содержит находки FAIL. Исправь их и вызови /sdx:backtrack --to $fix_stage." >&2
-      exit 1
-    fi
-  fi
-
-  local idx next_idx new_stage
-  idx="$(matrix_index "$track" "$stage")"
-  next_idx=$((idx + 1))
-  new_stage="$(printf '%s\n' "$stages" | sed -n "${next_idx}p")"
-
-  write_stage "$new_stage"
-  log_line "[STAGE_CHANGE] Переход на этап $new_stage"
-  echo "OK $stage -> $new_stage"
-}
-
-# backtrack <sid> <target>
-# Backward transition (REQ-BACKTRACK-1/2). No gate check on the departing stage's
-# artifact — going back is always allowed once the target is validated. Marks artifacts of
-# ALL stages strictly after <target> (exclusive), through the end of the track's active
-# stages, as outdated — NOT bounded by the current stage. REQ-BACKTRACK-2 sets no upper
-# bound ("этапы после новой точки"): an artifact from a stage later than "current" can
-# legitimately exist on disk (e.g. a leftover verification_report.md from a prior
-# Verification cycle while `stage` has since been reset earlier by another backtrack) and
-# must be marked too, otherwise a reader (human or agent) mistakes stale content for
-# current. The banner is a signal only: a marked artifact still counts as gate evidence
-# for both `next` and `retrack` — see "Границы доказательности" in sdx/protocol.md. The
-# target's own artifact is left untouched (it becomes the thing being revisited, not
-# something stale).
-cmd_backtrack() {
-  local sid="$1" target="$2"
-  sdir="$proj/.claude/sessions/$sid"
-  state="$sdir/session_state.json"
-  log="$sdir/session.log"
-
-  [ -f "$state" ] || {
-    echo "SDX sdx-stage: не найден session_state.json для сессии '$sid' — вызовите /sdx:start или /sdx:import." >&2
-    exit 2
-  }
-
-  local track stage
-  track="$(jq -r '.track // empty' "$state")"
-  stage="$(jq -r '.stage // empty' "$state")"
-
-  # Step 1: target must be a recognized stage name in the protocol at all (union of tracks).
-  if ! matrix_stage_exists "$target"; then
-    echo "SDX sdx-stage: '$target' не распознан как имя этапа протокола SDX. Проверь опечатку." >&2
+    local alt=""
+    [ "$foldable" = "yes" ] && alt=" (либо непустой change_note.md)"
+    echo "SDX sdx-stage: гейт не пройден — не найден/пуст '$artifact'$alt в .claude/sessions/$sid/. Заверши $stage, затем повтори /sdx:next." >&2
     exit 1
   fi
 
-  local stages
-  stages="$(matrix_stages "$track")"
+  local idx candidate
+  idx="$(stage_index "$stage")"
+  candidate="$(stage_names | sed -n "$((idx + 1))p")"
+  while [ "$no_code" = "true" ] && is_excluded_by_no_code "$candidate" && [ "$candidate" != "Closeout" ]; do
+    idx=$((idx + 1))
+    candidate="$(stage_names | sed -n "$((idx + 1))p")"
+  done
 
-  # Step 2: target must be active in the CURRENT track. -F: fixed-string match — $target is
-  # user/orchestrator-supplied and MUST NOT be interpreted as a regex (a target containing
-  # metacharacters could otherwise false-match an unrelated stage name).
-  if ! printf '%s\n' "$stages" | grep -qxF "$target"; then
-    echo "SDX sdx-stage: этап '$target' не активен в треке '$track' — нужна смена трека, не откат: /sdx:retrack <track>." >&2
-    exit 1
-  fi
-
-  # Step 3: no-op if already there (REQ-STAGE-4) — file untouched, not even mtime.
-  if [ "$target" = "$stage" ]; then
-    echo "OK no-op $stage"
-    return 0
-  fi
-
-  local idx_target idx_current
-  idx_target="$(matrix_index "$track" "$target")"
-  idx_current="$(matrix_index "$track" "$stage")"
-  if [ -z "$idx_current" ]; then
-    echo "SDX sdx-stage: текущий этап '$stage' не найден в треке '$track' матрицы — состояние сессии повреждено." >&2
-    exit 2
-  fi
-
-  # Step 4: target later than current in track order -> not a backtrack.
-  if [ "$idx_target" -gt "$idx_current" ]; then
-    echo "SDX sdx-stage: '$target' позже текущего этапа '$stage' в порядке трека — это не откат. Для движения вперёд используй /sdx:next." >&2
-    exit 1
-  fi
-
-  # Step 5: genuine backward move — write, log, then mark outdated artifacts.
-  write_stage "$target"
-  log_line "[STAGE_CHANGE] Возврат на этап $target"
-  echo "OK $stage -> $target"
-
-  local i s row artifact path
-  i=0
-  while IFS= read -r s; do
-    i=$((i + 1))
-    [ "$i" -le "$idx_target" ] && continue
-    # No upper bound here on purpose (W-1 fix, REQ-BACKTRACK-2): iterate through every
-    # remaining stage of the track, not just up to $idx_current — see docstring above.
-    row="$(matrix_row "$track" "$s")"
-    artifact="${row%%|*}"
-    [ "$artifact" = "-" ] && continue
-    path="$sdir/$artifact"
-    mark_outdated "$path" "$target"
-  done <<< "$stages"
-}
-
-# retrack <sid> <target>
-# Called AFTER retrack.md has already edited `track` directly via Edit (legitimate,
-# REQ-DENY-2) — reads the already-updated track and the still-unchanged stage. Checks, IN
-# THIS ORDER (F-1 fix — order matters, see step 3's docstring for why the guard must
-# precede the no-op check): (1) target is a recognized protocol stage name at all (union of
-# tracks) — F-3; (2) target is active in the (new) track; (3) artifact-floor guard
-# (REQ-RETRACK-2, rewritten per F-1 — see below); (4) idempotent no-op.
-#
-# REQ-RETRACK-1 ("без повторной проверки forward гейт-артефактов уходящего этапа") still
-# holds: the guard below never checks the DEPARTING stage's own artifact, nor `target`'s
-# own artifact — only the artifacts of stages that PRECEDE `target` in the new track's row
-# order. It also never re-derives a position from `stage`/the old track the way the
-# previous rank-based version did — see stage_artifact_ok's docstring for the rationale
-# (F-1: a self-reported position cannot be trusted as proof of progress; only artifacts on
-# disk can).
-cmd_retrack() {
-  local sid="$1" target="$2"
-  sdir="$proj/.claude/sessions/$sid"
-  state="$sdir/session_state.json"
-  log="$sdir/session.log"
-
-  [ -f "$state" ] || {
-    echo "SDX sdx-stage: не найден session_state.json для сессии '$sid' — вызовите /sdx:start или /sdx:import." >&2
-    exit 2
-  }
-
-  local track stage
-  track="$(jq -r '.track // empty' "$state")"
-  stage="$(jq -r '.stage // empty' "$state")"
-
-  # Step 1: target must be a recognized stage name in the protocol at all (union of
-  # tracks). Without this step a bogus target (typo, or a regex metacharacter string like
-  # ".*") could previously reach write_stage and corrupt `stage` with a value that is not
-  # any protocol stage name (F-3).
-  if ! matrix_stage_exists "$target"; then
-    echo "SDX sdx-stage: '$target' не распознан как имя этапа протокола SDX. Проверь опечатку." >&2
-    exit 1
-  fi
-
-  local stages
-  stages="$(matrix_stages "$track")"
-
-  # Step 2: target must be active in the (new) track. -F: fixed-string match — $target is
-  # user/orchestrator-supplied and MUST NOT be interpreted as a regex.
-  if ! printf '%s\n' "$stages" | grep -qxF "$target"; then
-    echo "SDX sdx-stage: этап '$target' не активен в треке '$track' — проверь целевой этап /sdx:retrack." >&2
-    exit 1
-  fi
-
-  # Step 3: artifact-floor guard (REQ-RETRACK-2, rewritten — F-1 fix). Deliberately runs
-  # BEFORE the idempotent no-op check below: F-1's sub-finding showed that a target whose
-  # STAGE NAME happens to equal the current `stage` value, but whose TRACK actually just
-  # changed (e.g. patch/Execution -> full/Execution — see scenario [26]), used to reach the
-  # old no-op branch and skip the guard entirely. Running the guard unconditionally closes
-  # that hole without needing to know whether the track literally changed.
-  #
-  # The rule is no longer positional (a rank derived from WHERE `stage` self-reports being)
-  # — it is evidence-based: `target` is reachable iff EVERY stage of the (new) track that
-  # PRECEDES it in row order (matrix_index < idx_target) already has its own gate
-  # objectively satisfied on disk (stage_artifact_ok — same criteria cmd_next applies to a
-  # single departing stage, REQ-STAGE-2). `stage`/the old track are never consulted for
-  # this — a track's own FIRST active stage always has an empty preceding chain, so
-  # entering a track at its own starting point remains unconditionally allowed; landing
-  # further requires the SAME artifacts /sdx:next would have required to get there for
-  # real. This is deliberately NOT bounded by "current progress" as a position, precisely
-  # because that position is exactly what F-1 showed cannot be trusted (a ratchet: two
-  # legitimate-looking retrack calls could inflate it without a single gate ever passing).
-  local idx_target
-  idx_target="$(matrix_index "$track" "$target")"
-  local i=0 s row artifact fail_marker missing_stage="" missing_artifact=""
-  while IFS= read -r s; do
-    i=$((i + 1))
-    [ "$i" -ge "$idx_target" ] && break
-    row="$(matrix_row "$track" "$s")"
-    artifact="${row%%|*}"
-    fail_marker="${row##*|}"
-    if ! stage_artifact_ok "$s" "$artifact" "$fail_marker" "$sdir"; then
-      missing_stage="$s"
-      missing_artifact="$artifact"
-      break
-    fi
-  done <<< "$stages"
-
-  if [ -n "$missing_stage" ]; then
-    if [ "$missing_stage" = "Change" ]; then
-      echo "SDX sdx-stage: '$target' недостижим — этап '$missing_stage' трека '$track' не подтверждён (нет ни change_note.md, ни пары SPEC.md+DESIGN.md в .claude/sessions/$sid/). retrack не продвигает вперёд мимо непройденного гейта — выбери менее продвинутый активный этап нового трека либо заверши '$missing_stage', затем продвинься штатно через /sdx:next." >&2
-    else
-      echo "SDX sdx-stage: '$target' недостижим — этап '$missing_stage' трека '$track' не подтверждён (не найден/пуст '$missing_artifact' в .claude/sessions/$sid/, либо остались находки FAIL). retrack не продвигает вперёд мимо непройденного гейта — выбери менее продвинутый активный этап нового трека либо заверши '$missing_stage' (артефакт '$missing_artifact'), затем продвинься штатно через /sdx:next." >&2
-    fi
-    exit 1
-  fi
-
-  # Step 4: idempotent no-op (REQ-STAGE-4 applies to backtrack/retrack alike, see
-  # DESIGN.md "Обработка ошибок" — "target == current для backtrack/retrack"). Safe here,
-  # AFTER the guard: reaching this point already proves every stage preceding `target` has
-  # a satisfied gate, so a no-op never hides an unearned position.
-  if [ "$target" = "$stage" ]; then
-    echo "OK no-op $stage"
-    return 0
-  fi
-
-  write_stage "$target"
-  log_line "[STAGE_CHANGE] Переход на этап $target"
-  echo "OK $stage -> $target"
+  write_stage "$candidate"
+  log_line "[STAGE_CHANGE] Переход на этап $candidate"
+  echo "OK $stage -> $candidate"
 }
 
 # ---- dispatcher ---------------------------------------------------------------------------
@@ -493,30 +410,14 @@ case "$sub" in
     ;;
   next)
     shift
-    if [ "$#" -ne 1 ]; then
-      echo "SDX sdx-stage: использование: sdx-stage.sh next <sid>" >&2
+    if [ "$#" -lt 1 ]; then
+      echo "SDX sdx-stage: использование: sdx-stage.sh next <sid> [--to <stage>]" >&2
       exit 2
     fi
     cmd_next "$@"
     ;;
-  backtrack)
-    shift
-    if [ "$#" -ne 2 ]; then
-      echo "SDX sdx-stage: использование: sdx-stage.sh backtrack <sid> <target-stage>" >&2
-      exit 2
-    fi
-    cmd_backtrack "$@"
-    ;;
-  retrack)
-    shift
-    if [ "$#" -ne 2 ]; then
-      echo "SDX sdx-stage: использование: sdx-stage.sh retrack <sid> <target-stage>" >&2
-      exit 2
-    fi
-    cmd_retrack "$@"
-    ;;
   *)
-    echo "SDX sdx-stage: использование: sdx-stage.sh <init|next|backtrack|retrack> <args...>" >&2
+    echo "SDX sdx-stage: использование: sdx-stage.sh <init|next> <args...>" >&2
     exit 2
     ;;
 esac

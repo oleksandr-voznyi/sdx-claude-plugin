@@ -60,8 +60,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | FEAT-014 | feat | open | high | 1 | [Self-test enforcement-слоя как условие входа в автономный режим](FEAT-014-enforcement-selftest-autonomy-precondition.md) |
 | PROC-019 | proc | open | high | 1 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) |
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
-| PROC-012 | proc | open | high | 2 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) |
-| PROC-013 | proc | open | high | 2 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) |
 | PROC-017 | proc | open | high | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
 | FEAT-005 | feat | open | high | 3 | [Stop-хук как тик планировщика прогона](FEAT-005-stop-hook-scheduler-tick.md) |
 | PROC-016 | proc | open | high | 3 | [Гейт по контракту вместо гейта по существованию](PROC-016-contract-gates-instead-of-existence.md) |
@@ -70,6 +68,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | FEAT-010 | feat | open | high | 4 | [Асимметричная выдача полномочий](FEAT-010-asymmetric-authority-function.md) |
 | IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
+| DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
 | DEBT-026 | debt | open | normal | 1 | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
@@ -84,6 +83,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-029 | debt | open | normal | null | [Три ветки `/sdx:audit` не исполнялись: исход `CLEAN`, правило `-N`, штатная конфигурация инструментов агента](DEBT-029-audit-run-unexercised-branches.md) |
 | DEBT-030 | debt | open | normal | null | [Значение `model` во frontmatter агентов не валидируется ничем — тихий сбой в рантайме](DEBT-030-agent-model-tier-not-validated.md) |
 | DEBT-033 | debt | open | normal | null | [Конвенция тела записи бэклога описана в шести местах и разошлась; верны две редакции из шести](DEBT-033-backlog-body-convention-scattered.md) |
+| DEBT-035 | debt | open | normal | null | [Два инварианта флагов enforced только прозой команд](DEBT-035-flag-invariants-prose-only.md) |
 | FEAT-002 | feat | open | normal | null | [Мультиязычность плагина: ревизия и улучшения](FEAT-002-plugin-multilingual-support.md) |
 | PROC-006 | proc | open | normal | null | [Публичность и трекшн: путь к программе Claude for Open Source](PROC-006-oss-publicity-traction.md) |
 | PROC-008 | proc | open | normal | null | [Длинный DESIGN.md — систематический источник дрейфа при итеративной доработке](PROC-008-long-design-drift.md) |
@@ -100,19 +100,12 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-032 | debt | open | low | null | [П.4 Closeout-чек-листа требует поля `session` там, где конвенция бэклога отводит `source`](DEBT-032-closeout-session-field-convention-drift.md) |
 | IDEA-007 | idea | open | low | null | [Автоматический пуш записей бэклога в GitHub Issues](IDEA-007-backlog-github-issues-sync.md) |
 | BUG-005 | bug | deferred | normal | null | [Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) |
-| DEBT-003 | debt | deferred | normal | null | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) |
 | DEBT-007 | debt | deferred | normal | null | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) |
-| DEBT-009 | debt | deferred | normal | null | [Discovery на standard-треке не имеет определённого артефакта](DEBT-009-discovery-standard-no-artifact.md) |
-| DEBT-014 | debt | deferred | normal | null | [stage-gate на Verification не пускает тесты хуков — конвенция репозитория не совпадает с allow-паттерном](DEBT-014-stage-gate-blocks-hook-tests.md) |
-| DEBT-015 | debt | deferred | normal | null | [Пробелы тестового покрытия нового stage-enforcement](DEBT-015-stage-guard-coverage-gaps.md) |
 | DEBT-023 | debt | deferred | normal | null | [Гейт `/sdx:proto` не показывает содержимое новых файлов прототипа](DEBT-023-proto-gate-new-files-diff.md) |
-| DEBT-025 | debt | deferred | normal | null | [Ручной прогон трека `vibe` не выполнен — покрытие ключевых критериев видимое](DEBT-025-vibe-manual-test-not-executed.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
 | IDEA-004 | idea | deferred | normal | null | [Расщепление назначения /sdx:checkpoint (REQ-CHECKPOINT-1)](IDEA-004-checkpoint-dual-purpose.md) |
 | IDEA-009 | idea | deferred | normal | null | [Калибровка постановщика по расхождению `declared` / `observed`](IDEA-009-declarant-calibration.md) |
-| DEBT-016 | debt | deferred | low | null | [`stage-write-guard.sh` не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) |
-| DEBT-024 | debt | deferred | low | null | [Инвариант ADR-001 «трек не привязан жёстко к типу» сужен дважды без пометки](DEBT-024-adr-001-invariant-narrowed-twice.md) |
 | IDEA-001 | idea | deferred | low | null | [REQ-CACHE-1 (Фаза 2) остаётся актуальным](IDEA-001-req-cache-1-deterministic-context-order.md) |
 | IDEA-006 | idea | deferred | low | null | [Опциональный escalate-тир параллельного Execution](IDEA-006-parallel-escalate-tier.md) |
 | IDEA-008 | idea | deferred | low | null | [Инструмент сравнения прогонов аудита (тренд находок во времени)](IDEA-008-audit-run-comparison.md) |
@@ -122,6 +115,15 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| PROC-012 | [Треки: пять → одна шкала + два режима](PROC-012-tracks-collapse.md) | `refactor-tracks-collapse-20260901` |
+| PROC-013 | [Enforcement по необратимости, а не по порядку этапов](PROC-013-enforcement-by-irreversibility.md) | `refactor-tracks-collapse-20260901` |
+| DEBT-003 | [Обход stage-gate через Bash не зафиксирован как граница](DEBT-003-stage-gate-bash-bypass-undocumented.md) | `refactor-tracks-collapse-20260901` |
+| DEBT-009 | [Discovery на standard-треке не имеет определённого артефакта](DEBT-009-discovery-standard-no-artifact.md) | `refactor-tracks-collapse-20260901` |
+| DEBT-014 | [stage-gate на Verification не пускает тесты хуков](DEBT-014-stage-gate-blocks-hook-tests.md) | `refactor-tracks-collapse-20260901` |
+| DEBT-015 | [Пробелы тестового покрытия stage-enforcement](DEBT-015-stage-guard-coverage-gaps.md) | `refactor-tracks-collapse-20260901` |
+| DEBT-016 | [stage-write-guard.sh не разрешает сегмент `..` в пути](DEBT-016-stage-write-guard-parent-segment.md) | `refactor-tracks-collapse-20260901` |
+| DEBT-024 | [Инвариант ADR-001 «трек не привязан к типу» сужен дважды без пометки](DEBT-024-adr-001-invariant-narrowed-twice.md) | `refactor-tracks-collapse-20260901` |
+| DEBT-025 | [Ручной прогон трека vibe не выполнен — покрытие видимое](DEBT-025-vibe-manual-test-not-executed.md) | `refactor-tracks-collapse-20260901` |
 | PROC-023 | [Триада SDX прозаична, а формат спецификаций процессов обязан компилироваться](PROC-023-triad-prose-vs-compilable-spec.md) | `design-spec-format-feasibility-20260901` |
 | BUG-007 | [`/sdx:init` создаёт каталоги разборов без файлов-заглушек](BUG-007-init-history-dirs-no-placeholder.md) | `feat-audit-agent-20260726` |
 | BUG-008 | [Зависимость от бита выполнения: ложный FAIL Closeout + тихая смерть enforcement-слоя](BUG-008-archive-verify-exec-bit-dependency.md) | `fix-archive-verify-exec-bit-20260725` |

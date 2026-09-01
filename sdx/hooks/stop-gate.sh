@@ -21,7 +21,14 @@ stage="$(jq -r '.stage // empty' "$state" 2>/dev/null || echo '')"
 # Enforce only in Execution/Verification, unless forced by SDX_STOP_GATE=1 (headless/Phase 4).
 if [ "${SDX_STOP_GATE:-0}" != "1" ]; then
   case "$stage" in
-    Execution|Verification) ;;   # fall through to enforcement
+    Execution|Verification)
+      # REQ-ENF-2: no_gates prototyping reuses the "Execution" stage name (REQ-SCALE-5) — the
+      # floor must stay transparent for it, exactly as it did for the retired "Prototype" name
+      # (ADR-018). Missing field on legacy sessions -> "false" (REQ-COMPAT-1) -> no behaviour
+      # change for anyone else.
+      no_gates="$(jq -r '.no_gates // false' "$state" 2>/dev/null || echo 'false')"
+      [ "$no_gates" = "true" ] && exit 0
+      ;;   # fall through to enforcement
     *) exit 0 ;;                 # other stages -> transparent
   esac
 fi

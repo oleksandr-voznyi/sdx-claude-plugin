@@ -17,5 +17,9 @@
 #      (ADR-019). НЕ версионируются ни при каких условиях.
 .sdx/audit-runs/
 
+# SDX: кэш self-test enforcement-слоя (FEAT-014) — вердикт по отпечатку окружения,
+#      перевычисляется при смене версии плагина/конфигов. НЕ версионируется.
+.claude/sdx/.cache/
+
 # Локальные настройки Claude Code.
 .claude/settings.local.json

@@ -42,14 +42,21 @@ else
 fi
 
 # ---- Scenario 2: every command goes through `bash` (BUG-008) ----
+# Accepts two forms, both mode-independent: plain `bash <path>` and
+# `timeout <N> bash <path>` (the selftest.sh SessionStart entry, FEAT-014 — a
+# `timeout`-wrapped invocation of `bash` is still going through the interpreter).
+# Anchored regex, NOT a loose substring/glob check: `timeout <N> <path>` (timeout present
+# but bash dropped) and bare direct execution must both still be rejected below — a naive
+# "contains bash" or "contains timeout" check would silently widen the invariant.
 echo "[2] Every registered command is invoked via 'bash <path>' (no exec-bit dependency)"
 direct=""
 for cmd in "${COMMANDS[@]}"; do
-  case "$cmd" in
-    bash\ *) ;;                      # invoked through the interpreter — mode-independent
-    *) direct="$direct
-    $cmd" ;;
-  esac
+  if [[ "$cmd" =~ ^bash\  ]] || [[ "$cmd" =~ ^timeout\ [0-9]+\ bash\  ]]; then
+    :                               # invoked through the interpreter — mode-independent
+  else
+    direct="$direct
+    $cmd"
+  fi
 done
 if [ -z "$direct" ]; then
   pass "all ${#COMMANDS[@]} commands invoke their script through bash"
@@ -61,12 +68,19 @@ fi
 echo "[3] Every referenced hook script exists in the plugin tree"
 missing=""
 for cmd in "${COMMANDS[@]}"; do
-  # Strip the leading `bash `, then resolve ${CLAUDE_PLUGIN_ROOT} to the repo root
-  # and drop the quoting the wiring uses around it.
-  path="${cmd#bash }"
+  # Strip the optional leading `timeout <N> ` prefix, then the leading `bash `, then
+  # resolve ${CLAUDE_PLUGIN_ROOT} to the repo root and drop the quoting the wiring uses
+  # around it. Finally drop a trailing `;` left over from a chained `; exit 0` suffix
+  # (selftest.sh's SessionStart entry, FEAT-014).
+  path="$cmd"
+  if [[ "$path" =~ ^timeout\ [0-9]+\ (.*)$ ]]; then
+    path="${BASH_REMATCH[1]}"
+  fi
+  path="${path#bash }"
   path="${path//\"/}"
   path="${path/\$\{CLAUDE_PLUGIN_ROOT\}/$ROOT}"
   path="${path%% *}"
+  path="${path%;}"
   [ -f "$path" ] || missing="$missing
     $path"
 done

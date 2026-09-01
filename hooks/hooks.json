@@ -8,6 +8,14 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/preflight.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "timeout 10 bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/selftest.sh; exit 0"
+          }
+        ]
       }
     ],
     "PreToolUse": [

@@ -34,12 +34,23 @@ if [ "${SDX_STOP_GATE:-0}" != "1" ]; then
 fi
 
 # Resolve the verify command BEFORE touching the loop-guard counter.
-# Priority: per-project executable script, then common project manager autodetect.
+# Priority: per-project script, then common project manager autodetect.
 # Doing this first keeps the no-op path (no test command) from mutating the
 # counter and emitting a spurious "human intervention" message every 4th turn.
+#
+# DEBT-026: presence, NOT the execute bit, is what activates the per-project runner.
+# The bit was never load-bearing for ADR-4's stated reason (the template is excluded by
+# its *name*, verify-cmd.sh.template, which matches neither -x nor -f), while losing it
+# — installers that unpack the plugin as 0600, BUG-008 — silently removed the test floor.
+# Opt-out is now the absence of the file, which cannot happen by accident.
+# `runner` is kept separate from `cmd` so the path is executed directly rather than
+# interpolated into a shell string (a project path with a space or a metacharacter would
+# otherwise be word-split or interpreted). `cmd` carries the label for messages only.
 cmd=""
-if [ -x "$proj/.claude/sdx/verify-cmd.sh" ]; then
-  cmd="$proj/.claude/sdx/verify-cmd.sh"
+runner=""
+if [ -f "$proj/.claude/sdx/verify-cmd.sh" ]; then
+  runner="$proj/.claude/sdx/verify-cmd.sh"
+  cmd=".claude/sdx/verify-cmd.sh"
 elif [ -f "$proj/composer.json" ] && grep -q '"test"' "$proj/composer.json"; then
   cmd="composer test"
 elif [ -f "$proj/package.json" ] && grep -q '"test"' "$proj/package.json"; then
@@ -48,7 +59,8 @@ elif [ -f "$proj/phpunit.xml" ] || [ -f "$proj/phpunit.xml.dist" ]; then
   cmd="./vendor/bin/phpunit"
 fi
 
-# No known test command -> no-op (required behaviour for projects without a test command, ADR-4).
+# No known test command -> no-op (required behaviour for projects without a test command,
+# ADR-4 as amended 2026-09-01: no runner file and no autodetect match).
 [ -z "$cmd" ] && exit 0
 
 # Green-run cache (A4): if the working tree's fingerprint matches the last known-green
@@ -82,7 +94,29 @@ outfile="$proj/.claude/sessions/${sid}/.stopgate.out"
 # Run the verify command under a timeout (R-2/FND-2): a hung/watch-mode runner must
 # not block turn-end indefinitely. timeout's non-zero rc is treated as red (block);
 # the loop-guard above still returns control to the human after 3 attempts.
-if ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash -c "$cmd" >"$outfile" 2>&1 ); then
+# Per-project runner: passed as its own argv element, never interpolated into a shell string
+# (a project path with a space or a metacharacter would otherwise be split or interpreted).
+#
+# The mode bit no longer ACTIVATES the runner (DEBT-026) but still selects HOW to invoke it:
+#   executable  -> run directly, so the kernel honours the shebang and a runner written in
+#                  python/zsh/... keeps working exactly as before this change;
+#   not executable -> interpret as bash. This is the case DEBT-026 exists for: a mode bit
+#                  stripped by an installer (BUG-008) must not silently remove the floor.
+# Both paths keep the floor; neither consults the mode to decide WHETHER to enforce.
+# Autodetect commands are static strings composed here, so `bash -c` stays correct for them.
+run_verify() {
+  if [ -n "$runner" ]; then
+    if [ -x "$runner" ]; then
+      ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" "$runner" >"$outfile" 2>&1 )
+    else
+      ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash "$runner" >"$outfile" 2>&1 )
+    fi
+  else
+    ( cd "$proj" && timeout "${SDX_VERIFY_TIMEOUT:-180}" bash -c "$cmd" >"$outfile" 2>&1 )
+  fi
+}
+
+if run_verify; then
   rm -f "$guard"   # green run: reset loop-guard counter
   # Cache the tree fingerprint at the moment verify went green (A4), so the next
   # Stop on an unchanged tree can skip re-running verify. Recompute post-run to

@@ -329,6 +329,102 @@ else
 fi
 cleanup
 
+# ---- Scenario 15: DEBT-026 — a non-executable verify-cmd.sh must still hold the test floor.
+#                   Before the -x -> -f change this exited 0 (autodetect finds nothing in a bare
+#                   repo), i.e. the floor vanished silently the moment the mode bit was lost —
+#                   the exact deployment scenario observed in BUG-008 (hooks unpacked as 0600). ----
+echo "[15] Non-executable (0600) verify-cmd.sh still enforces: red run blocks turn-end"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+printf '#!/bin/bash\nexit 1\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod 0600 "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+if [ "$RUN_EC" -eq 2 ]; then
+  pass "exit 2 (mode bit is no longer what activates the per-project runner)"
+else
+  fail "Expected exit 2 (red floor must survive a stripped exec bit)" "got exit $RUN_EC"
+fi
+cleanup
+
+# ---- Scenario 16: same, green side. Discriminates "ran and passed" from "silently no-op'd":
+#                   both exit 0, only the former leaves the green-run cache entry. ----
+echo "[16] Non-executable (0600) verify-cmd.sh actually runs: green run writes .stopgate.ok"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+printf '#!/bin/bash\nexit 0\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod 0600 "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok" ]; then
+  pass "exit 0 with .stopgate.ok present (the runner was executed, not skipped)"
+else
+  fail "Expected exit 0 AND .stopgate.ok written" "got exit $RUN_EC, .stopgate.ok present: $([ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok" ] && echo yes || echo no)"
+fi
+cleanup
+
+# ---- Scenario 17: the per-project runner is executed directly, not interpolated into a shell
+#                   string. A project path containing a space used to split into a bogus command
+#                   (audit-2026-07-26 finding); a path with shell metacharacters would have been
+#                   interpreted. Autodetect strings stay on `bash -c` — they are static. ----
+echo "[17] Per-project runner works when the project path contains a space"
+TMPPROJ="$(mktemp -d "${TMPDIR:-/tmp}/sdx stop gate XXXXXX")"
+git -C "$TMPPROJ" init -q
+git -C "$TMPPROJ" config user.email "test@test.com"
+git -C "$TMPPROJ" config user.name "Test"
+git -C "$TMPPROJ" commit -q --allow-empty -m "init"
+git -C "$TMPPROJ" branch -M main 2>/dev/null || true
+git -C "$TMPPROJ" checkout -q -b "sdx/test-stop"
+mkdir -p "$TMPPROJ/.claude/sessions/test-stop" "$TMPPROJ/.claude/sdx"
+printf '{"stage":"Execution"}' > "$TMPPROJ/.claude/sessions/test-stop/session_state.json"
+printf '#!/bin/bash\ntouch "$(dirname "$0")/ran.marker"\nexit 0\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ -f "$TMPPROJ/.claude/sdx/ran.marker" ]; then
+  pass "exit 0 and the runner actually executed (path with a space is not word-split)"
+else
+  fail "Expected exit 0 AND the runner to have executed" "got exit $RUN_EC, marker present: $([ -f "$TMPPROJ/.claude/sdx/ran.marker" ] && echo yes || echo no)"
+fi
+cleanup
+
+# ---- Scenario 18: the template must never be picked up as the runner. Before this delivery two
+#                   independent barriers excluded it — its NAME and its mode (it ships 100644).
+#                   The mode barrier is now gone by design, which makes the name the ONLY thing
+#                   standing between an unconfigured template and a live test floor. Guard it:
+#                   widening the condition to a glob (verify-cmd.sh*) must turn this red. ----
+echo "[18] verify-cmd.sh.template alone is NOT picked up as the runner (name, not mode, excludes it)"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+# The template as shipped: non-executable, and carrying a command that would fail loudly if run.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPPROJ/.claude/sdx/verify-cmd.sh.template"
+chmod 0644 "$TMPPROJ/.claude/sdx/verify-cmd.sh.template"
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ ! -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.count" ]; then
+  pass "exit 0 and no loop-guard counter (the template was not treated as a test command)"
+else
+  fail "Expected exit 0 with no loop-guard counter (template must not activate the floor)" "got exit $RUN_EC, counter present: $([ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.count" ] && echo yes || echo no)"
+fi
+cleanup
+
+# ---- Scenario 19: an executable runner keeps its own interpreter. Activation no longer depends
+#                   on the mode bit (DEBT-026), but invocation still does: an executable runner is
+#                   exec'd directly so the kernel honours its shebang. Forcing `bash <path>`
+#                   unconditionally would turn every python/zsh/... runner permanently red.
+#                   The fixture uses a fake interpreter that exits 0 while the runner body says
+#                   `exit 1`, so the two invocation paths give opposite results. ----
+echo "[19] Executable runner is exec'd directly: its shebang interpreter is honoured, not forced to bash"
+setup_stop_repo "sdx/test-stop" "Execution"
+mkdir -p "$TMPPROJ/.claude/sdx"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMPPROJ/fakeint"     # ignores the script, always green
+chmod +x "$TMPPROJ/fakeint"
+printf '#!%s\nexit 1\n' "$TMPPROJ/fakeint" > "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+chmod +x "$TMPPROJ/.claude/sdx/verify-cmd.sh"
+run_hook
+if [ "$RUN_EC" -eq 0 ] && [ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok" ]; then
+  pass "exit 0 with .stopgate.ok (the shebang interpreter ran; bash would have hit 'exit 1')"
+else
+  fail "Expected exit 0 AND .stopgate.ok (executable runner must not be forced through bash)" "got exit $RUN_EC, .stopgate.ok present: $([ -f "$TMPPROJ/.claude/sessions/test-stop/.stopgate.ok" ] && echo yes || echo no)"
+fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

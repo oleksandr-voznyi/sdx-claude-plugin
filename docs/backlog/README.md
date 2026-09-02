@@ -93,7 +93,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-015 | proc | open | low | 7 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | BUG-009 | bug | open | normal | null | [Нечисловой `.stopgate.count` роняет `stop-gate` кодом 1 — тест-пол исчезает молча](BUG-009-stop-gate-nonnumeric-counter.md) |
 | BUG-010 | bug | open | normal | null | [`selftest.sh` и его проводка непереносимы за пределы GNU-окружения](BUG-010-selftest-platform-portability.md) |
-| DEBT-037 | debt | open | normal | null | [Живая проводка `SessionStart` → `selftest.sh` не исполнялась ни разу](DEBT-037-selftest-live-wiring-unverified.md) |
 | DEBT-036 | debt | open | normal | null | [Ветка автодетекта тест-команды в `stop-gate` не покрыта автотестами](DEBT-036-stop-gate-autodetect-branch-untested.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
@@ -116,6 +115,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| DEBT-037 | [Живая проводка `SessionStart` → `selftest.sh` не исполнялась ни разу](DEBT-037-selftest-live-wiring-unverified.md) | — (закрыта наблюдением вне сессии, плагин 2.2.0) |
 | FEAT-014 | [Self-test enforcement-слоя как условие входа в автономный режим](FEAT-014-enforcement-selftest-autonomy-precondition.md) | `feat-enforcement-selftest-20260901` |
 | DEBT-010 | [Тихая деградация хуков не видна пользователю](DEBT-010-silent-hook-degradation-invisible.md) | `feat-enforcement-selftest-20260901` |
 | DEBT-026 | [`stop-gate` определяет тест-команду по биту выполнения — потеря бита молча снимает тест-пол](DEBT-026-stop-gate-verify-cmd-exec-bit.md) | `fix-stop-gate-exec-bit-20260901` |

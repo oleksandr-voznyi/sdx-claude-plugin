@@ -94,6 +94,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | BUG-009 | bug | open | normal | null | [Нечисловой `.stopgate.count` роняет `stop-gate` кодом 1 — тест-пол исчезает молча](BUG-009-stop-gate-nonnumeric-counter.md) |
 | BUG-010 | bug | open | normal | null | [`selftest.sh` и его проводка непереносимы за пределы GNU-окружения](BUG-010-selftest-platform-portability.md) |
 | DEBT-036 | debt | open | normal | null | [Ветка автодетекта тест-команды в `stop-gate` не покрыта автотестами](DEBT-036-stop-gate-autodetect-branch-untested.md) |
+| DEBT-038 | debt | open | low | null | [Поля `artifacts` и `history` в `session_state.json` объявлены и мертвы](DEBT-038-session-state-dead-fields.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |

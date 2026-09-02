@@ -148,10 +148,10 @@ description: Гейт принятия/отклонения прототипа (
      git add "$sdir/prototype_baseline.txt" && git commit -m "sdx(<id>): vibe baseline (attempt <N+1>)"
      ```
      Если гард сработал (путь с переводом строки среди untracked) — новый baseline НЕ записывается: сообщи пользователю об ошибке и остановись; попытка `<N+1>` не стартует, пока проблемный путь не будет убран/переименован. Это честный отказ, а не тихая деградация к `git clean`.
-   - Затем запиши строку в лог и закоммить её вместе с уже обновлённым baseline (`K` — суммарное число строк, которое было в `$tmp_tracked`+`$tmp_new` до их удаления в шаге (г) выше):
+   - Затем запиши строку в лог и закоммить её вместе с уже обновлённым baseline (`K` — суммарное число строк, которое было в `$tmp_tracked`+`$tmp_new` до их удаления в шаге (г) выше). Отклонение прототипа — акт категории `[деструктив]` (`PROC-019`): ДО коммита ниже добавь запись в `decisions_log.md` (четыре поля — развилка/вариант/обоснование/этап, см. `sdx/protocol.md` «Журнал решений») и включи файл в тот же `git add`, батчась в этот же коммит, а не отдельным ходом:
      ```bash
      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CHECKPOINT] Прототип отклонён (попытка <N>), откат по списку из <K> файлов; новая точка — попытка <N+1>" >> "$sdir/session.log"
-     git add "$sdir/prototype_baseline.txt" "$sdir/session.log" && git commit -m "sdx(<id>): vibe prototype rejected (attempt <N>), baseline reset"
+     git add "$sdir/prototype_baseline.txt" "$sdir/session.log" "$sdir/decisions_log.md" && git commit -m "sdx(<id>): vibe prototype rejected (attempt <N>), baseline reset"
      ```
      (Категория лога — существующая `CHECKPOINT`; отдельная пятая категория не вводится, `STAGE_CHANGE` здесь неверен — `stage` не меняется и `sdx-stage.sh` не вызывается.)
    - Сообщи итог пользователю: сколько файлов восстановлено, сколько удалено, остаток (если есть). Напомни, что сессия осталась на `Execution` (`no_gates == true`) и попытка `<N+1>` может начинаться немедленно.
@@ -291,10 +291,10 @@ description: Гейт принятия/отклонения прототипа (
          bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/sdx-stage.sh" next "<id>" --to "Execution"
          ```
          Он тривиально безопасен и не требует НИКАКОЙ evidence-проверки по совершенно конкретной причине: сессия с `no_gates == true` ВСЕГДА находится на `stage == "Execution"` (REQ-SCALE-5) — значит `--to "Execution"` целится в СВОЙ ЖЕ текущий этап (`idx_target == idx_current`), что по контракту `next --to` (см. `sdx/hooks/sdx-stage.sh`) — буквальный **no-op**: файл `stage` не трогается вообще, писать нечего, кроме последующего снятия `no_gates`. Артефакты реверс-инжиниринга к этому моменту уже созданы шагом 2 выше — именно они станут доказательством гейта СЛЕДУЮЩЕГО, уже обычного вызова `next` (без `--to`), когда сессия продолжит путь `Execution → Verification → Closeout` штатно.
-      2. **Снятие `no_gates` (REQ-FLAG-4, одноразовость)** — прямой `Edit` поля `no_gates: true → false` в `session_state.json` (легитимный путь — поле не `stage`, и в любом случае deny-хука, который мог бы это заблокировать, больше не существует) — ОДИН РАЗ, ДО следующего вызова `next`, потому что приоритет-0 проверка REQ-LEGAL-1 в `cmd_next` иначе продолжит возвращать `OK no-op Execution` бесконечно. Закоммить эту правку вместе с логом одним ходом:
+      2. **Снятие `no_gates` (REQ-FLAG-4, одноразовость)** — прямой `Edit` поля `no_gates: true → false` в `session_state.json` (легитимный путь — поле не `stage`, и в любом случае deny-хука, который мог бы это заблокировать, больше не существует) — ОДИН РАЗ, ДО следующего вызова `next`, потому что приоритет-0 проверка REQ-LEGAL-1 в `cmd_next` иначе продолжит возвращать `OK no-op Execution` бесконечно. Легализация прототипа — акт категории `[деструктив]` (`PROC-019`, симметрично отклонению на шаге 6): ДО коммита ниже добавь запись в `decisions_log.md` (четыре поля, см. `sdx/protocol.md` «Журнал решений»). Закоммить эту правку вместе с логом и журналом решений одним ходом:
          ```bash
          echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STAGE_CHANGE] Легализация прототипа: снятие no_gates" >> .claude/sessions/<id>/session.log \
-           && git add .claude/sessions/<id>/session_state.json .claude/sessions/<id>/session.log \
+           && git add .claude/sessions/<id>/session_state.json .claude/sessions/<id>/session.log .claude/sessions/<id>/decisions_log.md \
            && git commit -m "sdx(<id>): legalize prototype — drop no_gates"
          ```
          Повторная установка `no_gates: true` в ЭТОЙ ЖЕ сессии запрещена прозаически текстом этой команды и `commands/next.md` (REQ-FLAG-4) — тот же класс trade-off, что и сегодняшний запрет обратного входа в режим прототипирования. Не предлагай её пользователю ни в каком виде.

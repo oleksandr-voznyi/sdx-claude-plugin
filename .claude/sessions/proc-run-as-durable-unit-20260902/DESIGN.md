@@ -378,7 +378,7 @@ jq -r '.stage, .no_code, .no_gates, .gate_mode' "$sdir/session_state.json"
 grep -c '^- \[x\]' "$sdir/PLAN.md" 2>/dev/null || echo 0
 grep -c '^- \[[ x]\]' "$sdir/PLAN.md" 2>/dev/null || echo 0
 grep -m1 '^- \[ \]' "$sdir/PLAN.md" 2>/dev/null || echo "(нет открытых задач)"
-grep '\[STAGE_CHANGE\]' "$sdir/session.log" 2>/dev/null | tail -1 || echo "(переходов не зафиксировано)"
+last_tr="$(grep '\[STAGE_CHANGE\]' "$sdir/session.log" 2>/dev/null | tail -1)"; printf '%s\n' "${last_tr:-(переходов не зафиксировано)}"
 [ -f "$sdir/decisions_log.md" ] && grep '^### Развилка' "$sdir/decisions_log.md" || echo "(журнал решений пуст/отсутствует)"
 ```
 (Каждая строка — независимо проверенная команда, см. «Тестовая стратегия», доказательство

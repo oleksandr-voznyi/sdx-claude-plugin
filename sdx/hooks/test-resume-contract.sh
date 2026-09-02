@@ -137,7 +137,8 @@ echo "[T14] scenario 1: composition without dirty tree restores stage/progress/t
   checked="$(grep -c '^- \[x\]' "$SDIR/PLAN.md" 2>/dev/null || echo 0)"
   total="$(grep -c '^- \[[ x]\]' "$SDIR/PLAN.md" 2>/dev/null || echo 0)"
   first_open="$(grep -m1 '^- \[ \]' "$SDIR/PLAN.md" 2>/dev/null || echo "(нет открытых задач)")"
-  last_stage_line="$(grep '\[STAGE_CHANGE\]' "$SDIR/session.log" 2>/dev/null | tail -1 || echo '(переходов не зафиксировано)')"
+  last_tr="$(grep '\[STAGE_CHANGE\]' "$SDIR/session.log" 2>/dev/null | tail -1)"
+  last_stage_line="${last_tr:-(переходов не зафиксировано)}"
   decisions_found="$([ -f "$SDIR/decisions_log.md" ] && grep -c '^### Развилка' "$SDIR/decisions_log.md" || echo 0)"
 
   if [ "$stage" = "Execution" ] && [ "$no_code" = "false" ] && [ "$no_gates" = "false" ] \
@@ -157,7 +158,8 @@ echo "[T14] scenario 1: composition without dirty tree restores stage/progress/t
   sdirm="$mut/.claude/sessions/fix-01"
   grep -v 'Переход на этап Execution' "$sdirm/session.log" > "$sdirm/session.log.tmp" \
     && mv "$sdirm/session.log.tmp" "$sdirm/session.log"
-  last_mut="$(grep '\[STAGE_CHANGE\]' "$sdirm/session.log" 2>/dev/null | tail -1 || echo '(переходов не зафиксировано)')"
+  lm="$(grep '\[STAGE_CHANGE\]' "$sdirm/session.log" 2>/dev/null | tail -1)"
+  last_mut="${lm:-(переходов не зафиксировано)}"
   if printf '%s' "$last_mut" | grep -q 'Переход на этап Execution'; then
     fail "T14 red (session.log)" "mutation did not change the recovered transition: '$last_mut'"
   else
@@ -193,13 +195,35 @@ echo "[T14b] composition reads the last [STAGE_CHANGE], not the last log line (r
   fi
 
   # Boundary: a log with no transitions at all must not yield an empty string silently.
+  #
+  # This assertion MUST be evaluated in a shell that does NOT inherit this suite's options.
+  # The first version of it was green for the wrong reason: the delivered line ended in
+  # `| tail -1 || echo "(…)"`, whose fallback fires only under `set -o pipefail` (a pipeline's
+  # status is `tail`'s, and `tail -1` exits 0 on empty input). This suite sets `-uo pipefail`;
+  # the agent shell that actually runs the command does not. The test proved a property of its
+  # own environment and called it a property of the delivery -- caught by fresh-eyes review as
+  # a FAIL. Hence: run the delivered form in BOTH environments and require the same answer.
   nolog="$(mktemp -d)"
   printf '[t] [START] x\n' > "$nolog/session.log"
-  empty="$(grep '\[STAGE_CHANGE\]' "$nolog/session.log" 2>/dev/null | tail -1 || echo '(переходов не зафиксировано)')"
-  if [ "$empty" = "(переходов не зафиксировано)" ]; then
-    pass "boundary: a log with no [STAGE_CHANGE] yields an explicit marker, not an empty line"
+  # The delivered composition, quoted verbatim from commands/resume.md.
+  delivered='last_tr="$(grep '"'"'\[STAGE_CHANGE\]'"'"' "$sdir/session.log" 2>/dev/null | tail -1)"; printf '"'"'%s\n'"'"' "${last_tr:-(переходов не зафиксировано)}"'
+  plain="$(env -i bash --noprofile --norc -c "sdir='$nolog'; $delivered")"
+  strict="$(env -i bash --noprofile --norc -c "set -uo pipefail; sdir='$nolog'; $delivered")"
+  if [ "$plain" = "(переходов не зафиксировано)" ] && [ "$strict" = "$plain" ]; then
+    pass "boundary: no-transition log yields the explicit marker identically with and without pipefail (env-independent)"
   else
-    fail "T14b boundary" "expected the explicit marker, got '$empty'"
+    fail "T14b boundary" "plain='$plain' strict='$strict' (expected both to be the explicit marker)"
+  fi
+
+  # Red side for the boundary: the pipefail-dependent form must be shown to DIFFER between the
+  # two environments -- otherwise the check above would pass for any implementation.
+  fragile='grep '"'"'\[STAGE_CHANGE\]'"'"' "$sdir/session.log" 2>/dev/null | tail -1 || echo "(переходов не зафиксировано)"'
+  f_plain="$(env -i bash --noprofile --norc -c "sdir='$nolog'; $fragile")"
+  f_strict="$(env -i bash --noprofile --norc -c "set -uo pipefail; sdir='$nolog'; $fragile")"
+  if [ -z "$f_plain" ] && [ "$f_strict" = "(переходов не зафиксировано)" ]; then
+    pass "red: the '|| echo' form is empty without pipefail and non-empty with it — the check discriminates env-dependence"
+  else
+    fail "T14b boundary red" "f_plain='$f_plain' f_strict='$f_strict'"
   fi
   rm -rf "$nolog"
 }
@@ -456,6 +480,7 @@ echo "[T20] structural check: commands/resume.md — guard, all-records sweep, R
     # last line is not a transition, i.e. exactly the CLI-death case this command exists for.
     grep -qF "grep '\\[STAGE_CHANGE\\]' \"\$sdir/session.log\" 2>/dev/null | tail -1" "$f" \
       && ! grep -qF 'tail -1 "$(grep -l' "$f" \
+      && ! grep -qF '| tail -1 || echo' "$f" \
       && n=$((n + 1))
     echo "$n"
   }

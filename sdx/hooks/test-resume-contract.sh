@@ -462,11 +462,17 @@ echo "[T22] structural check: commands/verify.md — decision record batched wit
     local f="$1" n=0
     grep -qF 'Запись в журнал решений (`PROC-019`)' "$f" && n=$((n + 1))
     grep -qF 'decisions_log.md, если он был изменён на шаге 7' "$f" && n=$((n + 1))
+    # Third marker: the explicit NEGATIVE note in step 5 (reviewer's input composition).
+    # DESIGN.md ("Безопасность" -> "Изоляция reviewer") asks for it by name, and asks for it
+    # HERE rather than only in sdx/protocol.md, precisely to stop a future edit from adding
+    # decisions_log.md to the reviewer's input "for completeness". A note whose whole purpose
+    # is to prevent a future regression is worthless if its own absence is not caught.
+    grep -qF 'в состав входа НЕ входит' "$f" && n=$((n + 1))
     echo "$n"
   }
   n_checks="$(verify_checks "$VERIFY_MD")"
-  if [ "$n_checks" -eq 2 ]; then
-    pass "green: 2/2 markers present (decisions_log.md write + batched commit)"
+  if [ "$n_checks" -eq 3 ]; then
+    pass "green: 3/3 markers present (decisions_log.md write + batched commit + reviewer-isolation note)"
   else
     fail "T22 green" "n_checks=$n_checks"
   fi
@@ -474,10 +480,21 @@ echo "[T22] structural check: commands/verify.md — decision record batched wit
   mutated="$(mktemp)"
   grep -vF 'Запись в журнал решений (`PROC-019`)' "$VERIFY_MD" > "$mutated"
   n_red="$(verify_checks "$mutated")"
-  if [ "$n_red" -eq 1 ]; then
-    pass "red: stripping the decisions_log.md write step drops the count to 1/2 — gate discriminates"
+  if [ "$n_red" -eq 2 ]; then
+    pass "red: stripping the decisions_log.md write step drops the count to 2/3 — gate discriminates"
   else
-    fail "T22 red" "expected 1, got $n_red"
+    fail "T22 red" "expected 2, got $n_red"
+  fi
+
+  # Second, independent red branch: strip ONLY the reviewer-isolation note. Without its own
+  # mutation the third marker would be asserted green-only, i.e. it could be silently deleted
+  # by the same drift it exists to prevent.
+  grep -vF 'в состав входа НЕ входит' "$VERIFY_MD" > "$mutated"
+  n_red2="$(verify_checks "$mutated")"
+  if [ "$n_red2" -eq 2 ]; then
+    pass "red: stripping the reviewer-isolation note alone drops the count to 2/3 — the note itself is guarded"
+  else
+    fail "T22 red (isolation note)" "expected 2, got $n_red2"
   fi
   rm -f "$mutated"
 }

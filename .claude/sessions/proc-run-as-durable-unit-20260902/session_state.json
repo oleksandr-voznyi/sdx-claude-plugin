@@ -1,7 +1,7 @@
 {
   "session_id": "proc-run-as-durable-unit-20260902",
   "type": "feature",
-  "stage": "Task Planning",
+  "stage": "Execution",
   "gate_mode": "interactive",
   "git_branch": "sdx/proc-run-as-durable-unit-20260902",
   "no_code": false,

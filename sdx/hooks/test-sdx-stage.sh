@@ -647,6 +647,72 @@ else
 fi
 cleanup
 
+# ---- Scenario 31 (T02, REQ-STATE-1/2, DEBT-038): cmd_init no longer writes artifacts/history ----
+echo "[31] cmd_init no longer writes artifacts/history (DEBT-038, REQ-STATE-1/2)"
+TMPPROJ="$(mktemp -d)"
+run_stage init "t31" "feature" "Discovery" "interactive" "sdx/t31" "false" "false" > /dev/null
+sf="$(state_file t31)"
+has_artifacts="$(jq 'has("artifacts")' "$sf")"
+has_history="$(jq 'has("history")' "$sf")"
+if [ "$has_artifacts" = "false" ] && [ "$has_history" = "false" ]; then
+  pass "green: fresh session_state.json has no artifacts/history keys"
+else
+  fail "31 green" "has_artifacts=$has_artifacts has_history=$has_history"
+fi
+cleanup
+
+# Red side (DoD demands a real mutation, not an honest limit — the mutation is cheap: restore
+# the two dead keys into the SAME jq filter literal cmd_init uses, in a mktemp copy of the
+# script, and run cmd_init from the mutant against a fresh fixture — style of test-selftest.sh
+# [T28] (mutant-copy-and-run, not "checked by hand once").
+mutant="$(mktemp)"
+sed "s/no_code:\$no_code, no_gates:\$no_gates}/no_code:\$no_code, no_gates:\$no_gates, artifacts:[], history:[]}/" \
+  "$SCRIPT" > "$mutant"
+TMPPROJ="$(mktemp -d)"
+CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$mutant" init "t31r" "feature" "Discovery" "interactive" "sdx/t31r" "false" "false" > /dev/null
+sf_r="$(state_file t31r)"
+has_artifacts_r="$(jq 'has("artifacts")' "$sf_r" 2>/dev/null)"
+has_history_r="$(jq 'has("history")' "$sf_r" 2>/dev/null)"
+if [ "$has_artifacts_r" = "true" ] && [ "$has_history_r" = "true" ]; then
+  pass "red: mutant with artifacts/history re-inserted into the jq filter produces has(...)==true — scenario discriminates"
+else
+  fail "31 red" "expected mutant to reproduce DEBT-038 (has_artifacts=true, has_history=true), got has_artifacts=$has_artifacts_r has_history=$has_history_r"
+fi
+rm -f "$mutant"
+cleanup
+
+# ---- Scenario 32 (T03, REQ-STATE-2, DEBT-038): legacy session_state.json with
+# artifacts/history survives cmd_next untouched -- honest limit on the red side, no discriminating
+# mutation exists for this scenario (recorded explicitly per [T08]/[T27] test-selftest.sh style,
+# not a silent skip) ----
+echo "[32] legacy session_state.json with artifacts/history survives cmd_next untouched (REQ-STATE-2)"
+setup_sdx_repo "t32" "Discovery"
+sf="$(state_file t32)"
+# setup_sdx_repo still writes the legacy artifacts:[]/history:[] fields (test-sdx-stage.sh's own
+# fixture constructor, line ~31 -- untouched by this delivery's Group 8 T26 hygiene pass, which
+# is optional and out of scope for this task) -- this scenario relies on that fact to model a
+# pre-existing session_state.json created by an older sdx-stage.sh.
+printf '# ctx\n' > "$TMPPROJ/.claude/sessions/t32/context_report.md"
+out="$(run_stage next "t32")"
+ec=$?
+if [ "$ec" -eq 0 ] \
+   && [ "$(jq -r '.stage' "$sf")" = "Business Spec" ] \
+   && [ "$(jq -e '.artifacts == [] and .history == []' "$sf")" = "true" ]; then
+  pass "legacy artifacts/history fields survive cmd_next unread and untouched, stage transitioned correctly"
+else
+  fail "32" "ec=$ec stage=$(jq -r '.stage' "$sf" 2>/dev/null) artifacts=$(jq -c '.artifacts' "$sf" 2>/dev/null) history=$(jq -c '.history' "$sf" 2>/dev/null)"
+fi
+cleanup
+# Honest limit (same spirit as [T08]/[T27] test-selftest.sh, recorded explicitly rather than
+# silently skipped): no discriminating mutation exists for this scenario's "not read" half.
+# No line in sdx-stage.sh today reads .artifacts or .history -- the ONLY mutation that could turn
+# this scenario red would be to ADD code that reads them, i.e. to reintroduce the exact defect
+# DEBT-038 removed. That would be a tautological test ("we didn't add what we deliberately don't
+# add"), not a meaningful red side, so it is not constructed. What IS meaningfully red-tested is
+# the survival half (scenario 31's mutant demonstrates the write side is real and reversible);
+# this scenario's own contribution -- confirming cmd_next does not choke on or strip legacy
+# fields -- is asserted green only, by design, matching DESIGN.md's DoD table row B verbatim.
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

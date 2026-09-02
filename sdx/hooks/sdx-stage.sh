@@ -239,7 +239,7 @@ cmd_init() {
         --arg session_id "$sid" --arg type "$type" --arg stage "$stage" \
         --arg gate_mode "$gate_mode" --arg git_branch "$git_branch" \
         --argjson no_code "$no_code" --argjson no_gates "$no_gates" \
-        '{session_id:$session_id, type:$type, stage:$stage, gate_mode:$gate_mode, git_branch:$git_branch, no_code:$no_code, no_gates:$no_gates, artifacts:[], history:[]}' \
+        '{session_id:$session_id, type:$type, stage:$stage, gate_mode:$gate_mode, git_branch:$git_branch, no_code:$no_code, no_gates:$no_gates}' \
         > "$state"; then
     rm -f "$state"
     echo "SDX sdx-stage: jq не смог создать $state." >&2

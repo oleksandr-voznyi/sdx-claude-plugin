@@ -98,12 +98,19 @@ EOF
 - [ ] T04 Fourth task, open
 EOF
 
+  # Log lines use the format the REAL writer produces (sdx-stage.sh log_line: "[STAGE_CHANGE]
+  # Переход на этап <X>"), not a "<X> -> <Y>" shape no writer emits. The trailing [ERROR] line
+  # is not decoration: after a CLI death the last line of session.log is routinely an [ERROR]
+  # or [CHECKPOINT] entry, which is exactly what made the original `tail -1 "$(grep -l …)"`
+  # composition wrong. A fixture whose last line is a [STAGE_CHANGE] cannot tell the correct
+  # implementation from the broken one -- see scenario T14b below.
   cat > "$sdir/session.log" <<'EOF'
-[2026-09-01 09:00:00] [START] Session started
-[2026-09-01 09:05:00] [STAGE_CHANGE] Discovery -> Business Spec
-[2026-09-01 10:00:00] [STAGE_CHANGE] Business Spec -> Technical Design
-[2026-09-01 11:00:00] [STAGE_CHANGE] Technical Design -> Task Planning
-[2026-09-01 12:00:00] [STAGE_CHANGE] Task Planning -> Execution
+[2026-09-01 09:00:00] [START] Инициализация сессии fix-01
+[2026-09-01 09:05:00] [STAGE_CHANGE] Переход на этап Business Spec
+[2026-09-01 10:00:00] [STAGE_CHANGE] Переход на этап Technical Design
+[2026-09-01 11:00:00] [STAGE_CHANGE] Переход на этап Task Planning
+[2026-09-01 12:00:00] [STAGE_CHANGE] Переход на этап Execution
+[2026-09-01 12:30:00] [ERROR] Verification: 2 FAIL
 EOF
 
   cat > "$sdir/decisions_log.md" <<'EOF'
@@ -130,15 +137,15 @@ echo "[T14] scenario 1: composition without dirty tree restores stage/progress/t
   checked="$(grep -c '^- \[x\]' "$SDIR/PLAN.md" 2>/dev/null || echo 0)"
   total="$(grep -c '^- \[[ x]\]' "$SDIR/PLAN.md" 2>/dev/null || echo 0)"
   first_open="$(grep -m1 '^- \[ \]' "$SDIR/PLAN.md" 2>/dev/null || echo "(нет открытых задач)")"
-  last_stage_line="$(tail -1 "$(grep -l '\[STAGE_CHANGE\]' "$SDIR/session.log" 2>/dev/null)" 2>/dev/null)"
+  last_stage_line="$(grep '\[STAGE_CHANGE\]' "$SDIR/session.log" 2>/dev/null | tail -1 || echo '(переходов не зафиксировано)')"
   decisions_found="$([ -f "$SDIR/decisions_log.md" ] && grep -c '^### Развилка' "$SDIR/decisions_log.md" || echo 0)"
 
   if [ "$stage" = "Execution" ] && [ "$no_code" = "false" ] && [ "$no_gates" = "false" ] \
      && [ "$gate_mode" = "interactive" ] && [ "$checked" -eq 2 ] && [ "$total" -eq 4 ] \
      && printf '%s' "$first_open" | grep -q 'T03' \
-     && printf '%s' "$last_stage_line" | grep -q 'Task Planning -> Execution' \
+     && printf '%s' "$last_stage_line" | grep -q 'Переход на этап Execution' \
      && [ "$decisions_found" -eq 1 ]; then
-    pass "green: stage=Execution 2/4 first-open=T03 last-transition='Task Planning -> Execution' decisions=1"
+    pass "green: stage=Execution 2/4 first-open=T03 last-transition='Переход на этап Execution' decisions=1"
   else
     fail "T14 green" "stage=$stage no_code=$no_code no_gates=$no_gates gate_mode=$gate_mode checked=$checked total=$total first_open='$first_open' last='$last_stage_line' decisions=$decisions_found"
   fi
@@ -148,14 +155,53 @@ echo "[T14] scenario 1: composition without dirty tree restores stage/progress/t
   # value must change and the assertion above must no longer hold for it.
   mut="$(mktemp -d)"; cp -r "$FIX/." "$mut/"
   sdirm="$mut/.claude/sessions/fix-01"
-  sed -i '$ d' "$sdirm/session.log"
-  last_mut="$(tail -1 "$(grep -l '\[STAGE_CHANGE\]' "$sdirm/session.log" 2>/dev/null)" 2>/dev/null)"
-  if printf '%s' "$last_mut" | grep -q 'Task Planning -> Execution'; then
+  grep -v 'Переход на этап Execution' "$sdirm/session.log" > "$sdirm/session.log.tmp" \
+    && mv "$sdirm/session.log.tmp" "$sdirm/session.log"
+  last_mut="$(grep '\[STAGE_CHANGE\]' "$sdirm/session.log" 2>/dev/null | tail -1 || echo '(переходов не зафиксировано)')"
+  if printf '%s' "$last_mut" | grep -q 'Переход на этап Execution'; then
     fail "T14 red (session.log)" "mutation did not change the recovered transition: '$last_mut'"
   else
-    pass "red: stripping the last session.log line changes the recovered transition (was 'Task Planning -> Execution', now '$last_mut') — scenario discriminates"
+    pass "red: stripping the last transition line changes the recovered transition (now '$last_mut') — scenario discriminates"
   fi
   rm -rf "$mut"
+}
+
+# ---------------------------------------------------------------------------------------------
+# T14b — the composition must read the last [STAGE_CHANGE] LINE, not the last line of the file.
+# This scenario exists because the delivered composition originally read
+#   tail -1 "$(grep -l '[STAGE_CHANGE]' session.log)"
+# where grep -l prints the FILE NAME, so tail -1 returned the file's last line whatever its
+# category. Found as a FAIL by fresh-eyes review of this very delivery. The fixture's trailing
+# [ERROR] line is what makes the two forms observably different: with a [STAGE_CHANGE] last,
+# both forms agree and no test could tell them apart.
+echo "[T14b] composition reads the last [STAGE_CHANGE], not the last log line (regression guard)"
+{
+  correct="$(grep '\[STAGE_CHANGE\]' "$SDIR/session.log" 2>/dev/null | tail -1 || echo '(переходов не зафиксировано)')"
+  # The defective form, reproduced verbatim as the mutant:
+  defective="$(tail -1 "$(grep -l '\[STAGE_CHANGE\]' "$SDIR/session.log" 2>/dev/null)" 2>/dev/null)"
+
+  if printf '%s' "$correct" | grep -q '\[STAGE_CHANGE\] Переход на этап Execution'; then
+    pass "green: correct form recovers the last transition even with a trailing [ERROR] line"
+  else
+    fail "T14b green" "correct='$correct'"
+  fi
+
+  if printf '%s' "$defective" | grep -q '\[ERROR\]'; then
+    pass "red: the defective 'tail -1 \$(grep -l …)' form returns the [ERROR] line instead — the two forms are observably different"
+  else
+    fail "T14b red" "defective form did not reproduce the defect: '$defective'"
+  fi
+
+  # Boundary: a log with no transitions at all must not yield an empty string silently.
+  nolog="$(mktemp -d)"
+  printf '[t] [START] x\n' > "$nolog/session.log"
+  empty="$(grep '\[STAGE_CHANGE\]' "$nolog/session.log" 2>/dev/null | tail -1 || echo '(переходов не зафиксировано)')"
+  if [ "$empty" = "(переходов не зафиксировано)" ]; then
+    pass "boundary: a log with no [STAGE_CHANGE] yields an explicit marker, not an empty line"
+  else
+    fail "T14b boundary" "expected the explicit marker, got '$empty'"
+  fi
+  rm -rf "$nolog"
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -404,22 +450,43 @@ echo "[T20] structural check: commands/resume.md — guard, all-records sweep, R
     grep -qF 'Соблюдение записанных решений (REQ-RESUME-3)' "$f" && n=$((n + 1))      # (в)
     grep -qF 'не распространяется' "$f" && n=$((n + 1))                               # (г)
     normalize "$f" | grep -qF 'на момент последнего зафиксированного (закоммиченного) состояния' && n=$((n + 1))  # (д)
+    # (е) The composition block must read the last [STAGE_CHANGE] LINE. Positive marker plus a
+    # NEGATIVE one: the defective `tail -1 "$(grep -l …)"` form must not come back. Guarding the
+    # absence matters as much as the presence here -- the two forms differ only on logs whose
+    # last line is not a transition, i.e. exactly the CLI-death case this command exists for.
+    grep -qF "grep '\\[STAGE_CHANGE\\]' \"\$sdir/session.log\" 2>/dev/null | tail -1" "$f" \
+      && ! grep -qF 'tail -1 "$(grep -l' "$f" \
+      && n=$((n + 1))
     echo "$n"
   }
   n_checks="$(resume_checks "$RESUME_MD")"
-  if [ "$n_checks" -eq 5 ]; then
-    pass "green: 5/5 structural markers present (guard, all-records, REQ-RESUME-3, asymmetry, kill-test phrase)"
+  if [ "$n_checks" -eq 6 ]; then
+    pass "green: 6/6 structural markers present (guard, all-records, REQ-RESUME-3, asymmetry, kill-test phrase, correct STAGE_CHANGE read)"
   else
     fail "T20 green" "n_checks=$n_checks"
   fi
 
+  # Independent red branch for marker (е): reintroduce the defective form and watch it drop.
+  regressed="$(mktemp)"
+  # Mutant = the file with the defective form present (as a careless future edit would leave
+  # it). The negative half of marker (е) must fire on its mere presence, wherever it sits.
+  cp "$RESUME_MD" "$regressed"
+  printf '   tail -1 "$(grep -l %s[STAGE_CHANGE]%s "$sdir/session.log")"\n' "'" "'" >> "$regressed"
+  n_reg="$(resume_checks "$regressed")"
+  if [ "$n_reg" -eq 5 ]; then
+    pass "red: reintroducing the defective 'tail -1 \$(grep -l …)' form drops the count to 5/6 — the regression is caught"
+  else
+    fail "T20 red (STAGE_CHANGE read)" "expected 5, got $n_reg"
+  fi
+  rm -f "$regressed"
+
   mutated="$(mktemp)"
   grep -v 'Гард чистого рабочего дерева' "$RESUME_MD" > "$mutated"
   n_red="$(resume_checks "$mutated")"
-  if [ "$n_red" -eq 4 ]; then
-    pass "red: stripping the clean-tree guard heading drops the count to 4/5 — gate discriminates"
+  if [ "$n_red" -eq 5 ]; then
+    pass "red: stripping the clean-tree guard heading drops the count to 5/6 — gate discriminates"
   else
-    fail "T20 red" "expected 4, got $n_red"
+    fail "T20 red" "expected 5, got $n_red"
   fi
   rm -f "$mutated"
 }

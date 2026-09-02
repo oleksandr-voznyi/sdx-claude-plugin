@@ -40,7 +40,7 @@ description: Durable-возобновление прогона сессии по
    grep -c '^- \[x\]' "$sdir/PLAN.md" 2>/dev/null || echo 0
    grep -c '^- \[[ x]\]' "$sdir/PLAN.md" 2>/dev/null || echo 0
    grep -m1 '^- \[ \]' "$sdir/PLAN.md" 2>/dev/null || echo "(нет открытых задач)"
-   tail -1 "$(grep -l '\[STAGE_CHANGE\]' "$sdir/session.log" 2>/dev/null)" 2>/dev/null
+   grep '\[STAGE_CHANGE\]' "$sdir/session.log" 2>/dev/null | tail -1 || echo "(переходов не зафиксировано)"
    [ -f "$sdir/decisions_log.md" ] && grep '^### Развилка' "$sdir/decisions_log.md" || echo "(журнал решений пуст/отсутствует)"
    ```
    Каждая строка — независимо проверенная команда (data-layer контракт покрыт

@@ -151,14 +151,18 @@ description: Гейт принятия/отклонения прототипа (
    - Затем запиши строку в лог и закоммить её (`K` — суммарное число строк, которое было в `$tmp_tracked`+`$tmp_new` до их удаления в шаге (г) выше). **Коммитов здесь два, а не один:** блок захвата baseline выше уже закоммитил `prototype_baseline.txt` сообщением `vibe baseline (attempt <N+1>)`, поэтому коммит ниже фактически несёт `session.log` и `decisions_log.md` (повторный `git add` по baseline безвреден и оставлен для случая, если блок захвата был выполнен без коммита). Отклонение прототипа — акт категории `[деструктив]` (`PROC-019`): ДО коммита ниже добавь запись в `decisions_log.md` (четыре поля — развилка/вариант/обоснование/этап, см. `sdx/protocol.md` «Журнал решений») и включи файл в этот же `git add` — батчинг PROC-019 состоит в том, что отдельного ХОДА под запись не заводится, а не в том, что коммит ровно один:
      ```bash
      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CHECKPOINT] Прототип отклонён (попытка <N>), откат по списку из <K> файлов; новая точка — попытка <N+1>" >> "$sdir/session.log"
-     git add "$sdir/prototype_baseline.txt" "$sdir/session.log"
      # decisions_log.md ленивый: если записи почему-то нет, коммит отката всё равно ОБЯЗАН
      # состояться — файлы прототипа к этому моменту уже удалены с диска, и потеря коммита
      # оставила бы сессию в несогласованном состоянии. Отсутствие записи — повод громко
-     # сказать об этом пользователю, а не уронить `git add` и вместе с ним весь откат.
-     if [ -f "$sdir/decisions_log.md" ]; then git add "$sdir/decisions_log.md"; \
-       else echo "SDX: запись [деструктив] в decisions_log.md отсутствует — откат коммитится без неё" >&2; fi
-     git commit -m "sdx(<id>): vibe prototype rejected (attempt <N>), baseline reset"
+     # сказать об этом пользователю, а не уронить весь откат. Но ОТКАЗ `git add` по
+     # обязательным путям — это по-прежнему отказ: цепочка `&&` на них сохраняется.
+     if [ -f "$sdir/decisions_log.md" ]; then
+       set -- "$sdir/prototype_baseline.txt" "$sdir/session.log" "$sdir/decisions_log.md"
+     else
+       echo "SDX: запись [деструктив] в decisions_log.md отсутствует — откат коммитится без неё" >&2
+       set -- "$sdir/prototype_baseline.txt" "$sdir/session.log"
+     fi
+     git add -- "$@" && git commit -m "sdx(<id>): vibe prototype rejected (attempt <N>), baseline reset"
      ```
      (Категория лога — существующая `CHECKPOINT`; отдельная пятая категория не вводится, `STAGE_CHANGE` здесь неверен — `stage` не меняется и `sdx-stage.sh` не вызывается.)
    - Сообщи итог пользователю: сколько файлов восстановлено, сколько удалено, остаток (если есть). Напомни, что сессия осталась на `Execution` (`no_gates == true`) и попытка `<N+1>` может начинаться немедленно.
@@ -300,12 +304,17 @@ description: Гейт принятия/отклонения прототипа (
          Он тривиально безопасен и не требует НИКАКОЙ evidence-проверки по совершенно конкретной причине: сессия с `no_gates == true` ВСЕГДА находится на `stage == "Execution"` (REQ-SCALE-5) — значит `--to "Execution"` целится в СВОЙ ЖЕ текущий этап (`idx_target == idx_current`), что по контракту `next --to` (см. `sdx/hooks/sdx-stage.sh`) — буквальный **no-op**: файл `stage` не трогается вообще, писать нечего, кроме последующего снятия `no_gates`. Артефакты реверс-инжиниринга к этому моменту уже созданы шагом 2 выше — именно они станут доказательством гейта СЛЕДУЮЩЕГО, уже обычного вызова `next` (без `--to`), когда сессия продолжит путь `Execution → Verification → Closeout` штатно.
       2. **Снятие `no_gates` (REQ-FLAG-4, одноразовость)** — прямой `Edit` поля `no_gates: true → false` в `session_state.json` (легитимный путь — поле не `stage`, и в любом случае deny-хука, который мог бы это заблокировать, больше не существует) — ОДИН РАЗ, ДО следующего вызова `next`, потому что приоритет-0 проверка REQ-LEGAL-1 в `cmd_next` иначе продолжит возвращать `OK no-op Execution` бесконечно. Легализация прототипа — акт категории `[деструктив]` (`PROC-019`, симметрично отклонению на шаге 6): ДО коммита ниже добавь запись в `decisions_log.md` (четыре поля, см. `sdx/protocol.md` «Журнал решений»). Закоммить эту правку вместе с логом и журналом решений одним ходом:
          ```bash
-         echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STAGE_CHANGE] Легализация прототипа: снятие no_gates" >> .claude/sessions/<id>/session.log
-         git add .claude/sessions/<id>/session_state.json .claude/sessions/<id>/session.log
-         # Тот же довод, что и на шаге 6: ленивый файл не должен ронять коммит легализации.
-         if [ -f .claude/sessions/<id>/decisions_log.md ]; then git add .claude/sessions/<id>/decisions_log.md; \
-           else echo "SDX: запись [деструктив] в decisions_log.md отсутствует — легализация коммитится без неё" >&2; fi
-         git commit -m "sdx(<id>): legalize prototype — drop no_gates"
+         # Тот же довод, что и на шаге 6: ленивый файл не должен ронять коммит легализации,
+         # но отказ `git add` по обязательным путям остаётся отказом — цепочка `&&` сохраняется.
+         sdir=".claude/sessions/<id>"
+         echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STAGE_CHANGE] Легализация прототипа: снятие no_gates" >> "$sdir/session.log"
+         if [ -f "$sdir/decisions_log.md" ]; then
+           set -- "$sdir/session_state.json" "$sdir/session.log" "$sdir/decisions_log.md"
+         else
+           echo "SDX: запись [деструктив] в decisions_log.md отсутствует — легализация коммитится без неё" >&2
+           set -- "$sdir/session_state.json" "$sdir/session.log"
+         fi
+         git add -- "$@" && git commit -m "sdx(<id>): legalize prototype — drop no_gates"
          ```
          Повторная установка `no_gates: true` в ЭТОЙ ЖЕ сессии запрещена прозаически текстом этой команды и `commands/next.md` (REQ-FLAG-4) — тот же класс trade-off, что и сегодняшний запрет обратного входа в режим прототипирования. Не предлагай её пользователю ни в каком виде.
       3. Дальше — обычный `next` без `--to`: `Execution` (доводка, `developer`; с этого момента `stop-gate` снова видит стандартное `Execution` без прозрачности `no_gates`, и норма инкрементальных коммитов действует без исключений) → `Verification` (`qa` + fresh-eyes `reviewer`) → `Closeout` (`/sdx:archive`), уже штатным путём целевого объёма.

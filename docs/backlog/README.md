@@ -53,11 +53,10 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
-| FEAT-003 | feat | open | high | 1 | [Реестр задач прогона как источник истины вместо прозаического `PLAN.md`](FEAT-003-run-task-ledger.md) |
-| FEAT-004 | feat | open | high | 1 | [Журнал прогона пишет харнесс, а не модель](FEAT-004-harness-written-journal.md) |
-| PROC-019 | proc | open | high | 1 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) |
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
 | PROC-017 | proc | open | high | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
+| FEAT-003 | feat | open | high | 3 | [Реестр задач прогона как источник истины вместо прозаического `PLAN.md`](FEAT-003-run-task-ledger.md) |
+| FEAT-004 | feat | open | high | 3 | [Журнал прогона пишет харнесс, а не модель](FEAT-004-harness-written-journal.md) |
 | FEAT-005 | feat | open | high | 3 | [Stop-хук как тик планировщика прогона](FEAT-005-stop-hook-scheduler-tick.md) |
 | PROC-016 | proc | open | high | 3 | [Гейт по контракту вместо гейта по существованию](PROC-016-contract-gates-instead-of-existence.md) |
 | PROC-020 | proc | open | high | 3 | [Инвариант: агент не автономен в прогоне, меняющем механизм собственного надзора](PROC-020-no-autonomy-over-own-supervision.md) |
@@ -90,18 +89,19 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-024 | proc | open | normal | null | [Коллизия: п.4 Closeout требует заводить записи там, где тип `grooming` их создавать не вправе](PROC-024-closeout-record-creation-vs-grooming-ban.md) |
 | PROC-025 | proc | open | normal | null | [В номенклатуре типов сессий нет исследования: работа, производящая документ и не производящая кода](PROC-025-no-session-type-for-research.md) |
 | PROC-026 | proc | open | normal | null | [Груминг пересматривает атрибуты записи, не сверяя её с кодом](PROC-026-grooming-without-code-verification.md) |
+| PROC-027 | proc | open | normal | null | [У поверхностей, пересказывающих состав системы, нет сторожа](PROC-027-inventory-drift-unguarded.md) |
 | PROC-015 | proc | open | low | 7 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | BUG-009 | bug | open | normal | null | [Нечисловой `.stopgate.count` роняет `stop-gate` кодом 1 — тест-пол исчезает молча](BUG-009-stop-gate-nonnumeric-counter.md) |
 | BUG-010 | bug | open | normal | null | [`selftest.sh` и его проводка непереносимы за пределы GNU-окружения](BUG-010-selftest-platform-portability.md) |
 | DEBT-036 | debt | open | normal | null | [Ветка автодетекта тест-команды в `stop-gate` не покрыта автотестами](DEBT-036-stop-gate-autodetect-branch-untested.md) |
-| DEBT-038 | debt | open | low | null | [Поля `artifacts` и `history` в `session_state.json` объявлены и мертвы](DEBT-038-session-state-dead-fields.md) |
+| DEBT-040 | debt | open | normal | null | [Часть сценариев мутирует хелперы, написанные внутри самого сьюта](DEBT-040-tests-mutate-own-helpers.md) |
+| DEBT-039 | debt | open | low | null | [Поле `status` в схеме `session_state.json` объявлено без писателя](DEBT-039-session-state-status-no-writer.md) |
+| DEBT-041 | debt | open | low | null | [Anti-overclaim-линт направленный: ловит один порядок слов из двух](DEBT-041-overclaim-lint-directional.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
 | DEBT-032 | debt | open | low | null | [П.4 Closeout-чек-листа требует поля `session` там, где конвенция бэклога отводит `source`](DEBT-032-closeout-session-field-convention-drift.md) |
 | IDEA-007 | idea | open | low | null | [Автоматический пуш записей бэклога в GitHub Issues](IDEA-007-backlog-github-issues-sync.md) |
-| BUG-005 | bug | deferred | normal | null | [Противоречие: ADR-005 требует инкрементальных коммитов сессии ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) |
-| DEBT-007 | debt | deferred | normal | null | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) |
 | DEBT-023 | debt | deferred | normal | null | [Гейт `/sdx:proto` не показывает содержимое новых файлов прототипа](DEBT-023-proto-gate-new-files-diff.md) |
 | IDEA-002 | idea | deferred | normal | null | [Fanout-контур: stateless-задачи по портфелю репозиториев (REQ-LANE-1)](IDEA-002-fanout-contour.md) |
 | IDEA-003 | idea | deferred | normal | null | [Self-improving loop: стоимостный сигнал в Closeout (REQ-LOOP-1)](IDEA-003-self-improving-loop.md) |
@@ -116,6 +116,10 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| DEBT-007 | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) | `proc-run-as-durable-unit-20260902` (расщеплена: `status` → `DEBT-039`) |
+| BUG-005 | [Противоречие: ADR-005 ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) | `proc-run-as-durable-unit-20260902` (предпосылка неверна; фактически снято `ADR-012`) |
+| PROC-019 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) | `proc-run-as-durable-unit-20260902` |
+| DEBT-038 | [Поля `artifacts` и `history` в `session_state.json` объявлены и мертвы](DEBT-038-session-state-dead-fields.md) | `proc-run-as-durable-unit-20260902` |
 | DEBT-037 | [Живая проводка `SessionStart` → `selftest.sh` не исполнялась ни разу](DEBT-037-selftest-live-wiring-unverified.md) | — (закрыта наблюдением вне сессии, плагин 2.2.0) |
 | FEAT-014 | [Self-test enforcement-слоя как условие входа в автономный режим](FEAT-014-enforcement-selftest-autonomy-precondition.md) | `feat-enforcement-selftest-20260901` |
 | DEBT-010 | [Тихая деградация хуков не видна пользователю](DEBT-010-silent-hook-degradation-invisible.md) | `feat-enforcement-selftest-20260901` |

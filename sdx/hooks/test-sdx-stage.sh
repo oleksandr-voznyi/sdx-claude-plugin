@@ -28,7 +28,7 @@ setup_sdx_repo() {
   mkdir -p "$TMPPROJ/.claude/sessions/$sid"
   jq -n --arg session_id "$sid" --arg type "feature" --arg stage "$stage" \
     --argjson no_code "$no_code" --argjson no_gates "$no_gates" \
-    '{session_id:$session_id, type:$type, stage:$stage, gate_mode:"interactive", git_branch:("sdx/"+$session_id), no_code:$no_code, no_gates:$no_gates, artifacts:[], history:[]}' \
+    '{session_id:$session_id, type:$type, stage:$stage, gate_mode:"interactive", git_branch:("sdx/"+$session_id), no_code:$no_code, no_gates:$no_gates}' \
     > "$TMPPROJ/.claude/sessions/$sid/session_state.json"
 }
 
@@ -448,7 +448,7 @@ cleanup
 echo "[24] REQ-COMPAT-1: legacy 'track' field in JSON, no no_code/no_gates keys -> next works as no_code=false,no_gates=false"
 TMPPROJ="$(mktemp -d)"
 mkdir -p "$TMPPROJ/.claude/sessions/t24"
-jq -n '{session_id:"t24", type:"feature", track:"full", stage:"Discovery", gate_mode:"interactive", git_branch:"sdx/t24", artifacts:[], history:[]}' \
+jq -n '{session_id:"t24", type:"feature", track:"full", stage:"Discovery", gate_mode:"interactive", git_branch:"sdx/t24"}' \
   > "$TMPPROJ/.claude/sessions/t24/session_state.json"
 printf 'notes\n' > "$TMPPROJ/.claude/sessions/t24/context_report.md"
 out="$(run_stage next "t24")"
@@ -466,7 +466,7 @@ cleanup
 echo "[25] REQ-COMPAT-3: stage='Change' (legacy name) -> next exits 2 with diagnostic, not a crash"
 TMPPROJ="$(mktemp -d)"
 mkdir -p "$TMPPROJ/.claude/sessions/t25"
-jq -n '{session_id:"t25", type:"feature", track:"standard", stage:"Change", gate_mode:"interactive", git_branch:"sdx/t25", artifacts:[], history:[]}' \
+jq -n '{session_id:"t25", type:"feature", track:"standard", stage:"Change", gate_mode:"interactive", git_branch:"sdx/t25"}' \
   > "$TMPPROJ/.claude/sessions/t25/session_state.json"
 sf="$(state_file t25)"
 before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
@@ -485,7 +485,7 @@ cleanup
 echo "[26] REQ-COMPAT-3: stage='Update' (legacy name), next --to Discovery -> exit 2, not silently accepted"
 TMPPROJ="$(mktemp -d)"
 mkdir -p "$TMPPROJ/.claude/sessions/t26"
-jq -n '{session_id:"t26", type:"grooming", track:"doc", stage:"Update", gate_mode:"interactive", git_branch:"sdx/t26", artifacts:[], history:[]}' \
+jq -n '{session_id:"t26", type:"grooming", track:"doc", stage:"Update", gate_mode:"interactive", git_branch:"sdx/t26"}' \
   > "$TMPPROJ/.claude/sessions/t26/session_state.json"
 out="$(run_stage next "t26" --to "Discovery" 2>&1 1>/dev/null)"
 ec=$?
@@ -507,7 +507,7 @@ cleanup
 echo "[27] REQ-COMPAT-3: stage='' (empty string), forward next -> exit 2, file untouched, not silently healed to Discovery"
 TMPPROJ="$(mktemp -d)"
 mkdir -p "$TMPPROJ/.claude/sessions/t27"
-jq -n '{session_id:"t27", type:"feature", stage:"", gate_mode:"interactive", git_branch:"sdx/t27", no_code:false, no_gates:false, artifacts:[], history:[]}'   > "$TMPPROJ/.claude/sessions/t27/session_state.json"
+jq -n '{session_id:"t27", type:"feature", stage:"", gate_mode:"interactive", git_branch:"sdx/t27", no_code:false, no_gates:false}'   > "$TMPPROJ/.claude/sessions/t27/session_state.json"
 sf="$(state_file t27)"
 before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
 out="$(run_stage next "t27" 2>&1 1>/dev/null)"
@@ -526,7 +526,7 @@ cleanup
 echo "[28] REQ-COMPAT-3: .stage key absent from session_state.json, forward next -> exit 2, file untouched"
 TMPPROJ="$(mktemp -d)"
 mkdir -p "$TMPPROJ/.claude/sessions/t28"
-jq -n '{session_id:"t28", type:"feature", gate_mode:"interactive", git_branch:"sdx/t28", no_code:false, no_gates:false, artifacts:[], history:[]}'   > "$TMPPROJ/.claude/sessions/t28/session_state.json"
+jq -n '{session_id:"t28", type:"feature", gate_mode:"interactive", git_branch:"sdx/t28", no_code:false, no_gates:false}'   > "$TMPPROJ/.claude/sessions/t28/session_state.json"
 sf="$(state_file t28)"
 before_sum="$(md5sum "$sf" | cut -d' ' -f1)"
 out="$(run_stage next "t28" 2>&1 1>/dev/null)"
@@ -646,6 +646,75 @@ else
   fail "Expected --to rejection of excluded target under no_code" "ec=$ec out='$out'"
 fi
 cleanup
+
+# ---- Scenario 31 (T02, REQ-STATE-1/2, DEBT-038): cmd_init no longer writes artifacts/history ----
+echo "[31] cmd_init no longer writes artifacts/history (DEBT-038, REQ-STATE-1/2)"
+TMPPROJ="$(mktemp -d)"
+run_stage init "t31" "feature" "Discovery" "interactive" "sdx/t31" "false" "false" > /dev/null
+sf="$(state_file t31)"
+has_artifacts="$(jq 'has("artifacts")' "$sf")"
+has_history="$(jq 'has("history")' "$sf")"
+if [ "$has_artifacts" = "false" ] && [ "$has_history" = "false" ]; then
+  pass "green: fresh session_state.json has no artifacts/history keys"
+else
+  fail "31 green" "has_artifacts=$has_artifacts has_history=$has_history"
+fi
+cleanup
+
+# Red side (DoD demands a real mutation, not an honest limit — the mutation is cheap: restore
+# the two dead keys into the SAME jq filter literal cmd_init uses, in a mktemp copy of the
+# script, and run cmd_init from the mutant against a fresh fixture — style of test-selftest.sh
+# [T28] (mutant-copy-and-run, not "checked by hand once").
+mutant="$(mktemp)"
+sed "s/no_code:\$no_code, no_gates:\$no_gates}/no_code:\$no_code, no_gates:\$no_gates, artifacts:[], history:[]}/" \
+  "$SCRIPT" > "$mutant"
+TMPPROJ="$(mktemp -d)"
+CLAUDE_PROJECT_DIR="$TMPPROJ" bash "$mutant" init "t31r" "feature" "Discovery" "interactive" "sdx/t31r" "false" "false" > /dev/null
+sf_r="$(state_file t31r)"
+has_artifacts_r="$(jq 'has("artifacts")' "$sf_r" 2>/dev/null)"
+has_history_r="$(jq 'has("history")' "$sf_r" 2>/dev/null)"
+if [ "$has_artifacts_r" = "true" ] && [ "$has_history_r" = "true" ]; then
+  pass "red: mutant with artifacts/history re-inserted into the jq filter produces has(...)==true — scenario discriminates"
+else
+  fail "31 red" "expected mutant to reproduce DEBT-038 (has_artifacts=true, has_history=true), got has_artifacts=$has_artifacts_r has_history=$has_history_r"
+fi
+rm -f "$mutant"
+cleanup
+
+# ---- Scenario 32 (T03, REQ-STATE-2, DEBT-038): legacy session_state.json with
+# artifacts/history survives cmd_next untouched -- honest limit on the red side, no discriminating
+# mutation exists for this scenario (recorded explicitly per [T08]/[T27] test-selftest.sh style,
+# not a silent skip) ----
+echo "[32] legacy session_state.json with artifacts/history survives cmd_next untouched (REQ-STATE-2)"
+setup_sdx_repo "t32" "Discovery"
+sf="$(state_file t32)"
+# The legacy artifacts/history fields are injected HERE, deliberately, rather than inherited from
+# setup_sdx_repo: after the Group 8 (T26) hygiene pass the shared fixture constructor writes the
+# current 7-key schema, so a scenario about PRE-EXISTING legacy state must construct that state
+# explicitly. This also keeps the scenario honest -- what it models (a session_state.json written
+# by an older sdx-stage.sh) is visible at the point of use instead of being a side effect of a
+# helper shared with 30 other scenarios.
+jq '. + {artifacts: [], history: []}' "$sf" > "$sf.tmp" && mv "$sf.tmp" "$sf"
+printf '# ctx\n' > "$TMPPROJ/.claude/sessions/t32/context_report.md"
+out="$(run_stage next "t32")"
+ec=$?
+if [ "$ec" -eq 0 ] \
+   && [ "$(jq -r '.stage' "$sf")" = "Business Spec" ] \
+   && [ "$(jq -e '.artifacts == [] and .history == []' "$sf")" = "true" ]; then
+  pass "legacy artifacts/history fields survive cmd_next unread and untouched, stage transitioned correctly"
+else
+  fail "32" "ec=$ec stage=$(jq -r '.stage' "$sf" 2>/dev/null) artifacts=$(jq -c '.artifacts' "$sf" 2>/dev/null) history=$(jq -c '.history' "$sf" 2>/dev/null)"
+fi
+cleanup
+# Honest limit (same spirit as [T08]/[T27] test-selftest.sh, recorded explicitly rather than
+# silently skipped): no discriminating mutation exists for this scenario's "not read" half.
+# No line in sdx-stage.sh today reads .artifacts or .history -- the ONLY mutation that could turn
+# this scenario red would be to ADD code that reads them, i.e. to reintroduce the exact defect
+# DEBT-038 removed. That would be a tautological test ("we didn't add what we deliberately don't
+# add"), not a meaningful red side, so it is not constructed. What IS meaningfully red-tested is
+# the survival half (scenario 31's mutant demonstrates the write side is real and reversible);
+# this scenario's own contribution -- confirming cmd_next does not choke on or strip legacy
+# fields -- is asserted green only, by design, matching DESIGN.md's DoD table row B verbatim.
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

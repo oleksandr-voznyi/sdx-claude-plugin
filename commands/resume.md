@@ -37,8 +37,8 @@ description: Durable-возобновление прогона сессии по
    sid=$(git branch --show-current | sed 's#^sdx/##')
    sdir=".claude/sessions/$sid"
    jq -r '.stage, .no_code, .no_gates, .gate_mode' "$sdir/session_state.json"
-   grep -c '^- \[x\]' "$sdir/PLAN.md" 2>/dev/null || echo 0
-   grep -c '^- \[[ x]\]' "$sdir/PLAN.md" 2>/dev/null || echo 0
+   done_n="$(grep -c '^- \[x\]' "$sdir/PLAN.md" 2>/dev/null)"; printf '%s\n' "${done_n:-0}"
+   total_n="$(grep -c '^- \[[ x]\]' "$sdir/PLAN.md" 2>/dev/null)"; printf '%s\n' "${total_n:-0}"
    grep -m1 '^- \[ \]' "$sdir/PLAN.md" 2>/dev/null || echo "(нет открытых задач)"
    last_tr="$(grep '\[STAGE_CHANGE\]' "$sdir/session.log" 2>/dev/null | tail -1)"; printf '%s\n' "${last_tr:-(переходов не зафиксировано)}"
    [ -f "$sdir/decisions_log.md" ] && grep '^### Развилка' "$sdir/decisions_log.md" || echo "(журнал решений пуст/отсутствует)"

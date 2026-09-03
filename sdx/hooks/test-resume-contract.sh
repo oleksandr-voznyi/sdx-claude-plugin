@@ -33,6 +33,16 @@
 # Usage: bash sdx/hooks/test-resume-contract.sh
 set -uo pipefail
 
+# Locale: several lint checks below use case-insensitive matching (`grep -Fi`) on Cyrillic
+# prose. Case folding for non-ASCII is locale-dependent, so a caller running under LC_ALL=C
+# would silently get ASCII-only folding and a weaker check than the one written here. Pin a
+# UTF-8 locale when one is available; fall back to the ambient environment otherwise (the
+# exact-case half of every such check still holds, only the folding half degrades).
+for _loc in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
+  if locale -a 2>/dev/null | grep -qix "$_loc"; then export LC_ALL="$_loc"; break; fi
+done
+unset _loc
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -226,6 +236,40 @@ echo "[T14b] composition reads the last [STAGE_CHANGE], not the last log line (r
     fail "T14b boundary red" "f_plain='$f_plain' f_strict='$f_strict'"
   fi
   rm -rf "$nolog"
+
+  # Same defect class, second instance: the PLAN.md progress counters. `grep -c` PRINTS "0"
+  # and RETURNS 1 when nothing matches, so a `… || echo 0` tail emits TWO lines ("0\n0") on a
+  # session whose plan has no completed task yet -- the common shape of a session killed early,
+  # i.e. exactly the case /sdx:resume exists for. The delivered form assigns and defaults with
+  # ${var:-0} instead, which yields one line both when the file is missing and when it matches
+  # nothing. Asserted on line COUNT, not just value: a value check alone passes for "0\n0".
+  planfx="$(mktemp -d)"
+  printf '# plan\n- [ ] T01 open\n- [ ] T02 open\n' > "$planfx/PLAN.md"
+  delivered_cnt='done_n="$(grep -c "^- \[x\]" "$p/PLAN.md" 2>/dev/null)"; printf "%s\n" "${done_n:-0}"'
+  fragile_cnt='grep -c "^- \[x\]" "$p/PLAN.md" 2>/dev/null || echo 0'
+  d_lines="$(env -i bash --noprofile --norc -c "p='$planfx'; $delivered_cnt" | wc -l)"
+  d_val="$(env -i bash --noprofile --norc -c "p='$planfx'; $delivered_cnt")"
+  f_lines="$(env -i bash --noprofile --norc -c "p='$planfx'; $fragile_cnt" | wc -l)"
+  if [ "$d_lines" -eq 1 ] && [ "$d_val" = "0" ]; then
+    pass "boundary: plan with no completed task yields exactly one line '0'"
+  else
+    fail "T14b plan counter" "lines=$d_lines value='$d_val'"
+  fi
+  if [ "$f_lines" -eq 2 ]; then
+    pass "red: the '|| echo 0' form emits two lines on the same input — the check discriminates"
+  else
+    fail "T14b plan counter red" "expected 2 lines from the fragile form, got $f_lines"
+  fi
+
+  # And the missing-file case must still yield one line, not an empty one.
+  m_lines="$(env -i bash --noprofile --norc -c "p='$planfx/nowhere'; $delivered_cnt" | wc -l)"
+  m_val="$(env -i bash --noprofile --norc -c "p='$planfx/nowhere'; $delivered_cnt")"
+  if [ "$m_lines" -eq 1 ] && [ "$m_val" = "0" ]; then
+    pass "boundary: missing PLAN.md yields one line '0', not an empty line"
+  else
+    fail "T14b plan counter (missing file)" "lines=$m_lines value='$m_val'"
+  fi
+  rm -rf "$planfx"
 }
 
 # ---------------------------------------------------------------------------------------------

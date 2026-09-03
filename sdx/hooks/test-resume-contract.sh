@@ -513,7 +513,14 @@ echo "[T20] structural check: commands/resume.md — guard, all-records sweep, R
   RESUME_MD="$ROOT/commands/resume.md"
   resume_checks() {
     local f="$1" n=0
-    grep -qF '**Гард чистого рабочего дерева.**' "$f" && n=$((n + 1))                # (а)
+    grep -qF '**Гард чистого рабочего дерева' "$f" && n=$((n + 1))                    # (а)
+    # (ж) The guard must carve out `no_gates == true`: a prototype session's uncommitted code is
+    # a SANCTIONED state (CLAUDE.md §4, the single named exception to REQ-SESS-1), so an
+    # unconditional guard would make /sdx:resume unusable for exactly the session type DESIGN.md
+    # promises it supports -- and resume.md's own claim of symmetry with commands/switch.md would
+    # be false, since switch.md carries that carve-out and names `git stash`. Found as a FAIL by
+    # fresh-eyes review. Both halves are checked: the carve-out itself and the stash path.
+    grep -qF 'санкционированное' "$f" && grep -qF 'git stash' "$f" && n=$((n + 1))
     grep -qF 'это **ВСЕ**' "$f" && n=$((n + 1))                                       # (б)
     grep -qF 'Соблюдение записанных решений (REQ-RESUME-3)' "$f" && n=$((n + 1))      # (в)
     grep -qF 'не распространяется' "$f" && n=$((n + 1))                               # (г)
@@ -529,11 +536,23 @@ echo "[T20] structural check: commands/resume.md — guard, all-records sweep, R
     echo "$n"
   }
   n_checks="$(resume_checks "$RESUME_MD")"
-  if [ "$n_checks" -eq 6 ]; then
-    pass "green: 6/6 structural markers present (guard, all-records, REQ-RESUME-3, asymmetry, kill-test phrase, correct STAGE_CHANGE read)"
+  if [ "$n_checks" -eq 7 ]; then
+    pass "green: 7/7 structural markers present (guard, all-records, REQ-RESUME-3, asymmetry, kill-test phrase, correct STAGE_CHANGE read, no_gates carve-out)"
   else
     fail "T20 green" "n_checks=$n_checks"
   fi
+
+  # Red for (ж): strip the carve-out and watch the count drop — an unconditional guard must not
+  # be able to come back unnoticed.
+  nocarve="$(mktemp)"
+  grep -v 'санкционированное' "$RESUME_MD" > "$nocarve"
+  n_nc="$(resume_checks "$nocarve")"
+  if [ "$n_nc" -eq 6 ]; then
+    pass "red: stripping the no_gates carve-out drops the count to 6/7 — prototype sessions stay resumable"
+  else
+    fail "T20 red (no_gates carve-out)" "expected 6, got $n_nc"
+  fi
+  rm -f "$nocarve"
 
   # Independent red branch for marker (е): reintroduce the defective form and watch it drop.
   regressed="$(mktemp)"
@@ -542,20 +561,20 @@ echo "[T20] structural check: commands/resume.md — guard, all-records sweep, R
   cp "$RESUME_MD" "$regressed"
   printf '   tail -1 "$(grep -l %s[STAGE_CHANGE]%s "$sdir/session.log")"\n' "'" "'" >> "$regressed"
   n_reg="$(resume_checks "$regressed")"
-  if [ "$n_reg" -eq 5 ]; then
-    pass "red: reintroducing the defective 'tail -1 \$(grep -l …)' form drops the count to 5/6 — the regression is caught"
+  if [ "$n_reg" -eq 6 ]; then
+    pass "red: reintroducing the defective 'tail -1 \$(grep -l …)' form drops the count to 6/7 — the regression is caught"
   else
-    fail "T20 red (STAGE_CHANGE read)" "expected 5, got $n_reg"
+    fail "T20 red (STAGE_CHANGE read)" "expected 6, got $n_reg"
   fi
   rm -f "$regressed"
 
   mutated="$(mktemp)"
   grep -v 'Гард чистого рабочего дерева' "$RESUME_MD" > "$mutated"
   n_red="$(resume_checks "$mutated")"
-  if [ "$n_red" -eq 5 ]; then
-    pass "red: stripping the clean-tree guard heading drops the count to 5/6 — gate discriminates"
+  if [ "$n_red" -eq 6 ]; then
+    pass "red: stripping the clean-tree guard heading drops the count to 6/7 — gate discriminates"
   else
-    fail "T20 red" "expected 5, got $n_red"
+    fail "T20 red" "expected 6, got $n_red"
   fi
   rm -f "$mutated"
 }

@@ -517,7 +517,7 @@ echo "[T20] structural check: commands/resume.md — guard, all-records sweep, R
 }
 
 # ---------------------------------------------------------------------------------------------
-echo "[T21] structural check: commands/next.md — three T11 edits (auto-mode note, batched commit, REQ-RESUME-3 check)"
+echo "[T21] structural check: commands/next.md — four markers (auto symmetry, batched commit, REQ-RESUME-3 check, unconditional write rule)"
 {
   NEXT_MD="$ROOT/commands/next.md"
   next_checks() {
@@ -525,23 +525,45 @@ echo "[T21] structural check: commands/next.md — three T11 edits (auto-mode no
     grep -qF 'Стоп-рубрика останавливает `auto`-сессию так же, как `interactive`' "$f" && n=$((n + 1))   # (а)
     grep -qF 'decisions_log.md, если он был изменён в этом ходе' "$f" && n=$((n + 1))                     # (б)
     grep -qF '2б. **Соблюдение записанных решений (REQ-RESUME-3' "$f" && n=$((n + 1))                     # (в)
+    # (г) REQ-DEC-1/3: the instruction to WRITE the record must be unconditional, i.e. it must
+    # live in its own step, NOT inside the `- Если "auto":` bullet of step 2а. The first version
+    # of this delivery had it only there, which made the mere EXISTENCE of the instruction depend
+    # on gate_mode -- in `interactive`, the default and REQ-DEC-1's first addressee, the command
+    # said nothing about recording at all. Found as a FAIL by fresh-eyes review. Marker (а) alone
+    # cannot catch that: it greps the auto-branch phrasing and would happily cement the defect.
+    grep -qF '2в. **Запись решения, принятого на стоп-рубрике' "$f" \
+      && grep -qF 'БЕЗУСЛОВНО, в любом `gate_mode`' "$f" \
+      && n=$((n + 1))
     echo "$n"
   }
   n_checks="$(next_checks "$NEXT_MD")"
-  if [ "$n_checks" -eq 3 ]; then
-    pass "green: 3/3 T11 edits present in commands/next.md"
+  if [ "$n_checks" -eq 4 ]; then
+    pass "green: 4/4 markers present (auto symmetry, batched commit, REQ-RESUME-3 check, unconditional write rule)"
   else
     fail "T21 green" "n_checks=$n_checks"
   fi
+
+  # Red for (г): strip the unconditional write step and watch the count drop. Without this
+  # branch the marker would be asserted green-only, i.e. the exact regression it guards against
+  # (folding the rule back under the auto branch) could return unnoticed.
+  regressed="$(mktemp)"
+  grep -v '2в. \*\*Запись решения, принятого на стоп-рубрике' "$NEXT_MD" > "$regressed"
+  n_reg="$(next_checks "$regressed")"
+  if [ "$n_reg" -eq 3 ]; then
+    pass "red: stripping the unconditional write step drops the count to 3/4 — gate_mode-independence is guarded"
+  else
+    fail "T21 red (unconditional write)" "expected 3, got $n_reg"
+  fi
+  rm -f "$regressed"
 
   # Red: strip edit (в) — the REQ-RESUME-3 pre-AskUserQuestion check.
   mutated="$(mktemp)"
   grep -v '2б. \*\*Соблюдение записанных решений (REQ-RESUME-3' "$NEXT_MD" > "$mutated"
   n_red="$(next_checks "$mutated")"
-  if [ "$n_red" -eq 2 ]; then
-    pass "red: stripping edit (в) (pre-AskUserQuestion check) drops the count to 2/3 — gate discriminates"
+  if [ "$n_red" -eq 3 ]; then
+    pass "red: stripping edit (в) (pre-AskUserQuestion check) drops the count to 3/4 — gate discriminates"
   else
-    fail "T21 red" "expected 2, got $n_red"
+    fail "T21 red" "expected 3, got $n_red"
   fi
   rm -f "$mutated"
 }

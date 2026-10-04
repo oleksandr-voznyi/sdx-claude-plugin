@@ -179,6 +179,77 @@ else
 fi
 rm -f "$mutant_timeout"
 
+# ---- Scenario 6 (FEAT-015, PROC-020, REQ-MO-INV-2): MO hook wiring ----
+# is_bash_wired() accepts `timeout 10 bash <path>`, which for a PreToolUse hook silently turns the
+# guard into "no protection" (BUG-010) — so the MO entries need their own, stricter guard. Same
+# shape as check_inventory in test-mo-inventory.sh: mo_wiring_findings <hooks.json> prints one
+# finding per line, empty = consistent. No mapfile here (the file as a whole stays non-portable
+# to macOS because of scenarios 1/2/5 — a named limit, not widened).
+mo_wiring_findings() {
+  local f="$1" n cmd matcher m want
+  n="$(jq '[.hooks.PreToolUse[]? | select(any(.hooks[]?; .command | contains("sdx/hooks/mo-hook.sh")))] | length' "$f" 2>/dev/null)"
+  if [ "$n" != 1 ]; then
+    echo "PreToolUse: expected exactly one mo-hook.sh entry, found ${n:-?}"
+  else
+    matcher="$(jq -r '.hooks.PreToolUse[] | select(any(.hooks[]?; .command | contains("sdx/hooks/mo-hook.sh"))) | .matcher // ""' "$f")"
+    cmd="$(jq -r '.hooks.PreToolUse[] | select(any(.hooks[]?; .command | contains("sdx/hooks/mo-hook.sh"))) | .hooks[0].command' "$f")"
+    for want in Bash Write Edit MultiEdit NotebookEdit; do
+      case "|$matcher|" in *"|$want|"*) ;; *) echo "mo-hook matcher '$matcher' lacks $want" ;; esac
+    done
+    case "$cmd" in *timeout*) echo "mo-hook command contains timeout: $cmd" ;; esac
+    [ "$cmd" = 'bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/mo-hook.sh' ] || echo "mo-hook command has wrong form: $cmd"
+  fi
+  if [ "$(jq '[.hooks.PreToolUse[]? | select(.matcher == "Bash" and any(.hooks[]?; .command | contains("sdx/hooks/prod-guard.sh")))] | length' "$f" 2>/dev/null)" != 1 ]; then
+    echo "PreToolUse: prod-guard entry with matcher exactly \"Bash\" is missing"
+  fi
+  cmd="$(jq -r '[.hooks.SessionStart[]? | .hooks[]? | .command | select(contains("sdx/hooks/mo-session.sh"))] | .[0] // ""' "$f" 2>/dev/null)"
+  if [ -z "$cmd" ]; then
+    echo "SessionStart: mo-session.sh entry is missing"
+  else
+    case "$cmd" in *timeout*) echo "mo-session command contains timeout: $cmd" ;; esac
+    [ "$cmd" = 'bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/mo-session.sh' ] || echo "mo-session command has wrong form: $cmd"
+  fi
+}
+
+echo "[6] MO hooks are wired (mo-hook PreToolUse, mo-session SessionStart): exact form, matcher, no timeout"
+f6="$(mo_wiring_findings "$WIRING")"
+if [ -z "$f6" ]; then
+  pass "hooks.json wires mo-hook (matcher Bash|Write|Edit|MultiEdit|NotebookEdit) and mo-session without timeout, prod-guard kept"
+else
+  fail "MO wiring findings on the real hooks.json" "$f6"
+fi
+for s6 in mo-hook.sh mo-session.sh; do
+  if [ -f "$ROOT/sdx/hooks/$s6" ]; then pass "sdx/hooks/$s6 exists"
+  else fail "sdx/hooks/$s6 missing" "referenced by hooks.json"; fi
+done
+
+# Red sides: each jq mutation of a temp copy must make mo_wiring_findings report something.
+mo_mutant() { # <label> <jq filter>
+  local label="$1" filter="$2" mf mfind
+  mf="$(mktemp)"
+  jq "$filter" "$WIRING" > "$mf" 2>/dev/null
+  if cmp -s "$WIRING" "$mf"; then
+    fail "[6] mutant '$label' did not change hooks.json" "the jq filter no longer matches the file"
+  else
+    mfind="$(mo_wiring_findings "$mf")"
+    if [ -n "$mfind" ]; then pass "[6] mutant '$label' -> red (finding: $(printf '%s' "$mfind" | head -n 1))"
+    else fail "[6] mutant '$label' was NOT flagged" "mo_wiring_findings stayed silent"; fi
+  fi
+  rm -f "$mf"
+}
+mo_mutant "mo-hook entry removed" '.hooks.PreToolUse |= map(select((.hooks[0].command | contains("mo-hook.sh")) | not))'
+mo_mutant "NotebookEdit dropped from matcher" '(.hooks.PreToolUse[] | select(.hooks[0].command | contains("mo-hook.sh")) | .matcher) |= sub("\\|NotebookEdit"; "")'
+mo_mutant "timeout 10 prefix on mo-hook" '(.hooks.PreToolUse[] | select(.hooks[0].command | contains("mo-hook.sh")) | .hooks[0].command) |= "timeout 10 " + .'
+mo_mutant "mo-hook matcher narrowed to Bash" '(.hooks.PreToolUse[] | select(.hooks[0].command | contains("mo-hook.sh")) | .matcher) = "Bash"'
+mo_mutant "prod-guard entry removed" '.hooks.PreToolUse |= map(select((.hooks[0].command | contains("prod-guard.sh")) | not))'
+mo_mutant "mo-session entry removed" '.hooks.SessionStart |= map(select((.hooks[0].command | contains("mo-session.sh")) | not))'
+# is_bash_wired accepts the timeout-prefixed form — shown, so the dedicated guard is justified.
+if is_bash_wired 'timeout 10 bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/mo-hook.sh'; then
+  pass "[6] (context) is_bash_wired alone lets 'timeout 10 bash ...' through — hence mo_wiring_findings"
+else
+  fail "[6] context check" "is_bash_wired no longer accepts timeout form; revisit the scenario comment"
+fi
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

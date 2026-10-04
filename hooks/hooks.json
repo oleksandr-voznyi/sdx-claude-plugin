@@ -16,6 +16,14 @@
             "command": "timeout 10 bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/selftest.sh; exit 0"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/mo-session.sh"
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -25,6 +33,15 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/prod-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/sdx/hooks/mo-hook.sh"
           }
         ]
       }

@@ -38,6 +38,10 @@ description: Инициализация SDX фреймворка в сущест
    #      завершён» и НЕ должны попасть в коммит (ADR-019).
    .sdx/audit-runs/
 
+   # SDX: почтовый ящик мета-оркестратора (МО) — фенотип: создаёт узел МО, вне git.
+   #      Признак «над проектом есть МО» — .mesh/endpoint.yaml (sdx/mo/MO-INTEROP.md).
+   .mesh/
+
    # Локальные настройки Claude Code.
    .claude/settings.local.json
    ```

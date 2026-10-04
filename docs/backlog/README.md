@@ -54,6 +54,8 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 разделы «Уточнения разбора» в `FEAT-006`, `PROC-021`, `DEBT-031` без смены их атрибутов.
 `DEBT-042` порождена сессией `proc-028-simkit-vendoring-20261004` как названная граница поставки
 (норма без enforcement).
+`DEBT-043`…`DEBT-046` порождены сессией `feat-015-mo-interop-20261004`: три названные границы
+поставки (self-test, установленная копия, непроверенные К20/канал) и попутная находка `qa`.
 
 ## Открытые
 
@@ -71,7 +73,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
 | DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
-| FEAT-015 | feat | open | high | null | [Интероп с мета-оркестратором (МО) в плагинной модели: канал `.mesh/`, хук `exec_paths`, режим `devops`](FEAT-015-mo-interop-plugin-model.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
 | FEAT-008 | feat | open | normal | 4 | [Компенсации и бюджет прогона](FEAT-008-compensations-and-run-budget.md) |
@@ -105,6 +106,10 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-039 | debt | open | low | null | [Поле `status` в схеме `session_state.json` объявлено без писателя](DEBT-039-session-state-status-no-writer.md) |
 | DEBT-041 | debt | open | low | null | [Anti-overclaim-линт направленный: ловит один порядок слов из двух](DEBT-041-overclaim-lint-directional.md) |
 | DEBT-042 | debt | open | low | null | [Норма «обновление `sdx/mo/` не в авторежиме» держится только прозой протокола](DEBT-042-mo-update-not-in-auto-unenforced.md) |
+| DEBT-043 | debt | open | normal | null | [Self-test не покрывает МО-хуки; `/sdx:status` не показывает состояние МО](DEBT-043-selftest-perimeter-excludes-mo-hooks.md) |
+| DEBT-045 | debt | open | normal | null | [Два утверждения FEAT-015 держатся как допущения: агрегация двух PreToolUse и канал SessionStart](DEBT-045-k20-sessionstart-channel-unverified.md) |
+| DEBT-044 | debt | open | low | null | [Идентичность вендорённой копии проверяется только в чекауте](DEBT-044-installed-copy-hash-check.md) |
+| DEBT-046 | debt | open | low | null | [Посторонний пустой tracked-файл `false` в корне](DEBT-046-stray-tracked-file-false.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
@@ -124,6 +129,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| FEAT-015 | [Интероп с мета-оркестратором (МО) в плагинной модели](FEAT-015-mo-interop-plugin-model.md) | `feat-015-mo-interop-20261004` (К20/канал SessionStart → `DEBT-045`) |
 | PROC-028 | [Политика вендоринга sim-kit в плагин: версия, обновление, запрет локальных правок](PROC-028-simkit-vendoring-policy.md) | `proc-028-simkit-vendoring-20261004` (п.2 реализован двумя файлами) |
 | DEBT-007 | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) | `proc-run-as-durable-unit-20260902` (расщеплена: `status` → `DEBT-039`) |
 | BUG-005 | [Противоречие: ADR-005 ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) | `proc-run-as-durable-unit-20260902` (предпосылка неверна; фактически снято `ADR-012`) |

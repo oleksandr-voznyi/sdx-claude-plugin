@@ -1,0 +1,11 @@
+{
+  "session_id": "feat-015-mo-interop-20261004",
+  "type": "feature",
+  "stage": "Discovery",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/feat-015-mo-interop-20261004",
+  "no_code": false,
+  "no_gates": false,
+  "artifacts": [],
+  "history": []
+}

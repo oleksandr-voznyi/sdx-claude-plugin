@@ -6,7 +6,7 @@ priority: high
 wave: null
 source: intake intake-mo-interop-aibok-20261004 (ответ SDX `SDX-MO-interop-reply-2026-10-04.md` §3; разбор `SDX-MO-interop-review-2026-10-04.md` §0)
 session: null
-links: [FEAT-015, PROC-020, PROC-027, DEBT-006, ADR-013]
+links: [FEAT-015, PROC-020, PROC-027, DEBT-006, ADR-013, ADR-008]
 ---
 
 # PROC-028. Политика вендоринга sim-kit в плагин: версия, обновление, запрет локальных правок
@@ -25,7 +25,8 @@ bash-обёртку, `FEAT-015` п.2 — поэтому python3 и PyYAML ост
 запиской в sim-kit (`SDX-MO-interop-reply-2026-10-04.md`); так и должно оставаться.
 
 ## Рекомендация
-Зафиксировать в `sdx/protocol.md` (раздел о зависимостях enforcement-слоя) и в `sdx/mo/README` или `SIMKIT_VERSION`:
+Зафиксировать в `sdx/protocol.md` (там, где описан enforcement-слой и его зависимость от `jq`) и в `sdx/mo/README`
+или `SIMKIT_VERSION`:
 1. **Источник истины — sim-kit.** Плагин вендорит ровно файлы выпуска с версией из `VERSION`; локальные правки
    вендорённого кода запрещены — дефект уходит запиской в `agentico/reviews/`, плагин ждёт выпуска. Это
    **именованное исключение** из инварианта ADR-013 «источник истины фреймворка — этот репозиторий»: для

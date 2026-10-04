@@ -69,10 +69,17 @@ chk_devops() {
   grep -q 'mesh_endpoint\.py' "$f" || { echo "no mesh_endpoint.py invocation in $f"; return 1; }
   bad="$(grep 'mesh_endpoint\.py' "$f" | grep -v 'PYTHONDONTWRITEBYTECODE=1' || true)"
   [ -z "$bad" ] || { echo "mesh_endpoint.py without PYTHONDONTWRITEBYTECODE=1: $bad"; return 1; }
+  # the paragraph on the oversight mechanism: "не в авторежиме" + `request` + `gate_mode: auto` on one line
+  grep -F 'не в авторежиме' "$f" | grep -qF '`request`' || { echo "no paragraph with 'не в авторежиме' and request in $f"; return 1; }
+  grep -F 'не в авторежиме' "$f" | grep -qF 'gate_mode: auto' || { echo "no paragraph with 'не в авторежиме' and 'gate_mode: auto' in $f"; return 1; }
   return 0
+}
+chk_protocol_deploy() {  # the "Deployment под МО" paragraph: a line naming both Deployment and artifact.offer
+  grep -F 'Deployment' "$1" | grep -qF 'artifact.offer' || { echo "no line with 'Deployment' and 'artifact.offer' in $1"; return 1; }
 }
 chk_init_mesh() {
   grep -qE '^[[:space:]]*\.mesh/[[:space:]]*$' "$1" || { echo "no .mesh/ line in $1"; return 1; }
+  grep -qF 'почтовый ящик мета-оркестратора (МО) — фенотип' "$1" || { echo "no comment 'почтовый ящик мета-оркестратора (МО) — фенотип' in $1"; return 1; }
 }
 chk_snippet() {
   local block
@@ -82,7 +89,7 @@ chk_snippet() {
   return 0
 }
 chk_adr() {
-  grep -q 'ADR-021' "$1" || { echo "no ADR-021 in $1"; return 1; }
+  grep -E '^## ADR-021\.' "$1" | grep -qF 'мета-оркестратор' || { echo "no heading '## ADR-021.' naming мета-оркестратор in $1"; return 1; }
 }
 
 echo "=== test-mo-prose.sh ==="
@@ -123,12 +130,28 @@ expect_ok "devops.md" chk_devops "$DEVOPS_MD"
 expect_red "red: copy with a flagless mesh_endpoint.py call" chk_devops "$TMP/d1.md"
 grep -vF '.mesh/endpoint.yaml' "$DEVOPS_MD" > "$TMP/d2.md"
 expect_red "red: copy without .mesh/endpoint.yaml" chk_devops "$TMP/d2.md"
+sed 's/не в авторежиме/в любом режиме/g' "$DEVOPS_MD" > "$TMP/d3.md"
+expect_red "red: copy without 'не в авторежиме'" chk_devops "$TMP/d3.md"
+sed 's/`request`/запрос/g' "$DEVOPS_MD" > "$TMP/d4.md"
+expect_red "red: copy without request" chk_devops "$TMP/d4.md"
+sed 's/gate_mode: auto/режим x/g' "$DEVOPS_MD" > "$TMP/d5.md"
+expect_red "red: copy without 'gate_mode: auto'" chk_devops "$TMP/d5.md"
+
+echo ""
+echo "[5b] protocol.md: the 'Deployment под МО' paragraph (Deployment + artifact.offer)"
+expect_ok "protocol.md" chk_protocol_deploy "$PROTOCOL"
+sed 's/artifact\.offer/offer-x/g' "$PROTOCOL" > "$TMP/p3.md"
+expect_red "red: copy without artifact.offer" chk_protocol_deploy "$TMP/p3.md"
+grep -vF 'Deployment' "$PROTOCOL" > "$TMP/p4.md"
+expect_red "red: copy without any Deployment line" chk_protocol_deploy "$TMP/p4.md"
 
 echo ""
 echo "[6] commands/init.md deploys the .mesh/ gitignore pattern"
 expect_ok "init.md" chk_init_mesh "$INIT_MD"
 grep -vE '^[[:space:]]*\.mesh/[[:space:]]*$' "$INIT_MD" > "$TMP/i1.md"
 expect_red "red: copy without .mesh/" chk_init_mesh "$TMP/i1.md"
+grep -vF 'почтовый ящик мета-оркестратора (МО) — фенотип' "$INIT_MD" > "$TMP/i2.md"
+expect_red "red: copy without the 'почтовый ящик мета-оркестратора (МО) — фенотип' comment" chk_init_mesh "$TMP/i2.md"
 
 echo ""
 echo "[7] CLAUDE.md snippet has the 'МО над стендами' item inside the SDX block"
@@ -137,10 +160,14 @@ grep -vF 'МО над стендами' "$SNIPPET" > "$TMP/c1.md"
 expect_red "red: copy without the item" chk_snippet "$TMP/c1.md"
 
 echo ""
-echo "[8] docs/DECISIONS.md records ADR-021"
+echo "[8] docs/DECISIONS.md records ADR-021 as a heading naming the meta-orchestrator"
 expect_ok "DECISIONS.md" chk_adr "$DECISIONS"
 grep -v 'ADR-021' "$DECISIONS" > "$TMP/a1.md"
 expect_red "red: copy without ADR-021" chk_adr "$TMP/a1.md"
+sed 's/^## ADR-021\..*/## ADR-021. Интероп/' "$DECISIONS" > "$TMP/a2.md"
+expect_red "red: ADR-021 heading without 'мета-оркестратор'" chk_adr "$TMP/a2.md"
+{ grep -v '^## ADR-021\.' "$DECISIONS"; echo 'см. ADR-021, мета-оркестратор'; } > "$TMP/a3.md"
+expect_red "red: bare ADR-021 mention is not the heading" chk_adr "$TMP/a3.md"
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

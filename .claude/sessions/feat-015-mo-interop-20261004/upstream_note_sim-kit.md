@@ -5,8 +5,9 @@ sim-kit 0.7.3 (`core/mesh_endpoint.py`, `core/devagent_hook.py`, `core/MO-INTERO
 Статус: `proposed`. Отправляется на Closeout сессии после явного подтверждения.
 
 ## 1. Вызовы без `PYTHONDONTWRITEBYTECODE=1` в вендорённых текстах
-`MO-INTEROP.md` §5 (`python3 $MO_TOOLS/mesh_endpoint.py …`) и docstring `devagent_hook.py:17–18` («добавить в
-`.claude/settings.json`: `python3 "$CLAUDE_PROJECT_DIR/tools/devagent_hook.py"`») вызывают инструменты без
+`MO-INTEROP.md` §5 (`python3 $MO_TOOLS/mesh_endpoint.py …`) и docstring `devagent_hook.py:17–18` («Установка: в плагине SDX — hooks/hooks.json: PreToolUse, matcher
+Bash|Write|Edit|MultiEdit|NotebookEdit →
+  python3 "${CLAUDE_PLUGIN_ROOT}/sdx/mo/devagent_hook.py" (MESH_ENDPOINT_DIR берётся из CLAUDE_PROJECT_DIR).») вызывают инструменты без
 `PYTHONDONTWRITEBYTECODE=1`. В плагинной модели `devagent_hook.py` импортирует `mesh_endpoint` из того же
 каталога, и python пишет `sdx/mo/__pycache__/` в **корень плагина** — нарушение инварианта ADR-013 SDX («контент
 плагина не пишет в свой корень в рантайме»); сторож `test-mo-inventory.sh` считает подкаталог находкой.
@@ -26,7 +27,7 @@ printf '{"tool_name":"Write","tool_input":{"file_path":"%s/dep/x"},"cwd":"%s"}' 
 # ожидание по docstring: rc=2 (deny); факт: rc=0, конверт notice в .mesh/outbox/
 ```
 Обёртка SDX читает режим как `raw_mode` (нижний регистр), т.е. трактует `DENY` как `deny` — расхождение с хуком
-на этой фикстуре зафиксировано в сьюте как INFO. Просьба: один `.lower()` на строке 181 (или сравнение с
+на этой фикстуре. Просьба: один `.lower()` на строке 181 (или сравнение с
 `raw_mode`).
 
 ## 3. Норма `Deployment` под МО — формального согласования нет

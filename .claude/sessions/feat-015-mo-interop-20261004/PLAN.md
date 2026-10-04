@@ -1,7 +1,7 @@
 # Implementation Plan: FEAT-015 — интероп с мета-оркестратором (МО) в плагинной модели
 
 ## Статус реализации
-0/33 задач Execution (T01–T33), 0/4 задач Closeout (C1–C4). Этап: Task Planning завершён, Execution не начат.
+33/33 задач Execution (T01–T33), 0/4 задач Closeout (C1–C4). Этап: Execution завершён, идёт Verification (круг 1).
 
 Ссылки: `SPEC` = `SPEC.md`, `DESIGN` = `DESIGN.md` этой сессии; `DH`/`ME`/`MI` — как в DESIGN (`sim-kit/core/devagent_hook.py`, `mesh_endpoint.py`, `MO-INTEROP.md`). Критерии SPEC — `К1…К22`.
 

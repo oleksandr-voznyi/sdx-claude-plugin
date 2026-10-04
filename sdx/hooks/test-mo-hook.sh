@@ -98,13 +98,13 @@ ep() { mkdir -p "$fx/proj/.mesh"; printf '%s\n' "$1" > "$fx/proj/.mesh/endpoint.
 # block_yaml: a yaml module that fails to import (python3 present, PyYAML "absent")
 block_yaml() { mkdir -p "$fx/stubyaml"; printf 'raise ImportError("blocked for test")\n' > "$fx/stubyaml/yaml.py"; }
 
-# run_hook <stdin-text>: runs $HOOK in isolation. Results: RC, OUT, ERR. Env knobs: RUN_CWD, NO_PROJ_VAR, EXTRA_PP.
+# run_hook <stdin-text>: runs $HOOK in isolation. Results: RC, OUT, ERR. Env knobs: RUN_CWD, NO_PROJ_VAR, EXTRA_PP, PROJ_OVERRIDE.
 run_hook() {
   rm -f "$fx/stub.meta" "$fx/stub.stdin"
   ( cd "${RUN_CWD:-$fx/proj}" || exit 99
     export PATH="$fx/bin" CLAUDE_PLUGIN_ROOT="$fx/root" STUB_LOG="$fx/stub"
     [ -n "${EXTRA_PP:-}" ] && export PYTHONPATH="$EXTRA_PP"
-    if [ "${NO_PROJ_VAR:-}" = 1 ]; then unset CLAUDE_PROJECT_DIR; else export CLAUDE_PROJECT_DIR="$fx/proj"; fi
+    if [ "${NO_PROJ_VAR:-}" = 1 ]; then unset CLAUDE_PROJECT_DIR; else export CLAUDE_PROJECT_DIR="${PROJ_OVERRIDE:-$fx/proj}"; fi
     exec "$BASH_BIN" "$HOOK" <<<"$1" >"$fx/out" 2>"$fx/err" )
   RC=$?
   OUT="$(cat "$fx/out")"; ERR="$(cat "$fx/err")"
@@ -251,6 +251,7 @@ scen3() {
   for c in "no python3" "no hook file" "no jq" "garbage stdin" "hook rc 1" "hook rc 127" "hook killed"; do
     for m in notice deny; do cell3 "$c" "$m"; done
   done
+  scen3m
   # the static no-jq literal is itself valid JSON naming the cause
   new_fx; bin_set stub no; hook_file_stub; ep 'on_write: deny'; run_hook "$(mk_bash ls)"
   if is_json_deny && printf '%s' "$(reason)" | grep -q 'jq'; then pass "[3j$LBL] no-jq deny literal is valid JSON and names jq"
@@ -367,14 +368,37 @@ scen7() {
   new_fx; bin_set stub yes; hook_file_stub; ep 'on_write: deny'; pp="$fx/proj"
   local c
   for c in "Write|$pp/.mesh/outbox/x.json" "Write|$pp/src/endpoint.yaml" \
-           "Write|$pp/.mesh/endpoint.yaml.bak" "Read|$pp/.mesh/endpoint.yaml"; do
+           "Write|$pp/.mesh/endpoint.yaml.bak" "Read|$pp/.mesh/endpoint.yaml" \
+           "Write|$pp/.mesh/hook-state.json"; do
     run_hook "$(mk_write "${c%%|*}" "${c#*|}" "$pp")"
     if [ "$RC" = 0 ] && [ -z "$OUT" ] && stub_ran; then info "[7d$LBL] boundary (not the guard): ${c%%|*} ${c#*|} -> passed to the hook, not blocked by the wrapper"
     else fail "[7d$LBL] control ${c%%|*} ${c#*|}" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
   done
+  scen7f
   run_hook "$(mk_bash "cat $pp/.mesh/endpoint.yaml; echo x > $pp/.mesh/endpoint.yaml")"
   if [ "$RC" = 0 ] && [ -z "$OUT" ] && stub_ran; then info "[7e$LBL] boundary (REQ-MO-HOOK-8): Bash text naming endpoint.yaml is not guarded — hook started"
   else fail "[7e$LBL] Bash control" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+}
+
+# [7f] project reached through a symlink: the guard compares against the physical project path too
+scen7f() {
+  new_fx; bin_set stub yes; hook_file_stub; ep 'on_write: notice'
+  ln -s "$fx/proj" "$fx/link"
+  local phys; phys="$(cd "$fx/proj" && pwd -P)"
+  PROJ_OVERRIDE="$fx/link" run_hook "$(mk_write Write "$phys/.mesh/endpoint.yaml" "$phys")"
+  if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && ! stub_ran; then pass "[7f$LBL] project via symlink: Write to the physical .mesh/endpoint.yaml -> JSON deny, hook not started"
+  else fail "[7f$LBL] symlinked project" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
+}
+
+# [3m] a multi-line traceback from the hook becomes exactly one stderr line (its last line)
+scen3m() {
+  new_fx; bin_set stub yes; hook_file_stub; ep 'on_write: notice'
+  STUB_RC=1 STUB_ERR='Traceback (most recent call last):
+  File "x.py", line 1, in <module>
+ValueError: boom-last' run_hook "$(mk_bash ls)"
+  if [ "$RC" = 0 ] && [ -z "$OUT" ] && one_line "$ERR" && printf '%s' "$ERR" | grep -q 'boom-last' && ! printf '%s' "$ERR" | grep -q 'Traceback'; then
+    pass "[3m$LBL] multi-line hook traceback / notice: exactly one stderr line, carrying the last traceback line"
+  else fail "[3m$LBL] multi-line traceback" "rc=$RC out=[$OUT] err=[$ERR]"; fi
 }
 
 # ---------------------------------------------------------------- [8]
@@ -512,6 +536,8 @@ mutate BYTECODE-ENV 's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJE
 mutate BYTECODE-FS  's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'SCEN8_MIN=1 scen8; scen9'
 mutate NO-GUARD     '/# MO-GUARD/d' 'GUARD_SET=min scen7'
 mutate NO-NORM      's|^  case "\$fp" in /\*) ;; \*) fp=.*# MO-NORM$|  :|' 'GUARD_SET=norm scen7'
+mutate NO-PHYS      's|for d in "\$proj_abs" "\$proj_phys"; do|for d in "$proj_abs"; do|' 'scen7f'
+mutate M9-MULTILINE 's|^    last="\${err##\*"\$nl"}"|    last="$err"|' 'scen3m'
 mutate NO-HOOKFILE  '/# MO-HOOKFILE/d' 'cell3 "no hook file" notice'
 
 echo ""

@@ -8,5 +8,6 @@
 Правила — `sdx/protocol.md`, «Вендорённые компоненты (`sdx/mo/`)» (PROC-028, поправка к ADR-013):
 локальные правки запрещены — дефект уходит запиской в `agentico/reviews/`, плагин ждёт выпуска;
 обновление — осознанный шаг отдельной сессией, не в `gate_mode: auto`; сторож — `sdx/hooks/test-mo-inventory.sh`.
-Плагин вызывает эти файлы только через обёртки `sdx/hooks/mo-hook.sh` и `sdx/hooks/mo-session.sh`
+Из проводки `hooks.json` эти файлы вызываются только через обёртки `sdx/hooks/mo-hook.sh` и `sdx/hooks/mo-session.sh`;
+субагент `devops` вызывает `mesh_endpoint.py` напрямую с `PYTHONDONTWRITEBYTECODE=1`
 (`PYTHONDONTWRITEBYTECODE=1`, трансляция `exit 2` в JSON `permissionDecision: "deny"`).

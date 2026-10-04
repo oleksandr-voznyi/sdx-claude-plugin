@@ -49,6 +49,10 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 (`Constructor-concept.md`, `AIBoK-structure.md`), оформившим находки, которые предшествующий
 груминг обнаружил, но завести не мог по границам своего типа.
 
+Записи `FEAT-015` и `PROC-028` порождены разбором `intake intake-mo-interop-aibok-20261004`
+(интероп SDX с мета-оркестратором по sim-kit 0.7.3 и обзор AIBoK 1.0); тем же разбором дописаны
+разделы «Уточнения разбора» в `FEAT-006`, `PROC-021`, `DEBT-031` без смены их атрибутов.
+
 ## Открытые
 
 | ID | type | status | priority | wave | Название |
@@ -65,6 +69,8 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
 | DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
+| FEAT-015 | feat | open | high | null | [Интероп с мета-оркестратором (МО) в плагинной модели: канал `.mesh/`, хук `exec_paths`, режим `devops`](FEAT-015-mo-interop-plugin-model.md) |
+| PROC-028 | proc | open | high | null | [Политика вендоринга sim-kit в плагин: версия, обновление, запрет локальных правок](PROC-028-simkit-vendoring-policy.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
 | FEAT-008 | feat | open | normal | 4 | [Компенсации и бюджет прогона](FEAT-008-compensations-and-run-budget.md) |

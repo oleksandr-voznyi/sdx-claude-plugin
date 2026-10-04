@@ -1,5 +1,8 @@
 # Intake: intake-mo-interop-aibok-20261004
 
+> Перенесено из `.claude/sessions/intake-mo-interop-aibok-20261004/intake.md` на Closeout (ADR-017); упоминаемые
+> в тексте файлы сессии (`change_note.md`, `decisions_log.md`, `verification_report.md`) удалены вместе с каталогом.
+
 - **session_id**: intake-mo-interop-aibok-20261004
 - **Дата**: 2026-10-04
 - **Тип**: intake

@@ -51,6 +51,7 @@ claude plugin install sdx@sdx --scope user
 | `sdx/protocol.md` | Протокол сессий: состояние, единая шкала этапов и флаги, гейты, Closeout, import/export |
 | `sdx/hooks/` | Скрипты хуков (stop-gate, prod-guard, preflight, selftest) и их тесты (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` — вызываемые командами CLI-скрипты, не проводка `hooks.json` |
 | `sdx/templates/` | Шаблоны per-project конфигов и SDX-блока для CLAUDE.md |
+| `sdx/mo/` | Вендорённые инструменты лист-сессии мета-оркестратора (sim-kit, версия в `SIMKIT_VERSION`): `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`; вызываются только обёртками `sdx/hooks/mo-hook.sh` / `mo-session.sh`, активны лишь в проекте с `.mesh/endpoint.yaml` |
 
 Хуки safe-by-default: вне ветки `sdx/<id>` и без per-project конфигов они прозрачны (no-op), поэтому user-scope установка не мешает проектам, не использующим SDX.
 

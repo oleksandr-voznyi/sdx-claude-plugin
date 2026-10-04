@@ -18,21 +18,21 @@
 
 ### Группа 1 — Вендоринг (`sdx/mo/`)
 
-- [ ] **T01** `[INFRA]` Вендорить sim-kit 0.7.3 в `sdx/mo/`
+- [x] **T01** `[INFRA]` Вендорить sim-kit 0.7.3 в `sdx/mo/`
   - Зависит от: —
   - Файлы: `sdx/mo/mesh_endpoint.py`, `sdx/mo/devagent_hook.py`, `sdx/mo/MO-INTEROP.md`, `sdx/mo/SIMKIT_VERSION`, `sdx/mo/SIMKIT_SHA256` (новые)
   - Что: выполнить блок команд DESIGN «`sdx/mo/` — вендорённый каталог» дословно (`cp` трёх файлов из `/home/archi/Code/aibok/agentico/meta-orchestrator/sim-kit/core/`, `printf` версии, `sha256sum` в `SIMKIT_SHA256` в порядке `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`). Предусловие: `cat sim-kit/VERSION` == `0.7.3`, иначе СТОП (версия в SPEC фиксирована). Не запускать python из `core/`, не копировать `__pycache__`, `mo.py`, `guard.py`, `mesh.py`, `classifiers/`.
   - DoD: `cmp` каждого из трёх файлов с `sim-kit/core/` — пусто; `cat sdx/mo/SIMKIT_VERSION` == `0.7.3`; `(cd sdx/mo && sha256sum -c SIMKIT_SHA256)` — три `OK`; `ls -a sdx/mo` без `__pycache__`; строки `SIMKIT_SHA256` соответствуют `^[0-9a-f]{64}  [^/ ]+$`.
   - Закрывает: К1 (часть), REQ-MO-VEND-1/3. Параллельно: можно с T04 (разные файлы).
 
-- [ ] **T02** `[DOC]` `sdx/mo/README.md` (не вендорится)
+- [x] **T02** `[DOC]` `sdx/mo/README.md` (не вендорится)
   - Зависит от: T01
   - Файлы: `sdx/mo/README.md`
   - Что: ~12 строк по списку DESIGN («откуда / политика / как обновлять (не в `auto`, ссылка на `protocol.md` «Вендорённые компоненты (`sdx/mo/`)») / в проекты не копируется / `PYTHONDONTWRITEBYTECODE=1`»), на русском. Не добавлять `README.md` в `SIMKIT_SHA256`.
   - DoD: `bash sdx/hooks/test-mo-inventory.sh` — в [6] `README.md` не считается лишним файлом (нет находки «неперечисленный файл»); `grep -c 'SIMKIT_SHA256' sdx/mo/SIMKIT_SHA256` для README не нужен (не хешируется): `! grep -q README sdx/mo/SIMKIT_SHA256`.
   - Закрывает: К1 (часть), REQ-MO-VEND-2/3.
 
-- [ ] **T03** `[TEST]` Сторож `test-mo-inventory.sh` [6]: реальная проверка и красные стороны (без правки сьюта)
+- [x] **T03** `[TEST]` Сторож `test-mo-inventory.sh` [6]: реальная проверка и красные стороны (без правки сьюта)
   - Зависит от: T01, T02
   - Файлы: правок файлов репо нет (проверка исполнением; результат — в сообщении коммита/`verification`-заметке сессии)
   - Что: прогнать `bash sdx/hooks/test-mo-inventory.sh`; убедиться, что [6] выполняется (не «пропуск INFO»). Красные стороны — ТОЛЬКО на копии репо в scratchpad (`cp -R` без `.git`), чекаут не трогать: (а) дописать байт в `devagent_hook.py` → `check_inventory` красный; (б) `mkdir sdx/mo/__pycache__` → красный; (в) лишний файл `sdx/mo/x.txt` → красный; (г) `SIMKIT_VERSION` = `0.7` пусто/мусор → красный.
@@ -235,7 +235,7 @@
   - DoD: `grep -n '^## ADR-021\|ADR-021' docs/DECISIONS.md` находит запись и ссылку из ADR-013; `grep -c 'mesh_endpoint.py\|devagent_hook.py\|MO-INTEROP.md' docs/DECISIONS.md` не уменьшился относительно `main`; в ADR перечислены все 6 отвергнутых вариантов.
   - Закрывает: К18 (ADR), REQ-MO-PROTO-6.
 
-- [ ] **T30** `[DOC]` Поверхности состава: `README.md`, `README.en.md`, `CLAUDE.md` §6
+- [x] **T30** `[DOC]` Поверхности состава: `README.md`, `README.en.md`, `CLAUDE.md` §6
   - Зависит от: T01
   - Файлы: `README.md`, `README.en.md`, `CLAUDE.md`
   - Что: DESIGN «Тексты правок → 6»: строка `sdx/mo/` в таблице «Состав плагина» (RU и EN симметрично), `sdx/hooks/` + `mo-hook, mo-session`, абзац про МО-хуки «молчат без `.mesh/endpoint.yaml`», строка `sdx/` в `CLAUDE.md` §6 с тремя именами. Три имени (`mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`) — literal match на каждой поверхности.

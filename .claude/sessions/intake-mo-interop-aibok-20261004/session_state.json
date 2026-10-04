@@ -1,0 +1,11 @@
+{
+  "session_id": "intake-mo-interop-aibok-20261004",
+  "type": "intake",
+  "stage": "Discovery",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/intake-mo-interop-aibok-20261004",
+  "no_code": true,
+  "no_gates": false,
+  "artifacts": [],
+  "history": []
+}

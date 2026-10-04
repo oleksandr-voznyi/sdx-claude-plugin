@@ -1,11 +1,11 @@
 ---
 id: FEAT-015
 type: feat
-status: open
+status: closed
 priority: high
 wave: null
 source: intake intake-mo-interop-aibok-20261004 (записка владельца МО 04.10, ответ SDX `SDX-MO-interop-reply-2026-10-04.md`, разбор `SDX-MO-interop-review-2026-10-04.md`, sim-kit 0.7.3 `core/MO-INTEROP.md`)
-session: null
+session: feat-015-mo-interop-20261004
 links: [PROC-028, FEAT-006, FEAT-007, PROC-020, BUG-002, IDEA-002, PROC-019, DEBT-031, ADR-013]
 ---
 
@@ -107,3 +107,18 @@ stderr, ни `python3` в дереве процессов (проверяемо 
 когда у SDX появятся классы риска), `IDEA-002` (МО — внешний актор над многими репозиториями, но его предмет —
 стенды, а не stateless-задачи по портфелю; пересечение по охвату, не по предмету), `DEBT-031` (L6/L7 для стендов
 живут у МО — см. дополнение там).
+
+## Резолюция
+Закрыто сессией `feat-015-mo-interop-20261004` (ADR-021; постоянные документы `docs/specs/mo-interop.md`,
+`docs/designs/mo-interop.md`, `docs/designs/mo-interop-discovery.md`). Поставлено: `sdx/mo/` (sim-kit 0.7.3,
+`SIMKIT_VERSION`/`SIMKIT_SHA256`); обёртка `sdx/hooks/mo-hook.sh` (выход до python без `.mesh/endpoint.yaml`,
+трансляция `exit 2` → JSON `permissionDecision: "deny"`, `PYTHONDONTWRITEBYTECODE=1`, политика отказа по режиму,
+охрана `endpoint.yaml`/`cursors.json`) и `mo-session.sh` (`pull`/`inbox --json`/`leases` как ДАННЫЕ); проводка
+`hooks.json`; восьмой тег `[директива]`; `Deployment` под МО закрывается отправкой `artifact.offer`; режим
+`devops`; `.mesh/` в `init.md`; абзац в сниппете; поверхности состава. 15 сьютов, 389 проверок, мутанты красные.
+
+**Открыто после закрытия:** К20 (агрегация решений двух PreToolUse на `Bash`) и канал SessionStart — НЕ ПРОВЕРЕНО
+исполнением (`DEBT-045`); К21 — живая приёмка на MOVE.IO вне поставки; расширение self-test (`DEBT-043`);
+хеш-проверка установленной копии (`DEBT-044`); три находки upstream для sim-kit — записка `agentico/reviews/`
+(регистр `on_write` `DH:181`/`DH:38`, `PYTHONDONTWRITEBYTECODE` в текстах sim-kit, формальное согласование
+`Deployment`).

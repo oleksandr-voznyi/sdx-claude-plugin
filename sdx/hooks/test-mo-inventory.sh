@@ -26,14 +26,15 @@
 #
 # Deliberately static, like test-init-patterns.sh and test-hook-wiring.sh: it hashes files, runs
 # no hooks. Both checkers are exercised on a scratch fixture with green and red sides before
-# they are pointed at the real sdx/mo/ — a guard never shown to go red proves nothing. While
-# FEAT-015 is not delivered the real directory does not exist; scenario [6] says so out loud and
-# counts it neither as a pass nor as a fail.
+# they are pointed at the real sdx/mo/ — a guard never shown to go red proves nothing. The real
+# directory is delivered by FEAT-015, so its absence is a regression: scenario [6] FAILs on it
+# (red side: a copy of this suite with MO_DIR pointed at a missing directory must exit 1).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-MO_DIR="$ROOT/sdx/mo"
+# MO_DIR_UNDER_TEST overrides the directory under test (red side of scenario [6]).
+MO_DIR="${MO_DIR_UNDER_TEST:-$ROOT/sdx/mo}"
 SURFACES="README.md README.en.md CLAUDE.md sdx/protocol.md docs/DECISIONS.md"
 
 PASS_COUNT=0
@@ -222,7 +223,7 @@ if command -v sha256sum >/dev/null 2>&1 && command -v shasum >/dev/null 2>&1; th
 else echo "  INFO: only one sha256 tool on this host — fallback equivalence not exercised"; fi
 
 # --- The real directory ---------------------------------------------------------------------
-echo "[6] Real sdx/mo/ (exists only once FEAT-015 is delivered)"
+echo "[6] Real sdx/mo/ (delivered by FEAT-015; absence is a regression)"
 if [ -d "$MO_DIR" ]; then
   out="$(check_inventory "$MO_DIR")"
   if [ -z "$out" ]; then pass "sdx/mo/ matches SIMKIT_SHA256 and SIMKIT_VERSION ($(cat "$MO_DIR/SIMKIT_VERSION"))"
@@ -232,8 +233,18 @@ if [ -d "$MO_DIR" ]; then
   if [ -z "$out" ]; then pass "every vendored name is mentioned by each composition surface ($SURFACES)"
   else fail "composition surfaces drifted from sdx/mo/" "$(printf '%s' "$out" | tr '\n' ';')"; fi
 else
-  # Not a pass: nothing was verified. Not a fail: absence is the documented pre-FEAT-015 state.
-  echo "  INFO: sdx/mo/ absent — nothing vendored yet (FEAT-015 not delivered); real-directory and surface checks skipped"
+  # Delivered by FEAT-015: a missing directory is a regression, not a pre-delivery state.
+  fail "sdx/mo/ missing" "$MO_DIR does not exist (vendored by FEAT-015)"
+fi
+
+# Red side of [6]: the same suite with MO_DIR pointing at a missing directory must FAIL exactly once.
+if [ -z "${MO_DIR_UNDER_TEST:-}" ]; then
+  echo "[6r] Missing sdx/mo/ turns the suite red"
+  rout="$(MO_DIR_UNDER_TEST="$(mktemp -d)/absent" bash "${BASH_SOURCE[0]}" 2>&1)"; rrc=$?
+  if [ "$rrc" -eq 1 ] && [ "$(printf '%s\n' "$rout" | grep -c 'FAIL: sdx/mo/ missing')" = 1 ] \
+     && printf '%s' "$rout" | grep -q 'Results: .* 1 failed'; then
+    pass "MO_DIR_UNDER_TEST=<absent> -> rc 1 with exactly 1 FAIL (sdx/mo/ missing)"
+  else fail "absent sdx/mo/ stayed green" "rc=$rrc"; fi
 fi
 
 echo ""

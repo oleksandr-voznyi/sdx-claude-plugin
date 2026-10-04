@@ -51,10 +51,11 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 | `agents/` | 9 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops`, `auditor` |
 | `hooks/hooks.json` | Enforcement-layer wiring (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Session protocol: state, unified stage scale and flags, gates, Closeout, import/export |
-| `sdx/hooks/` | Hook scripts (stop-gate, prod-guard, preflight, selftest) and their tests (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` are CLI scripts invoked by commands, not `hooks.json` wiring |
+| `sdx/hooks/` | Hook scripts (stop-gate, prod-guard, preflight, selftest, mo-hook, mo-session) and their tests (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` are CLI scripts invoked by commands, not `hooks.json` wiring |
 | `sdx/templates/` | Templates for per-project configs and the CLAUDE.md SDX block |
+| `sdx/mo/` | Vendored meta-orchestrator leaf-session tools (sim-kit, version in `SIMKIT_VERSION`): `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`; invoked from the `hooks.json` wiring only via the wrappers `sdx/hooks/mo-hook.sh` / `mo-session.sh`; the `devops` subagent calls `mesh_endpoint.py` directly with `PYTHONDONTWRITEBYTECODE=1`, active only in a project that has `.mesh/endpoint.yaml` |
 
-Hooks are safe by default: outside an `sdx/<id>` branch and without per-project configs they are transparent (no-op), so a user-scope installation does not interfere with projects that don't use SDX.
+Hooks are safe by default: outside an `sdx/<id>` branch and without per-project configs they are transparent (no-op), so a user-scope installation does not interfere with projects that don't use SDX. The exception is the activation criterion of the MO hooks (`mo-hook`, `mo-session`): they are active when the project has `.mesh/endpoint.yaml`, not by the `sdx/<id>` branch; without that file they are a no-op.
 
 ## Unified stage scale and mode flags
 

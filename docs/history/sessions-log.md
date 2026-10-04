@@ -899,3 +899,45 @@ ADR-шаг от `PROC-021`; волны `FEAT-015`/`PROC-028`; сузить `DEBT
 `sdx/hooks/test-mo-inventory.sh` (новый), `docs/backlog/{PROC-028,FEAT-015,DEBT-042,README}`.
 Ветка `sdx/proc-028-simkit-vendoring-20261004`. Отдельного файла в `docs/specs/` нет: дельта этой
 сессии — сам нормативный текст протокола и ADR.
+
+## 2026-10-04/05 — feat-015-mo-interop-20261004 (feature, полный цикл SPEC/DESIGN/PLAN) · плагин 2.3.0
+
+**Предмет.** Интероп SDX с мета-оркестратором (МО) в плагинной модели — обязательства SDX из `MO-INTEROP.md`
+sim-kit 0.7.3. Первый фрагмент плагина с источником истины вне репозитория: `sdx/mo/` (три вендорённых файла,
+`SIMKIT_VERSION`/`SIMKIT_SHA256` по `PROC-028`), обёртка `sdx/hooks/mo-hook.sh` (PreToolUse: выход до python без
+`.mesh/endpoint.yaml`; трансляция `exit 2` хука sim-kit в JSON `permissionDecision: "deny"` + `exit 0` по
+протоколу; `PYTHONDONTWRITEBYTECODE=1`; политика отказа — fail-open в `notice`, fail-closed в `deny`; охрана
+`endpoint.yaml`/`cursors.json`), `mo-session.sh` (SessionStart: `pull`/`inbox --json`/`leases`, всё как ДАННЫЕ через
+`tojson`), проводка `hooks.json`, восьмой тег журнала `[директива]`, норма «`Deployment` под МО закрывается
+отправкой `artifact.offer`», режим `devops`, `.mesh/` в `init.md`, абзац в сниппете, поверхности состава. ADR-021.
+
+**Исполнение.** Три параллельные дорожки `developer` (обёртка+тесты / session+проводка / проза) по 33 задачам
+PLAN; `test-mo-hook.sh` ужат 66 → 20 с без потери веток; итог — 15 сьютов, 389 проверок, ~55 с полного прогона
+(`verify-cmd.sh` актуализирован). Отклонения от DoD названы в архиве плана (порядок TDD дорожки A, красная
+сторона `mo-session` отсутствует по построению, сторож инвентаря правлен: пропажа `sdx/mo/` теперь FAIL).
+
+**Верификация.** `qa` — полная матрица критериев, 25/32 своих мутантов красные, 7 выживших → закрыты кругом 2.
+Fresh-eyes круг 1 — 0 FAIL / 11 WARN (README safe-by-default; «три хука» self-test; «только обёртками»;
+мотивировка `__pycache__` — байткод пишет только `devagent_hook.py`; `MANUAL_TEST` случай 6; `auto` и
+`artifact.offer`; аренды без маркировки — одна правка кода); круг 2 — 0 FAIL / 6 WARN, все — отставание
+SPEC/DESIGN/PLAN от решений, принятых человеком в этой же сессии. Коллизия триады одна (DESIGN отказался от
+предпроверки PyYAML в обёртке — хук sim-kit делает это сам) — решена пользователем в пользу DESIGN, SPEC поправлен.
+Правки круга 3 независимым ревью не смотрелись — гейт закрыт решением пользователя. Семь записей в
+`decisions_log.md` (`[триада]`, `[триаж]`×5, `[ручной-шаг]`).
+
+**Не проверено исполнением** (решение пользователя; `DEBT-045`): К20 — агрегация решений двух PreToolUse на
+`Bash` на бинарнике; видит ли модель stderr `SessionStart`. Сценарий сохранён —
+`docs/history/experiments/mo-interop-manual-test-2026-10-05.md`. К21 — живая приёмка на MOVE.IO — вне поставки.
+
+**Бэклог.** Закрыта `FEAT-015`. Новые `DEBT-043` (self-test и `/sdx:status` без МО), `DEBT-044` (хеш
+установленной копии), `DEBT-045` (непроверенные допущения), `DEBT-046` (посторонний файл `false` в корне —
+находка `qa`). Upstream в sim-kit — записка-заготовка (регистр `on_write` `DH:181`/`DH:38`;
+`PYTHONDONTWRITEBYTECODE` в текстах sim-kit; согласование `Deployment`) — отправляется отдельно.
+
+**Затронутые документы:** `sdx/mo/*` (новый), `sdx/hooks/{mo-hook,mo-session}.sh`, пять сьютов,
+`hooks/hooks.json`, `sdx/protocol.md`, `commands/{next,init}.md`, `agents/devops.md`,
+`sdx/templates/claude-md-snippet.md`, `docs/DECISIONS.md` (ADR-021, ссылка в ADR-013),
+`docs/designs/decision-journal-and-resume.md`, `README.md`, `README.en.md`, `CLAUDE.md`, `.claude-plugin/plugin.json`
+(2.3.0), `.claude/sdx/verify-cmd.sh`. Постоянные: `docs/specs/mo-interop.md`, `docs/designs/mo-interop.md`,
+`docs/designs/mo-interop-discovery.md`, `docs/history/experiments/mo-interop-manual-test-2026-10-05.md`,
+`docs/history/plans/feat-015-mo-interop-20261004.md`. Ветка `sdx/feat-015-mo-interop-20261004`.

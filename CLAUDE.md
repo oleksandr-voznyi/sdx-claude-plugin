@@ -81,7 +81,7 @@
 - `commands/`: Слэш-команды SDX (`/sdx:start`, `/sdx:next` и т.д. — неймспейс даёт имя плагина).
 - `agents/`: Инструкции специализированных агентов (YAML frontmatter: `name`, `description`, `tools`, `model`).
 - `hooks/hooks.json`: Проводка enforcement-хуков (пути через `${CLAUDE_PLUGIN_ROOT}`).
-- `sdx/`: Протокол сессий (`protocol.md`), hook-скрипты с тестами (`hooks/`), шаблоны per-project конфигов (`templates/`).
+- `sdx/`: Протокол сессий (`protocol.md`), hook-скрипты с тестами (`hooks/`, в т.ч. МО-хуки `mo-hook`/`mo-session`), шаблоны per-project конфигов (`templates/`), вендорённые инструменты лист-сессии мета-оркестратора (`mo/`: `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md` из sim-kit — источник истины вне репозитория, политика PROC-028 в протоколе).
 
 В каждом целевом проекте (включая этот мета-репозиторий) живёт только **per-project слой**:
 - `.claude/sessions/<id>/`: Данные активной сессии. Сессия = ветка `sdx/<id>`, checkout'нутая в основном рабочем дереве (один CLI на весь жизненный цикл, без worktree — ADR-012); артефакты версионируются (tracked) инкрементальными коммитами на этой ветке; только эфемерные `.stopgate.*`-файлы игнорируются точечным паттерном.

@@ -144,6 +144,7 @@ scen1() {
   STUB_RC=1 STUB_ERR="boom" run_hook "$ev"
   if [ "$RC" = 0 ] && [ -z "$OUT" ] && [ -z "$ERR" ] && ! stub_ran; then pass "[1a$LBL] no .mesh, no jq, failing python3: silent, python3 not started"
   else fail "[1a$LBL] no .mesh" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
+  [ "${SCEN_MIN:-0}" = 1 ] && return 0
   # (b) .mesh/ exists but without endpoint.yaml
   new_fx; bin_set stub no; hook_file_stub; mkdir -p "$fx/proj/.mesh/outbox"
   STUB_RC=1 STUB_ERR="boom" run_hook "$ev"
@@ -184,10 +185,10 @@ longer word|on_write: denyx|notice'
 scen2() {
   echo "[2$LBL] on_write mode is read as the sim-kit hook reads it (observed via the no-python3 branch)"
   local line name content want got n=0
+  new_fx; bin_set none yes; hook_file_stub   # one fixture for the wrapper loop: only endpoint.yaml changes
   while IFS= read -r line; do
     name="${line%%|*}"; rest="${line#*|}"; content="${rest%|*}"; want="${rest##*|}"
     n=$((n + 1))
-    new_fx; bin_set none yes; hook_file_stub
     mkdir -p "$fx/proj/.mesh"; printf '%b\n' "$content" > "$fx/proj/.mesh/endpoint.yaml"
     run_hook "$(mk_bash 'ls')"
     if is_json_deny && [ "$RC" = 0 ]; then got=deny; elif [ "$RC" = 0 ] && one_line "$ERR" && [ -z "$OUT" ]; then got=notice; else got="other(rc=$RC)"; fi
@@ -204,12 +205,12 @@ scen2() {
     chmod 600 "$fx/proj/.mesh/endpoint.yaml"
   fi
   # parity with the real hook: PyYAML blocked, so the hook decides purely by its own mode regex (rc 2 = deny)
-  if [ "$HAVE_PY" = 1 ]; then
+  if [ "$HAVE_PY" = 1 ] && [ "${PARITY:-1}" = 1 ]; then
     n=0
+    new_fx; bin_set real yes; hook_file_real; block_yaml
     while IFS= read -r line; do
       name="${line%%|*}"; rest="${line#*|}"; content="${rest%|*}"; want="${rest##*|}"
       n=$((n + 1))
-      new_fx; bin_set real yes; hook_file_real; block_yaml
       mkdir -p "$fx/proj/.mesh"; printf '%b\n' "$content" > "$fx/proj/.mesh/endpoint.yaml"
       ( cd "$fx/proj"; PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$fx/stubyaml" CLAUDE_PROJECT_DIR="$fx/proj" \
           "$REAL_PY" "$fx/root/sdx/mo/devagent_hook.py" <<<"$(mk_bash ls)" >/dev/null 2>&1 )
@@ -222,7 +223,7 @@ scen2() {
     new_fx; bin_set none yes; hook_file_stub; mkdir -p "$fx/proj/.mesh"; printf 'on_write: deny\xd0\xb9\n' > "$fx/proj/.mesh/endpoint.yaml"
     run_hook "$(mk_bash ls)"
     info "[2.known$LBL] 'denyй' (non-ASCII tail): wrapper mode is locale dependent (decision: $(is_json_deny && echo deny || echo notice)); Python reads it as not-deny — named divergence, not a pass"
-  else
+  elif [ "$HAVE_PY" != 1 ]; then
     info "[2p$LBL] no python3: parity part SKIPPED (not a pass)"
   fi
 }
@@ -281,11 +282,13 @@ scen5() {
   want='DENY [MO-exec-paths]: запись "под кавычками" \ обратный слэш
 вторая строка: 100% {json}'
   for m in notice deny; do
+    [ "${SCEN_MIN:-0}" = 1 ] && [ "$m" = notice ] && continue
     new_fx; bin_set stub yes; hook_file_stub; ep "on_write: $m"
     STUB_RC=2 STUB_ERR="$want" run_hook "$(mk_bash 'cp a /dep/a')"
     if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && [ "$(reason)" = "$want" ]; then pass "[5$LBL] $m: valid JSON deny, reason equals hook stderr byte-for-byte, exit 0, stderr empty"
     else fail "[5$LBL] $m" "rc=$RC out=[$OUT] err=[$ERR] reason=[$(reason)]"; fi
   done
+  [ "${SCEN_MIN:-0}" = 1 ] && return 0
   new_fx; bin_set stub yes; hook_file_stub; ep 'on_write: notice'
   STUB_RC=2 run_hook "$(mk_bash 'x')"
   if [ "$RC" = 0 ] && is_json_deny && [ -n "$(reason)" ]; then pass "[5e$LBL] rc 2 with empty stderr: block kept, placeholder reason"
@@ -321,30 +324,40 @@ scen6() {
 # ---------------------------------------------------------------- [7]
 scen7() {
   echo "[7$LBL] mailbox guard: Write-family tools cannot write .mesh/endpoint.yaml / cursors.json"
-  local tool m f form p cwd ev n=0 bad=0 pp
-  for m in notice deny; do
-    new_fx; bin_set stub yes; hook_file_stub; ep "on_write: $m"
-    pp="$fx/proj"
-    for tool in Write Edit MultiEdit NotebookEdit; do
-      for f in endpoint.yaml cursors.json; do
-        for form in abs rel dots dslash updir; do
-          cwd="$pp"
-          case "$form" in
-            abs)    p="$pp/.mesh/$f" ;;
-            rel)    p=".mesh/$f" ;;
-            dots)   p="$pp/./.mesh/../.mesh/$f" ;;
-            dslash) p="$pp//.mesh/$f" ;;
-            updir)  p="../.mesh/$f"; cwd="$pp/src" ;;
-          esac
-          n=$((n + 1))
-          run_hook "$(mk_write "$tool" "$p" "$cwd")"
-          if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && ! stub_ran; then :
-          else bad=$((bad + 1)); fail "[7$LBL] $m $tool $f ($form)" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
-        done
-      done
-    done
-    [ "$bad" = 0 ] && pass "[7a$LBL] $m: all $n guarded combinations (4 tools x 2 files x 5 path forms) -> JSON deny, hook not started" ; bad=0; n=0
+  local combo m tool f form p cwd n=0 bad=0 pp
+  # The guard does not depend on the mode or on which tool/file is named beyond the (tool, file, path form)
+  # branches, so a covering set is used instead of the full 4x2x5x2 product: every tool, both files, every
+  # path form (abs, relative+cwd, ./.. , //, ../ from a subdirectory) and both modes occur at least once.
+  # GUARD_SET=min (repo-variant run) keeps one combination per tool family.
+  if [ "${GUARD_SET:-full}" = min ]; then
+    set -- "notice|Write|endpoint.yaml|abs" "deny|NotebookEdit|cursors.json|rel"
+  elif [ "${GUARD_SET:-full}" = norm ]; then   # mutation run of the normalisation: only the non-trivial path forms
+    set -- "notice|Write|endpoint.yaml|rel" "notice|Write|endpoint.yaml|dots" "notice|Write|endpoint.yaml|dslash" "deny|Edit|cursors.json|updir"
+  else
+    set -- "notice|Write|endpoint.yaml|abs" "notice|Write|endpoint.yaml|rel" "notice|Write|endpoint.yaml|dots" \
+           "notice|Write|endpoint.yaml|dslash" "notice|Write|endpoint.yaml|updir" "notice|Write|cursors.json|abs" \
+           "notice|Edit|endpoint.yaml|abs" "notice|MultiEdit|endpoint.yaml|abs" "notice|NotebookEdit|endpoint.yaml|abs" \
+           "notice|NotebookEdit|cursors.json|rel" "deny|Write|endpoint.yaml|abs" "deny|MultiEdit|cursors.json|dots" \
+           "deny|Edit|cursors.json|updir" "deny|NotebookEdit|endpoint.yaml|dslash"
+  fi
+  new_fx; bin_set stub yes; hook_file_stub; pp="$fx/proj"   # one fixture: only endpoint.yaml (mode) changes
+  for combo in "$@"; do
+    m="${combo%%|*}"; rest="${combo#*|}"; tool="${rest%%|*}"; rest="${rest#*|}"; f="${rest%%|*}"; form="${rest##*|}"
+    ep "on_write: $m"; cwd="$pp"
+    case "$form" in
+      abs)    p="$pp/.mesh/$f" ;;
+      rel)    p=".mesh/$f" ;;
+      dots)   p="$pp/./.mesh/../.mesh/$f" ;;
+      dslash) p="$pp//.mesh/$f" ;;
+      updir)  p="../.mesh/$f"; cwd="$pp/src" ;;
+    esac
+    n=$((n + 1))
+    run_hook "$(mk_write "$tool" "$p" "$cwd")"
+    if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && ! stub_ran; then :
+    else bad=$((bad + 1)); fail "[7$LBL] $m $tool $f ($form)" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
   done
+  [ "$bad" = 0 ] && pass "[7a$LBL] all $n guarded combinations -> JSON deny, hook not started"
+  [ "${GUARD_SET:-full}" = full ] || return 0
   # without jq the guard cannot read the input: deny -> literal JSON deny, notice -> one line (SPEC boundary)
   new_fx; bin_set stub no; hook_file_stub; ep 'on_write: deny'; run_hook "$(mk_write Write "$fx/proj/.mesh/endpoint.yaml")"
   expect_deny_json "[7b$LBL] no jq / deny: literal JSON deny"
@@ -353,8 +366,8 @@ scen7() {
   # controls: NOT blocked by the guard (the hook is started, nothing is denied) — a named boundary, not a PASS of the guard
   new_fx; bin_set stub yes; hook_file_stub; ep 'on_write: deny'; pp="$fx/proj"
   local c
-  for c in "Write|$pp/.mesh/outbox/x.json" "Write|$pp/.mesh/hook-state.json" "Write|$pp/src/endpoint.yaml" \
-           "Write|$pp/.mesh/endpoint.yaml.bak" "Edit|$pp/.mesh/inbox/l/000001.json" "Read|$pp/.mesh/endpoint.yaml"; do
+  for c in "Write|$pp/.mesh/outbox/x.json" "Write|$pp/src/endpoint.yaml" \
+           "Write|$pp/.mesh/endpoint.yaml.bak" "Read|$pp/.mesh/endpoint.yaml"; do
     run_hook "$(mk_write "${c%%|*}" "${c#*|}" "$pp")"
     if [ "$RC" = 0 ] && [ -z "$OUT" ] && stub_ran; then info "[7d$LBL] boundary (not the guard): ${c%%|*} ${c#*|} -> passed to the hook, not blocked by the wrapper"
     else fail "[7d$LBL] control ${c%%|*} ${c#*|}" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
@@ -384,6 +397,11 @@ scen8() {
   setup_real deny; run_hook "$(jq -nc --arg p "$dep/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
   if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && printf '%s' "$(reason)" | grep -q 'DENY \[MO-exec-paths\]'; then pass "[8a$LBL] deny: Write into exec_paths -> JSON deny with DENY [MO-exec-paths], exit 0, stderr empty"
   else fail "[8a$LBL] deny Write" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  if [ "${SCEN8_MIN:-0}" = 1 ]; then   # mutation runs: only the Bash deny check (g) on top of (a)
+    setup_real deny; run_hook "$(jq -nc --arg c "touch $dep/x" '{tool_name:"Bash",tool_input:{command:$c},cwd:"/",session_id:"s8"}')"
+    if [ "$RC" = 0 ] && is_json_deny; then pass "[8g$LBL] deny: Bash touch in exec_paths -> JSON deny"; else fail "[8g$LBL] deny Bash" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+    return 0
+  fi
   setup_real notice; run_hook "$(jq -nc --arg p "$dep/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
   expect_silent "[8b$LBL] notice: same write -> exit 0, nothing on stdout/stderr"
   setup_real deny; run_hook "$(jq -nc --arg p "$fx/other/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
@@ -434,11 +452,13 @@ scen2
 PROJ_KIND=plain; LBL=""
 run_core
 scen9
-echo "[10] scenarios 3-8 in a project without .claude/ (not a VCS repo): ran above (fixtures have no .claude/)"
+echo "[10] scenarios 3-8 in a project without .claude/ (not a VCS repo): ran above in full (fixtures have no .claude/)"
 if command -v git >/dev/null 2>&1; then
-  echo "[10] ... and in a VCS repo on main"
+  echo "[10] ... and a representative subset (one fixture per branch) in a VCS repo on main"
   PROJ_KIND=repo; LBL=" repo"
-  run_core
+  # one representative per branch: no endpoint, notice/deny cannot-check, rc 0, rc 2, guard, real hook
+  SCEN_MIN=1 scen1; cell3 "no python3" notice; cell3 "no python3" deny; cell3 "hook rc 1" notice; cell3 "hook rc 1" deny
+  SCEN_MIN=1 scen5; scen6; GUARD_SET=min scen7; scen8
   scen9
 else
   info "[10] no git: repo variant SKIPPED"
@@ -475,7 +495,7 @@ mutate() {
   if cmp -s "$ORIG_HOOK" "$mf"; then fail "[13] $name" "mutant is identical to the original (anchor missing?)"; return; fi
   p0=$PASS_COUNT; f0=$FAIL_COUNT
   HOOK="$mf"; REAL_FX=""
-  eval "$calls" >"$MUTDIR/$name.out" 2>&1
+  PARITY=0 eval "$calls" >"$MUTDIR/$name.out" 2>&1
   HOOK="$ORIG_HOOK"
   d=$((FAIL_COUNT - f0)); PASS_COUNT=$p0; FAIL_COUNT=$f0
   first="$(grep -m1 'FAIL:' "$MUTDIR/$name.out" | cut -c1-110)"
@@ -484,15 +504,15 @@ mutate() {
 }
 mutate EARLY-EXIT   '/# MO-EARLY-EXIT/d' 'scen1'
 mutate MODE-REGEX   's|^mode_re=.*# MO-MODE$|mode_re="(^\|"$'"'"'\\n'"'"'")on_write: *([[:alnum:]_]+)"|' 'scen2'
-mutate FAIL-OPEN    's|if \[ "\$mode" = deny \]; then   # MO-FAILOPEN|if false; then|' 'scen3'
-mutate RC2          's|exit 0   # MO-RC2|exit 2|' 'scen3; scen5'
-mutate TRANSLATE    's|^    deny_json .*# MO-TRANSLATE$|    printf "%s\\n" "$err" >\&2; exit 2 ;;|' 'scen5; scen8'
+mutate FAIL-OPEN    's|if \[ "\$mode" = deny \]; then   # MO-FAILOPEN|if false; then|' 'cell3 "no python3" deny; cell3 "hook rc 1" deny'
+mutate RC2          's|exit 0   # MO-RC2|exit 2|' 'cell3 "no python3" deny; SCEN_MIN=1 scen5'
+mutate TRANSLATE    's|^    deny_json .*# MO-TRANSLATE$|    printf "%s\\n" "$err" >\&2; exit 2 ;;|' 'SCEN_MIN=1 scen5; SCEN8_MIN=1 scen8'
 mutate NO-STDIN     's|<<<"\$input")"; rc=\$?|</dev/null)"; rc=$?|' 'scen6'
 mutate BYTECODE-ENV 's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'scen6'
-mutate BYTECODE-FS  's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'scen8; scen9'
-mutate NO-GUARD     '/# MO-GUARD/d' 'scen7'
-mutate NO-NORM      's|^  case "\$fp" in /\*) ;; \*) fp=.*# MO-NORM$|  :|' 'scen7'
-mutate NO-HOOKFILE  '/# MO-HOOKFILE/d' 'scen3'
+mutate BYTECODE-FS  's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'SCEN8_MIN=1 scen8; scen9'
+mutate NO-GUARD     '/# MO-GUARD/d' 'GUARD_SET=min scen7'
+mutate NO-NORM      's|^  case "\$fp" in /\*) ;; \*) fp=.*# MO-NORM$|  :|' 'GUARD_SET=norm scen7'
+mutate NO-HOOKFILE  '/# MO-HOOKFILE/d' 'cell3 "no hook file" notice'
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

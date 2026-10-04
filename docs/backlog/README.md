@@ -65,6 +65,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
 | DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
+| FEAT-015 | feat | open | high | null | [Интероп с мета-оркестратором (МО) в плагинной модели: канал `.mesh/`, хук `exec_paths`, режим `devops`](FEAT-015-mo-interop-plugin-model.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
 | FEAT-008 | feat | open | normal | 4 | [Компенсации и бюджет прогона](FEAT-008-compensations-and-run-budget.md) |
@@ -90,6 +91,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | PROC-025 | proc | open | normal | null | [В номенклатуре типов сессий нет исследования: работа, производящая документ и не производящая кода](PROC-025-no-session-type-for-research.md) |
 | PROC-026 | proc | open | normal | null | [Груминг пересматривает атрибуты записи, не сверяя её с кодом](PROC-026-grooming-without-code-verification.md) |
 | PROC-027 | proc | open | normal | null | [У поверхностей, пересказывающих состав системы, нет сторожа](PROC-027-inventory-drift-unguarded.md) |
+| PROC-028 | proc | open | normal | null | [Политика вендоринга sim-kit в плагин: версия, обновление, запрет локальных правок](PROC-028-simkit-vendoring-policy.md) |
 | PROC-015 | proc | open | low | 7 | [Тиры моделей: четыре → два](PROC-015-model-tiers-four-to-two.md) |
 | BUG-009 | bug | open | normal | null | [Нечисловой `.stopgate.count` роняет `stop-gate` кодом 1 — тест-пол исчезает молча](BUG-009-stop-gate-nonnumeric-counter.md) |
 | BUG-010 | bug | open | normal | null | [`selftest.sh` и его проводка непереносимы за пределы GNU-окружения](BUG-010-selftest-platform-portability.md) |

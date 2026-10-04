@@ -43,42 +43,42 @@
 
 Все T04–T09 пишут в ОДИН файл `sdx/hooks/test-mo-hook.sh` (последовательно, один коммит на задачу); до T10 сьют красный.
 
-- [ ] **T04** `[TEST]` [PROC-020] `test-mo-hook.sh`: каркас + сценарий 1 (нет МО)
+- [x] **T04** `[TEST]` [PROC-020] `test-mo-hook.sh`: каркас + сценарий 1 (нет МО)
   - Зависит от: —
   - Файлы: `sdx/hooks/test-mo-hook.sh` (новый, шапка-комментарий как у `test-mo-inventory.sh`)
   - Что: каркас по DESIGN «Тесты — Общие правила»: `mktemp -d` фикстура, `trap`, `pass/fail`, `Results:`; хелперы: изоляция `PATH` через `$fx/bin` с symlink'ами на `bash`,`cat`,`jq` (образец `test-selftest.sh:494–499`), bash-заглушка `python3` (управление `STUB_RC/STUB_ERR/STUB_LOG`, пишет `argv`, `$PYTHONDONTWRITEBYTECODE`, `$MESH_ENDPOINT_DIR`, stdin; режим «пишет маркер и падает»), хелпер `run_hook <json>` и хелпер `make_mutant <label-pattern>` (копия `mo-hook.sh` + `sed` + `! cmp -s`). Сценарий 1: нет `.mesh/endpoint.yaml` (в т.ч. `.mesh/` без файла; без `CLAUDE_PROJECT_DIR` из cwd; не git-репо, нет `.claude/`; `PATH` без `jq`; заглушка пишет маркер и падает).
   - DoD: `bash sdx/hooks/test-mo-hook.sh; echo $?` != 0, красные строки — «нет `sdx/hooks/mo-hook.sh`» (красная сторона по отсутствию реализации); `bash -n` сьюта ок; `grep -nE 'timeout|mapfile|declare -A|%N' sdx/hooks/test-mo-hook.sh` пусто. Красная сторона мутантом `# MO-EARLY-EXIT` описана в коде сценария (прогоняется в T13).
   - Закрывает: К2 (тестовая часть).
 
-- [ ] **T05** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарий 2 (режим `on_write` — паритет с `DH`)
+- [x] **T05** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарий 2 (режим `on_write` — паритет с `DH`)
   - Зависит от: T04
   - Файлы: `sdx/hooks/test-mo-hook.sh`
   - Что: таблица фикстур DESIGN (сц. 2): `notice`, `deny`, `DENY`, `'deny'`, `"deny"`, `deny  # c`, ключа нет, `# on_write: deny`, `  on_write: deny`, `allow`, два ключа, `on_write:\n  deny`, нечитаемый файл (`chmod 000`, SKIP при root) — режим наблюдается через ветку «нет python3» (deny → JSON, notice → строка). Часть (а): паритет с реальным `DH` под заблокированным PyYAML (`PYTHONPATH=$fx/stubyaml`, `yaml.py` = `raise ImportError`), расхождение — FAIL, без `python3` — INFO-skip. Часть (б): мутант с иным regex (`grep -E 'on_write: *deny'`). Расхождение `denyй` в C-локали — отдельный INFO, не PASS. Фикстура `DENY` сравнивает путь `cannot_check`/`raw_mode`, не штатный путь `DH` (расхождение `DH:181` vs `DH:38` — только INFO, идёт в T33).
   - DoD: сьют по-прежнему красный (нет реализации); в коде сценария есть таблица ожиданий по всем 13 фикстурам; мутант regex в T13 даёт ≥1 красную фикстуру (прогон — T13).
   - Закрывает: К3 (тестовая часть).
 
-- [ ] **T06** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарии 3 и 4 (невозможность проверки; нет PyYAML)
+- [x] **T06** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарии 3 и 4 (невозможность проверки; нет PyYAML)
   - Зависит от: T04
   - Файлы: `sdx/hooks/test-mo-hook.sh`
   - Что: сц. 3 — `notice`/`deny` × {нет `python3`; нет файла хука; нет `jq`; мусор на stdin; `DH`-заглушка rc 1; rc 127; rc убит сигналом (`kill -9 $$`)}: notice → stderr ровно 1 строка (`wc -l`), stdout пуст, rc 0; deny → валидный JSON (`jq .`), `permissionDecision=="deny"`, rc 0 (не 2); без `jq` — литерал JSON, тоже валиден. Сц. 4 — настоящий `python3` + `PYTHONPATH=$fx/stubyaml`, реальная копия `DH`: notice → rc 0, stdout пуст, stderr 1 строка с `PyYAML`; deny → JSON deny с `PyYAML` в причине; INFO-skip без `python3`.
   - DoD: сьют красный (нет реализации); для каждого из 7 условий × 2 режима есть строка-утверждение; мутанты «fail-open во всех режимах» и «rc 2 из обёртки» описаны для T13.
   - Закрывает: К4, К5, К7 (тестовая часть).
 
-- [ ] **T07** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарии 5 и 6 (трансляция rc 2; rc 0, stdin, env)
+- [x] **T07** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарии 5 и 6 (трансляция rc 2; rc 0, stdin, env)
   - Зависит от: T04
   - Файлы: `sdx/hooks/test-mo-hook.sh`
   - Что: сц. 5 — заглушка rc 2 с многострочным stderr (`"`, `\`, кириллица): stdout — валидный JSON, `jq -r .hookSpecificOutput.permissionDecisionReason` равен stderr заглушки, rc 0, stderr обёртки пуст. Сц. 6 — rc 0 со строкой stderr / без: stdout пуст, строка проброшена ровно один раз; лог заглушки: stdin байт-в-байт (включая ≥200 КБ и многострочное `content`), `argv[1] == $CLAUDE_PLUGIN_ROOT/sdx/mo/devagent_hook.py`, `MESH_ENDPOINT_DIR == $proj`, `PYTHONDONTWRITEBYTECODE == 1`; пустой stderr при rc 2 → причина-заглушка, блок сохранён.
   - DoD: сьют красный; утверждения по каждому полю лога заглушки; мутанты `# MO-TRANSLATE` (rc 2 насквозь), «`input` не передан хуку», `# MO-BYTECODE` описаны для T13.
   - Закрывает: К6, К8, К10 (env-часть).
 
-- [ ] **T08** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарий 7 (охрана ящика)
+- [x] **T08** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарий 7 (охрана ящика)
   - Зависит от: T04
   - Файлы: `sdx/hooks/test-mo-hook.sh`
   - Что: `Write`/`Edit`/`MultiEdit`/`NotebookEdit` (`notebook_path`) × {`.mesh/endpoint.yaml`, `.mesh/cursors.json`} × пути {абсолютный, относительный с `cwd` из входа, `…/./.mesh/../.mesh/endpoint.yaml`, `$proj//.mesh/endpoint.yaml`} × {notice, deny} × `exec_paths` пуст: JSON deny, rc 0, маркер заглушки python ОТСУТСТВУЕТ; без `jq` — deny литерал / notice одна строка. Контрольные «не блокируется охраной» (заглушка вызвана): `.mesh/outbox/x.json`, `.mesh/hook-state.json`, `src/endpoint.yaml`, `.mesh/endpoint.yaml.bak`, инструмент `Read`, `Bash` с текстом `.mesh/endpoint.yaml` (граница).
   - DoD: сьют красный; описаны мутанты «охрана удалена» и «охрана без нормализации» (по ней должны краснеть `..`, `//`, относительный) — прогон в T13; контрольные проходы явно названы «граница, не PASS охраны».
   - Закрывает: К9 (тестовая часть).
 
-- [ ] **T09** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарии 8, 9, 11 (реальный вендорённый `DH`)
+- [x] **T09** `[TEST]` [PROC-020] `test-mo-hook.sh`: сценарии 8, 9, 11 (реальный вендорённый `DH`)
   - Зависит от: T04
   - Файлы: `sdx/hooks/test-mo-hook.sh`
   - Что: сц. 8 — копия `sdx/mo/` в `$fx/root/sdx/mo/` (INFO-skip без `python3`+PyYAML), `exec_paths: [$fx/dep]`, `on_write: deny`, нет аренды: (а) `Write` в `$fx/dep/a` → JSON deny, причина содержит `DENY [MO-exec-paths]`, stderr обёртки пуст; (б) `on_write: notice` → rc 0, stdout пуст; (в) `Write` вне `exec_paths` → тишина; (г) `Bash touch $fx/dep/x` в deny → JSON deny; (д) аренда: конверт `lease.granted` собирается python-однострочником через `ehash` вендорённого `ME` (`PYTHONDONTWRITEBYTECODE=1`) → `Write` в `$fx/dep/a` в deny проходит. Сц. 9 — `ls -a "$fx/root/sdx/mo"` без `__pycache__` после сц. 4 и 8. Сц. 11 — `$ROOT/sdx/mo/` (чекаут) без `__pycache__` после прогона.
@@ -87,28 +87,28 @@
 
 ### Группа 3 — `mo-hook.sh` реализация [PROC-020]
 
-- [ ] **T10** `[CODE]` [PROC-020] `mo-hook.sh`: шаги 1–3 (ранний выход, режим, вход/зависимости, функции вывода)
+- [x] **T10** `[CODE]` [PROC-020] `mo-hook.sh`: шаги 1–3 (ранний выход, режим, вход/зависимости, функции вывода)
   - Зависит от: T04, T05, T06 (тесты красные первыми)
   - Файлы: `sdx/hooks/mo-hook.sh` (новый)
   - Что: по DESIGN «`sdx/hooks/mo-hook.sh`»: резолв окружения; шаг 1 с меткой `# MO-EARLY-EXIT` (`[ -f "$proj/.mesh/endpoint.yaml" ] || exit 0` до `cat`/`jq`/`python3`); шаг 2 — `mode_re` БЕЗ кавычек в `[[ =~ ]]`, дефолт `notice`; шаг 3 — `input="$(cat)"`, проверка `jq` с литералом JSON для deny / строкой для notice; разбор `tool_name`; функции `deny_json` (метка `# MO-TRANSLATE` на строке `printf` JSON, формат буква-в-букву `prod-guard.sh:11–12`) и `cannot_check`. `set -u`, без `-e`/`pipefail`.
   - DoD: `bash -n sdx/hooks/mo-hook.sh`; `bash sdx/hooks/test-mo-hook.sh` — сц. 1, 2, 3 (ветка «нет jq», «мусор на stdin», «нет python3» — `python3` ещё не запускается, значит часть ветвей ждёт T12; ожидаемо красные остаются сц. 3 «rc 1/127/сигнал», 4–9) ; `grep -nE 'timeout|mapfile|declare -A|\$\{[a-z_]+,,\}|%N' sdx/hooks/mo-hook.sh` пусто; `! grep -qE 'git |resolve-session' sdx/hooks/mo-hook.sh` (REQ-MO-HOOK-3: не зависит от ветки).
   - Закрывает: К2, К3 (реализация).
 
-- [ ] **T11** `[CODE]` [PROC-020] `mo-hook.sh`: шаг 4 (охрана ящика)
+- [x] **T11** `[CODE]` [PROC-020] `mo-hook.sh`: шаг 4 (охрана ящика)
   - Зависит от: T10, T08
   - Файлы: `sdx/hooks/mo-hook.sh`
   - Что: `is_mailbox_file`/`norm_path` по DESIGN (лексическая нормализация, `set -f` и `local IFS` внутри, цели `{proj_abs,proj_phys}/.mesh/{endpoint.yaml,cursors.json}`; если `cd "$proj"` неудачен — охрана пропускается); вызов для `Write|Edit|MultiEdit|NotebookEdit` ДО запуска python, независимо от режима и `exec_paths`.
   - DoD: `bash -n`; сц. 7 `test-mo-hook.sh` зелёный (все пути × инструменты × режимы, контрольные проходы); маркер заглушки python отсутствует в охранных кейсах.
   - Закрывает: К9 (реализация).
 
-- [ ] **T12** `[CODE]` [PROC-020] `mo-hook.sh`: шаги 5–6 (запуск `DH`, трансляция кодов)
+- [x] **T12** `[CODE]` [PROC-020] `mo-hook.sh`: шаги 5–6 (запуск `DH`, трансляция кодов)
   - Зависит от: T10, T07, T09
   - Файлы: `sdx/hooks/mo-hook.sh`
   - Что: проверки `python3` и `-f "$hook"` (иначе `cannot_check`); запуск `PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR="$proj" MESH_ENDPOINT_DIR="$proj" python3 "$hook" 2>&1 >/dev/null <<<"$input"` с меткой `# MO-BYTECODE`; таблица: rc 0 → проброс stderr одной строкой; rc 2 → `deny_json "${err:-…без причины}"`; иное → `cannot_check` с последней строкой err ≤200 симв.
   - DoD: `bash -n`; `bash sdx/hooks/test-mo-hook.sh` — сц. 1–9, 11 зелёные (сц. 4, 8 — PASS либо честный INFO-skip без python3/PyYAML; показать, какой вариант в этом окружении: `python3 -c 'import yaml'`); `ls -a sdx/mo` без `__pycache__` после прогона.
   - Закрывает: К4–К8, К10 (реализация).
 
-- [ ] **T13** `[TEST]` [PROC-020] `test-mo-hook.sh`: мутанты, сц. 10, переносимость — красные стороны показаны
+- [x] **T13** `[TEST]` [PROC-020] `test-mo-hook.sh`: мутанты, сц. 10, переносимость — красные стороны показаны
   - Зависит от: T11, T12
   - Файлы: `sdx/hooks/test-mo-hook.sh`
   - Что: реализовать прогоны мутантов, описанных в T04–T09: без `# MO-EARLY-EXIT`; regex режима `grep -E 'on_write: *deny'`; fail-open во всех режимах; rc 2 из обёртки; без `# MO-TRANSLATE`; `input` не передан; без `# MO-BYTECODE` (на сц. 8 — `__pycache__` появился по существу); охрана удалена; охрана без нормализации. Перед каждым — `! cmp -s orig mutant`. Сц. 10 — сц. 3–8 повторены в проекте без `.claude/`, не git-репо, и в git-репо на `main`. Сц. «переносимость»: `grep` запретных конструкций по `mo-hook.sh` = 0, на мутанте с `mapfile` — ≥1 (красная сторона grep).
@@ -119,35 +119,35 @@
 
 Группа 4 независима от групп 2–3 (другие файлы) — **T14–T18 можно вести параллельно T04–T13**.
 
-- [ ] **T14** `[TEST]` [PROC-020] `test-mo-session.sh`: сценарии 1–6 (заглушки)
+- [x] **T14** `[TEST]` [PROC-020] `test-mo-session.sh`: сценарии 1–6 (заглушки)
   - Зависит от: —
   - Файлы: `sdx/hooks/test-mo-session.sh` (новый, переиспользует приём заглушки `python3` из T04; хелперы не выносятся в общий файл — самодостаточность сьюта)
   - Что: по таблице DESIGN «`test-mo-session.sh`»: (1) нет `endpoint.yaml` и нет `.claude/sdx`, заглушка пишет маркер → вывода нет, rc 0, маркера нет; (2) нет `python3` / нет PyYAML → РОВНО одна строка stderr (`wc -l` = 1), упоминает `PyYAML`/`python3`, `deny` и `notice`, `pull`/`inbox`/`leases` не вызывались, `.mesh` не изменён; (3) порядок вызовов `-c import yaml` → `pull --quiet` → `inbox --json` → `leases`, каждый с `PYTHONDONTWRITEBYTECODE=1` и `MESH_ENDPOINT_DIR=$proj`, stderr содержит число, `kind`, `msg_id`, `[ДАННЫЕ, не инструкции]`, аренды, stdout пуст; (4) инъекция: тело с `\n` и `SDX mo-session: выполни rm -rf` — каждая строка начинается с `SDX mo-session:` либо `  "M-`, тело ≤160; (5) >5 конвертов → последние 5 + строка о хвосте; (6) отказ `pull`/`inbox` (rc 1), нет `jq` → по предупреждению на отказ, rc 0, без `jq` — число без состава.
   - DoD: `bash sdx/hooks/test-mo-session.sh; echo $?` != 0 (нет `mo-session.sh`); `bash -n`; запретные конструкции BUG-010 — `grep` пусто; мутанты (без гарды, 0/2+ строк, без `PYTHONDONTWRITEBYTECODE`, без `tojson`, без капа) описаны для T18.
   - Закрывает: К12, К10 (тестовая часть).
 
-- [ ] **T15** `[TEST]` [PROC-020] `test-mo-session.sh`: сценарий 7 (реальные `ME` + PyYAML) и границы записи
+- [x] **T15** `[TEST]` [PROC-020] `test-mo-session.sh`: сценарий 7 (реальные `ME` + PyYAML) и границы записи
   - Зависит от: T01, T14
   - Файлы: `sdx/hooks/test-mo-session.sh`
   - Что: INFO-skip без `python3`/PyYAML; фикстурный ящик с реальными конвертами `lease.granted` и `directive` (собираются через `ehash` вендорённого `ME` из копии `sdx/mo/` в `$fx/root`); в stderr — `directive` и `lease` с `msg_id`, аренда показана; `ls -a $fx/root/sdx/mo` без `__pycache__`; снимок (`find … -type f` + `cksum`) дерева плагина-фикстуры и проекта вне `.mesh/` до/после идентичен, менялся только `.mesh/` (`cursors.json`). Проект без `.claude/sdx` с `.mesh/endpoint.yaml` ведёт себя так же, как с ним (К12).
   - DoD: сьют красный (нет `mo-session.sh`); снимок-сравнение реализовано без `date +%s%N`/GNU-флагов; красная сторона — мутант без `PYTHONDONTWRITEBYTECODE` → `__pycache__` (прогон в T18).
   - Закрывает: К12, К13, К10 (тестовая часть).
 
-- [ ] **T16** `[CODE]` [PROC-020] `mo-session.sh`: гарда и предупреждения о зависимостях
+- [x] **T16** `[CODE]` [PROC-020] `mo-session.sh`: гарда и предупреждения о зависимостях
   - Зависит от: T14
   - Файлы: `sdx/hooks/mo-session.sh` (новый)
   - Что: `set -u`, `exit 0` на всех путях, вывод только stderr; `[ -f "$proj/.mesh/endpoint.yaml" ] || exit 0` (гарды `.claude/sdx` НЕТ); функция `mo()`; шаг 1 — нет `jq` (строка-предупреждение, расширение REQ-MO-SESS-4); шаг 2 — нет `python3` или `import yaml` ≠ 0 → ОДНА строка, `exit 0`.
   - DoD: `bash -n`; `test-mo-session.sh` сц. 1, 2 зелёные, сц. 3–7 красные ожидаемо; `grep -nE 'timeout|mapfile|declare -A|%N' sdx/hooks/mo-session.sh` пусто; `grep -n 'exit' sdx/hooks/mo-session.sh` — только `exit 0`.
   - Закрывает: К12 (часть).
 
-- [ ] **T17** `[CODE]` [PROC-020] `mo-session.sh`: pull / inbox / leases / напоминание
+- [x] **T17** `[CODE]` [PROC-020] `mo-session.sh`: pull / inbox / leases / напоминание
   - Зависит от: T16, T15
   - Файлы: `sdx/hooks/mo-session.sh`
   - Что: шаги 3–6 DESIGN: `pull --quiet` (rc≠0 → строка, `exit 0`), `inbox --json` (форматирование через `jq`, `tojson` на КАЖДОМ поле, тело ≤160, последние 5 + хвост «ранее принято ещё N», пусто → «входящих нет», без `jq` — только число по `grep -c .`), `leases` (непусто / «действующих аренд нет …»), последняя строка-напоминание нормы `MI` §3/§5.
   - DoD: `bash -n`; `bash sdx/hooks/test-mo-session.sh` — сц. 1–6 зелёные, сц. 7 PASS либо INFO-skip (указать, какое); `ls -a sdx/mo` без `__pycache__`.
   - Закрывает: К12, К13, К10 (реализация).
 
-- [ ] **T18** `[TEST]` [PROC-020] `test-mo-session.sh`: мутанты — красные стороны
+- [x] **T18** `[TEST]` [PROC-020] `test-mo-session.sh`: мутанты — красные стороны
   - Зависит от: T17
   - Файлы: `sdx/hooks/test-mo-session.sh`
   - Что: реализовать прогоны мутантов (копия скрипта + `sed`, `! cmp -s`): без гарды (маркер в сц. 1), «молчит» и «2+ строк» в сц. 2, без `PYTHONDONTWRITEBYTECODE` (env-лог сц. 3 и `__pycache__` сц. 7), без `tojson` (сц. 4), без капа (сц. 5).
@@ -156,14 +156,14 @@
 
 ### Группа 5 — Проводка `hooks.json` [PROC-020]
 
-- [ ] **T19** `[TEST]` [PROC-020] `test-hook-wiring.sh`: сценарий `[6]` — `mo_wiring_findings`
+- [x] **T19** `[TEST]` [PROC-020] `test-hook-wiring.sh`: сценарий `[6]` — `mo_wiring_findings`
   - Зависит от: — (пишется красным до T20; параллельно с группами 2–4)
   - Файлы: `sdx/hooks/test-hook-wiring.sh` (добавить `[6]`; `[1]–[5]` не переписывать; без `mapfile`)
   - Что: функция `mo_wiring_findings <hooks.json>` (пусто = согласовано) — (а) ровно одна запись `PreToolUse` с `sdx/hooks/mo-hook.sh`, `matcher` при разбиении по `|` содержит все пять `Bash Write Edit MultiEdit NotebookEdit`; (б) её `command` не содержит `timeout` и точно `bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/mo-hook.sh`; (в) запись `prod-guard` с `matcher == "Bash"` сохранена; (г) в `SessionStart` есть запись с `mo-session.sh` без `timeout`. Красные стороны `jq`-мутациями (образец `[5a]/[5b]`, `mutant != original`): удалить запись; убрать `NotebookEdit`; префикс `timeout 10 ` (именно его `is_bash_wired` пропускает); matcher → `Bash`; убрать `prod-guard`; убрать `mo-session`.
   - DoD: до T20 `bash sdx/hooks/test-hook-wiring.sh` красный только на `[6]` (на оригинале), `[1]–[5]` зелёные; после T20 зелёный; все 6 мутаций краснят `[6]`, каждая показана отдельной строкой.
   - Закрывает: К11 (тестовая часть).
 
-- [ ] **T20** `[CODE]` [PROC-020] `hooks/hooks.json`: две новые записи
+- [x] **T20** `[CODE]` [PROC-020] `hooks/hooks.json`: две новые записи
   - Зависит от: T19, T12, T17 (скрипты существуют — `test-hook-wiring.sh` проверяет существование)
   - Файлы: `hooks/hooks.json`
   - Что: в `SessionStart` — третья запись `bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/mo-session.sh`; в `PreToolUse` — вторая запись с `matcher: "Bash|Write|Edit|MultiEdit|NotebookEdit"` и `bash "${CLAUDE_PLUGIN_ROOT}"/sdx/hooks/mo-hook.sh`. Без `timeout`. Существующие записи (`preflight`, `selftest`, `prod-guard` `matcher: Bash`) не менять.
@@ -172,63 +172,63 @@
 
 ### Группа 6 — Прозаический слой (параллельно друг другу после T21; от кода групп 2–5 не зависит)
 
-- [ ] **T21** `[TEST]` Статические grep-инварианты текстов (красные до T22–T30)
+- [x] **T21** `[TEST]` Статические grep-инварианты текстов (красные до T22–T30)
   - Зависит от: —
   - Файлы: `sdx/hooks/test-mo-hook.sh` (отдельная секция «static»; решение lead-dev: один файл, чтобы не расширять `test-hook-wiring.sh`, не переносимый на macOS из-за `mapfile`)
   - Что: инварианты DESIGN «Статические проверки»: `agents/devops.md` — каждая строка с `mesh_endpoint.py` содержит `PYTHONDONTWRITEBYTECODE=1` (либо это определение `mo()` с ним), файл содержит `.mesh/endpoint.yaml`, `request`, `auto`; `claude-md-snippet.md` — `.mesh/endpoint.yaml` между `SDX:BEGIN` и `SDX:END`; `commands/init.md` — строка `.mesh/`; `sdx/protocol.md` — «Восемь тегов» и 0 вхождений «семь тегов»/«семи тегов»; `commands/verify.md` и `commands/resume.md` — нет перечня тегов и числа тегов (REQ-MO-PROTO-2: предмет отсутствует, `grep -cE 'семь|восемь|\[триаж\]\s*,\s*\[' ` = 0 — подобрать выражение по факту текста и записать его в тесте); пункты стоп-рубрики не изменены (сверка списка с `git show main:sdx/protocol.md`, неизменность).
   - DoD: до T22–T28 секция красная (показать список красных строк); красные стороны контролем на копиях: копия `protocol.md` с «семь тегов» → красная; копия `devops.md` с вызовом `mesh_endpoint.py` без флага → красная; копия сниппета без блока → красная; на копии `init.md` без `.mesh/` → красная; после T22–T28 — зелёная.
   - Закрывает: К14, К15, К16 (grep-часть), К17 (grep-часть).
 
-- [ ] **T22** `[DOC]` `sdx/protocol.md`: тексты 1.1–1.5, 1.9 (теги, стоп-рубрика, enforcement-слой)
+- [x] **T22** `[DOC]` `sdx/protocol.md`: тексты 1.1–1.5, 1.9 (теги, стоп-рубрика, enforcement-слой)
   - Зависит от: T21
   - Файлы: `sdx/protocol.md`
   - Что: DESIGN «Схема данных / API → Тексты правок → 1»: 1.1 («Восемь» тегов, `[директива]`, оговорка про шесть/седьмой/восьмой, «один из восьми»); 1.2 (пример `directive` после «Критерий по умолчанию для не перечисленного…», СПИСОК пунктов стоп-рубрики не менять); 1.3 (вводный абзац «Enforcement-слой»); 1.4 («Механизм блокировки PreToolUse»); 1.5 (заголовок «Оставшиеся три хука…» + предложение-граница в `prod-guard`); 1.9 (`(SessionStart, PreToolUse, Stop)`).
   - DoD: `grep -cE 'семь(и)? тегов' sdx/protocol.md` = 0, «Восемь» есть; `diff` пунктов стоп-рубрики с `main` пуст; секция T21 по протоколу зелёная; `bash sdx/hooks/test-sdx-stage.sh` зелёный (таблица этапов не тронута).
   - Закрывает: К17, К18 (часть). Параллельно: T23–T28.
 
-- [ ] **T23** `[DOC]` `sdx/protocol.md`: новый подраздел «МО-хук» (1.6)
+- [x] **T23** `[DOC]` `sdx/protocol.md`: новый подраздел «МО-хук» (1.6)
   - Зависит от: T22 (тот же файл — последовательно после него)
   - Файлы: `sdx/protocol.md`
   - Что: подраздел «МО-хук (`mo-hook`, `mo-session`) — FEAT-015, ADR-021» перед «Вендорённые компоненты (`sdx/mo/`)»: две записи проводки, граница с `prod-guard`, различие политик отказа, четыре честные границы (а)–(г), оговорка «приоритет решений нескольких хуков — свойство харнесса, не проверено до Verification».
   - DoD: `grep -c 'PYTHONDONTWRITEBYTECODE' sdx/protocol.md` ≥ 1 в подразделе; в тексте явно названы: подмена `endpoint.yaml` через `Bash`, best-effort охрана, лексическая нормализация, прямой вызов без флага; `deny > defer > ask > allow` помечено как не подтверждённое; ссылки на `BUG-002/008/010` присутствуют.
   - Закрывает: К18 (часть), REQ-MO-PROTO-4/5.
 
-- [ ] **T24** `[DOC]` `sdx/protocol.md`: 1.7 (устаревшие фразы) и 1.8 (`Deployment` под МО)
+- [x] **T24** `[DOC]` `sdx/protocol.md`: 1.7 (устаревшие фразы) и 1.8 (`Deployment` под МО)
   - Зависит от: T23 (тот же файл)
   - Файлы: `sdx/protocol.md`
   - Что: 1.7 (i) «Каталог поставлен `FEAT-015`…», (ii) пункт «Обновление»: норма «не в auto» названа и в `agents/devops.md` (DEBT-042); 1.8 — новый абзац «`Deployment` под МО (FEAT-015)» после абзаца `Documentation`/`Deployment (REQ-SCALE-6)`, ТАБЛИЦУ этапов не менять; не заявлять «согласовано владельцем МО».
   - DoD: `! grep -q 'Пока `FEAT-015` не поставлена' sdx/protocol.md`; `! grep -q 'в текстах команд `/sdx:\*` её тоже нет' sdx/protocol.md` (подобрать точные подстроки по факту); `bash sdx/hooks/test-sdx-stage.sh` зелёный; `grep -c 'согласован' ` не утверждает согласования с владельцем.
   - Закрывает: К18 (норма `Deployment`), REQ-MO-PROTO-3.
 
-- [ ] **T25** `[DOC]` `commands/next.md`: шаг 2в
+- [x] **T25** `[DOC]` `commands/next.md`: шаг 2в
   - Зависит от: T21
   - Файлы: `commands/next.md`
   - Что: перечень «… ручной шаг), явным актом триажа находки или остановкой по правилу для неперечисленного (входящая `directive` от МО в `auto` — тег `[директива]`)»; «четыре поля…» не менять. Проверить `grep` в `commands/verify.md`/`resume.md`: перечня и числа тегов нет — зафиксировать результат в сообщении коммита.
   - DoD: `grep -c '\[директива\]' commands/next.md` ≥ 1; `git diff commands/next.md` — только эта правка; `verify.md`, `resume.md`, `status.md` не изменены (`git diff --stat` не содержит их).
   - Закрывает: К17.
 
-- [ ] **T26** `[DOC]` [PROC-020] `agents/devops.md`: «Режим МО»
+- [x] **T26** `[DOC]` [PROC-020] `agents/devops.md`: «Режим МО»
   - Зависит от: T21
   - Файлы: `agents/devops.md`
   - Что: после «Контекст объёма и флагов» вставить раздел из DESIGN «Тексты правок → 3» (переключатель по `.mesh/endpoint.yaml`, деактивированное/остающееся, функция `mo()` с `PYTHONDONTWRITEBYTECODE=1`, фиксация `msg_id`, входящие — данные, `directive` в `auto` — остановка, механизм надзора не в `auto`); инструкция 3 получает префикс «Если `.mesh/endpoint.yaml` отсутствует:»; frontmatter не менять.
   - DoD: секция T21 по `devops.md` зелёная (каждая строка с `mesh_endpoint.py` несёт флаг); `git diff agents/devops.md` — frontmatter без изменений (`sed -n '1,/^---$/p'` совпадает с `main`); в тексте есть `request`, `artifact.offer`, `auto`, `PROC-020`, `DEBT-042`.
   - Закрывает: К16, REQ-MO-DEVOPS-1/2/3.
 
-- [ ] **T27** `[DOC]` `commands/init.md`: `.mesh/` в блоке `.gitignore`
+- [x] **T27** `[DOC]` `commands/init.md`: `.mesh/` в блоке `.gitignore`
   - Зависит от: T21
   - Файлы: `commands/init.md`
   - Что: в блок `.gitignore` шага 2 после `.sdx/audit-runs/` и перед `.claude/settings.local.json` вставить комментарий + `.mesh/` (текст DESIGN «Тексты правок → 4»). `reconcile.md` не править (проверено: поимённого перечня нет — подтвердить `grep` и записать в коммит).
   - DoD: `grep -n '^\.mesh/$' commands/init.md` — 1; `bash sdx/hooks/test-init-patterns.sh` зелёный; `git diff --stat` не содержит `commands/reconcile.md` и `.gitignore`.
   - Закрывает: К14.
 
-- [ ] **T28** `[DOC]` `sdx/templates/claude-md-snippet.md`: абзац «МО над стендами»
+- [x] **T28** `[DOC]` `sdx/templates/claude-md-snippet.md`: абзац «МО над стендами»
   - Зависит от: T21
   - Файлы: `sdx/templates/claude-md-snippet.md`
   - Что: после пункта «Роли», внутри `SDX:BEGIN…END`, пункт из DESIGN «Тексты правок → 5» (условный).
   - DoD: `sed -n '/SDX:BEGIN/,/SDX:END/p' sdx/templates/claude-md-snippet.md | grep -c '\.mesh/endpoint\.yaml'` ≥ 1; маркеры `SDX:BEGIN/END` целы (по одному); секция T21 зелёная; красная сторона T21 (копия без абзаца) краснеет.
   - Закрывает: К15.
 
-- [ ] **T29** `[DOC]` ADR-021 + строка в поправке ADR-013
+- [x] **T29** `[DOC]` ADR-021 + строка в поправке ADR-013
   - Зависит от: T22–T24 (решения ссылаются на тексты протокола)
   - Файлы: `docs/DECISIONS.md`
   - Что: ADR-021 по формату соседних ADR (контекст / решение (1)–(7) / последствия (границы 1.6) / отвергнутое (список из DESIGN)); в поправке 2026-10-04 к ADR-013 дописать «(решения интеропа — ADR-021)»; перечень трёх имён файлов в поправках СОХРАНИТЬ. Дата — дата коммита/Closeout.
@@ -340,3 +340,11 @@ T13 ─> T33 (записка upstream; текст, внешняя)
 | К22 — сессия не в `gate_mode: auto` | правила исполнения, метки [PROC-020], T20, T32 |
 
 Все 22 критерия привязаны хотя бы к одной задаче. T33 (записка upstream) и C1–C4 — внешние/Closeout, критерии не закрывают, кроме указанных хвостов К20/К21.
+
+
+## Отклонения при исполнении (фиксируются здесь, не сглаживаются)
+- **T03**: красные мутации сторожа на реальном `sdx/mo/` не прогонялись при отметке — перенесены в T32 (финальный прогон).
+- **T04–T12 (дорожка A)**: порядок TDD не соблюдён — реализация написана раньше сьюта; красная сторона показана задним числом прогоном с `MO_HOOK_UNDER_TEST=/nonexistent` (17 passed / 274 failed) и 11 мутантами по меткам. Это нарушение DoD по форме, не по существу доказательства.
+- **T21**: grep-инварианты текстов — в отдельном сьюте `test-mo-prose.sh`, а не в `test-mo-hook.sh` (решение оркестратора: дорожки не делят файлы). Проверка «пункты стоп-рубрики неизменны относительно `main`» в сьют не вошла (сверка с веткой хрупка) — подтверждена diff'ом.
+- **T18**: красной стороны «без `PYTHONDONTWRITEBYTECODE` → `__pycache__`» у `mo-session.sh` нет по построению (скрипт — `__main__`, ничего не импортирует локально; байткод не пишется и без переменной — прогнано); различимо только по env-логу. Для `mo-hook.sh` (есть импорт) красная сторона есть (`[9]`).
+- **Время прогона**: `test-mo-hook.sh` ≈ 66 с, полный `verify-cmd.sh` ≈ 98 с при потолке `stop-gate` 180 с (`SDX_VERIFY_TIMEOUT`); комментарий `verify-cmd.sh` «~9 секунд» устарел — на Closeout запись `DEBT`.

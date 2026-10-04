@@ -52,6 +52,8 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 Записи `FEAT-015` и `PROC-028` порождены разбором `intake intake-mo-interop-aibok-20261004`
 (интероп SDX с мета-оркестратором по sim-kit 0.7.3 и обзор AIBoK 1.0); тем же разбором дописаны
 разделы «Уточнения разбора» в `FEAT-006`, `PROC-021`, `DEBT-031` без смены их атрибутов.
+`DEBT-042` порождена сессией `proc-028-simkit-vendoring-20261004` как названная граница поставки
+(норма без enforcement).
 
 ## Открытые
 
@@ -70,7 +72,6 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
 | DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
 | FEAT-015 | feat | open | high | null | [Интероп с мета-оркестратором (МО) в плагинной модели: канал `.mesh/`, хук `exec_paths`, режим `devops`](FEAT-015-mo-interop-plugin-model.md) |
-| PROC-028 | proc | open | high | null | [Политика вендоринга sim-kit в плагин: версия, обновление, запрет локальных правок](PROC-028-simkit-vendoring-policy.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
 | FEAT-008 | feat | open | normal | 4 | [Компенсации и бюджет прогона](FEAT-008-compensations-and-run-budget.md) |
@@ -103,6 +104,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-040 | debt | open | normal | null | [Часть сценариев мутирует хелперы, написанные внутри самого сьюта](DEBT-040-tests-mutate-own-helpers.md) |
 | DEBT-039 | debt | open | low | null | [Поле `status` в схеме `session_state.json` объявлено без писателя](DEBT-039-session-state-status-no-writer.md) |
 | DEBT-041 | debt | open | low | null | [Anti-overclaim-линт направленный: ловит один порядок слов из двух](DEBT-041-overclaim-lint-directional.md) |
+| DEBT-042 | debt | open | low | null | [Норма «обновление `sdx/mo/` не в авторежиме» держится только прозой протокола](DEBT-042-mo-update-not-in-auto-unenforced.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
@@ -122,6 +124,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| PROC-028 | [Политика вендоринга sim-kit в плагин: версия, обновление, запрет локальных правок](PROC-028-simkit-vendoring-policy.md) | `proc-028-simkit-vendoring-20261004` (п.2 реализован двумя файлами) |
 | DEBT-007 | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) | `proc-run-as-durable-unit-20260902` (расщеплена: `status` → `DEBT-039`) |
 | BUG-005 | [Противоречие: ADR-005 ↔ `.claude/sessions/` в `.gitignore`](BUG-005-sessions-gitignore-adr005-contradiction.md) | `proc-run-as-durable-unit-20260902` (предпосылка неверна; фактически снято `ADR-012`) |
 | PROC-019 | [«Прогон» как durable-единица работы вместо «сессии»](PROC-019-run-as-durable-unit.md) | `proc-run-as-durable-unit-20260902` |

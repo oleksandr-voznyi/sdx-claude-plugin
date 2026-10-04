@@ -19,7 +19,7 @@
 #       python bytecode must not be written here: the FEAT-015 wrapper runs python with
 #       PYTHONDONTWRITEBYTECODE=1, so a __pycache__/ is a finding, not an exception);
 #   (e) every listed name is mentioned by each prose surface that recounts the composition of
-#       sdx/mo/ — README.md, README.en.md, sdx/protocol.md, docs/DECISIONS.md (PROC-027 class:
+#       sdx/mo/ — README.md, README.en.md, CLAUDE.md, sdx/protocol.md, docs/DECISIONS.md (PROC-027 class:
 #       a bare-name inventory drifts silently; this is composition only, never meaning).
 # Composition, hashes and mentions — never semantics (envelope version compatibility is a
 # judgement made at update time, not a test).
@@ -34,7 +34,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MO_DIR="$ROOT/sdx/mo"
-SURFACES="README.md README.en.md sdx/protocol.md docs/DECISIONS.md"
+SURFACES="README.md README.en.md CLAUDE.md sdx/protocol.md docs/DECISIONS.md"
 
 PASS_COUNT=0
 FAIL_COUNT=0

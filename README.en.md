@@ -51,7 +51,7 @@ Run `/sdx:init` in the target project (`/sdx:init --existing` for an existing co
 | `agents/` | 9 subagents: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops`, `auditor` |
 | `hooks/hooks.json` | Enforcement-layer wiring (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Session protocol: state, unified stage scale and flags, gates, Closeout, import/export |
-| `sdx/hooks/` | Hook scripts (stop-gate, prod-guard, preflight, selftest) and their tests (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` are CLI scripts invoked by commands, not `hooks.json` wiring |
+| `sdx/hooks/` | Hook scripts (stop-gate, prod-guard, preflight, selftest, mo-hook, mo-session) and their tests (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` are CLI scripts invoked by commands, not `hooks.json` wiring |
 | `sdx/templates/` | Templates for per-project configs and the CLAUDE.md SDX block |
 | `sdx/mo/` | Vendored meta-orchestrator leaf-session tools (sim-kit, version in `SIMKIT_VERSION`): `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`; invoked only via the wrappers `sdx/hooks/mo-hook.sh` / `mo-session.sh`, active only in a project that has `.mesh/endpoint.yaml` |
 

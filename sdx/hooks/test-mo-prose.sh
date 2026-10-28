@@ -126,7 +126,7 @@ chk_snippet_mandate() {
   block="$(sed -n '/SDX:BEGIN/,/SDX:END/p' "$f")"
   n="$(printf '%s\n' "$block" | grep -cF '.mesh/mandate.yaml' || true)"
   [ "$n" = 1 ] || { echo "'.mesh/mandate.yaml' must occur on exactly one line of the SDX block, found $n"; return 1; }
-  if grep -qF '/sdx:pr' "$f"; then echo "/sdx:pr in $f"; return 1; fi
+  if grep -qE '/sdx:pr([^a-z]|$)' "$f"; then echo "/sdx:pr in $f"; return 1; fi  # not /sdx:proto
   [ "$(grep -c 'SDX:BEGIN' "$f")" = 1 ] && [ "$(grep -c 'SDX:END' "$f")" = 1 ] || { echo "SDX:BEGIN/SDX:END markers not exactly once in $f"; return 1; }
   return 0
 }

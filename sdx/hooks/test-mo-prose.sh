@@ -48,6 +48,11 @@ expect_red() {
 }
 
 # ---- checks: print the reason to stdout and return 1 on violation -------------------------
+chk_plugin_version() {
+  local v; v="$(jq -r .version "$1" 2>/dev/null)"
+  [ "$v" = "2.4.0" ] || { echo "plugin version is '$v', expected 2.4.0"; return 1; }
+}
+
 chk_protocol_tags() {
   grep -q 'Восемь' "$1" || { echo "no 'Восемь' in $1"; return 1; }
   grep -q '\[директива\]' "$1" || { echo "no [директива] in $1"; return 1; }
@@ -325,6 +330,12 @@ awk '/^## ADR-020\./{p=1} /^## ADR-021\./{p=0} p && /Поправка 2026-10-28
 expect_red "red: ADR-020 amendment missing" chk_adr_amendments "$TMP/t16b.md"
 sed 's/третий сужающий источник/источник/g' "$DECISIONS" > "$TMP/t16c.md"
 expect_red "red: ADR-020 amendment without 'третий сужающий источник'" chk_adr_amendments "$TMP/t16c.md"
+
+echo ""
+echo "[17] .claude-plugin/plugin.json: version 2.4.0"
+expect_ok "plugin.json" chk_plugin_version "$ROOT/.claude-plugin/plugin.json"
+sed 's/"version": "2\.4\.0"/"version": "2.3.1"/' "$ROOT/.claude-plugin/plugin.json" > "$TMP/t17.json"
+expect_red "red: plugin.json with the old version" chk_plugin_version "$TMP/t17.json"
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

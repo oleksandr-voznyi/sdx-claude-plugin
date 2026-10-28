@@ -4,7 +4,8 @@
 #
 # Contract: ALWAYS exit 0. A block is JSON permissionDecision:"deny" on stdout (like prod-guard.sh).
 # The sim-kit hook blocks with exit 2 + reason on stderr; this wrapper translates that into the JSON
-# deny and never returns exit 2 itself. stderr carries at most one line.
+# deny and never returns exit 2 itself. The wrapper's OWN stderr is at most one line; on hook exit 0
+# the hook's stderr is passed through as is (sim-kit 0.9 may emit several lines under .mesh/mandate.yaml).
 #
 # Activation: ONLY the file $CLAUDE_PROJECT_DIR/.mesh/endpoint.yaml (not a branch, not .claude/sdx).
 # Without it: no output, no jq, no python (check order: endpoint.yaml -> mode -> jq/python3/hook file -> exit code).

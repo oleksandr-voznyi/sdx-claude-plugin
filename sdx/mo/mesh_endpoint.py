@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mesh_endpoint — почтовый ящик лист-сессии (dev-agent системы, сессия без ядра МО). sim-kit 0.7.3.
+"""mesh_endpoint — почтовый ящик лист-сессии (dev-agent системы, сессия без ядра МО). sim-kit 0.7.7.
 
 Живёт в инструментах фреймворка разработки (плагин SDX: ${CLAUDE_PLUGIN_ROOT}/sdx/mo/; ручная установка: tools/mo/),
 а почтовый ящик — в репозитории системы, .mesh/endpoint.yaml пишет узел (./mo mesh register-endpoint):
@@ -29,6 +29,7 @@ except ImportError:
 
 HERE = Path(os.environ.get("MESH_ENDPOINT_DIR") or Path.cwd()) / ".mesh"
 V = 1
+KIT = "0.9.1"  # версия инструментов лист-сессии; уходит в from.kit — узел пишет mesh.version-skew при расхождении (0.7.7)
 MAY_SEND = {"artifact.offer", "notice", "escalation", "request", "report", "ack", "nack"}
 MAY_RECV = {"rollout.result", "notice", "directive", "ack", "nack", "lease.granted", "lease.released"}
 REDACT = [r'(?i)("?(?:password|passwd|pwd|secret|token|api[_-]?key|client[_-]?secret)"?\s*[:=]\s*)("[^"]*"|[^\s,;}]+)',
@@ -79,7 +80,7 @@ def send(kind, body, correlation=None, in_reply_to=None):
     seq, prev = last(out)
     raw = canon(body)
     e = {"v": V, "msg_id": "M-" + uuid.uuid4().hex[:12], "link": c["link"], "seq": seq + 1, "prev": prev,
-         "from": {"node": c["endpoint_id"], "path": None, "session": os.environ.get("CLAUDE_SESSION_ID"), "role": "endpoint"},
+         "from": {"node": c["endpoint_id"], "path": None, "session": os.environ.get("CLAUDE_SESSION_ID"), "role": "endpoint", "kit": KIT},
          "to": {"node": c["node_id"], "path": None}, "kind": kind, "correlation_id": correlation, "in_reply_to": in_reply_to,
          "created": now().isoformat(),
          "expires": (now() + dt.timedelta(hours=72)).isoformat(),
@@ -194,6 +195,7 @@ if __name__ == "__main__":
     if a.op == "send":
         b = json.loads(Path(a.body).read_text(encoding="utf-8")) if Path(a.body).exists() else json.loads(a.body)
         print(send(a.kind, b, a.correlation, a.irt)["msg_id"])
+        print("конверт в .mesh/outbox; узел заберёт при своём следующем пробуждении (sync/tick) — доставка не мгновенна", file=sys.stderr)
     elif a.op == "pull":
         pull(a.quiet)
     elif a.op == "leases":

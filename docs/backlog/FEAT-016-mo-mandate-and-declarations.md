@@ -33,7 +33,11 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
 Две сессии: сначала **отдельная сессия перевендоринга** (п.1 — `PROC-028`, `sdx/protocol.md` «Вендорённые компоненты»:
 обновление `sdx/mo/` — осознанный шаг своей сессией, не в авторежиме), затем feature-сессия на п.2–9. Состав:
 
-1. **Перевендоринг `sdx/mo/`** из тега `sim-kit-0.9.0` (`mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`) по
+1. **Перевендоринг `sdx/mo/`** из тега `sim-kit-0.9.1` *(выполнено сессией `feat-016a-simkit-090-20261028`, 2026-10-28:
+   вендорён тег `sim-kit-0.9.1` — от 0.9.0 отличаются `MO-INTEROP.md` и `KIT`; `SIMKIT_VERSION`=`0.9.1`, хеши `12befd5b…`,
+   `6502cec4…`, `7eec5b88…`; `test-mo-hook.sh` 115 проверок / 12 мутантов — снят `BYTECODE-FS`, добавлены `[8h]`–`[8h4]`;
+   `kit.sh` на теге 331/0; коллизия `self_deploy` решена в пользу эталона — `devops` деплоит на инстансы `self_deploy` сам).*
+   Исходная формулировка пункта: из тега `sim-kit-0.9.0` (`mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`) по
    `PROC-028`: `SIMKIT_VERSION`=`0.9.0`, `SIMKIT_SHA256` (`8dcd2664…`, `6502cec4…`, `2b051842…`), сторож
    `test-mo-inventory.sh` зелёный; хеши — `sha256sum` в чекауте sim-kit на теге `sim-kit-0.9.0` (коммит `3faf4f2`, 26.10),
    перепроверяются при вендоринге, а не переписываются из этой записи; `tests/kit.sh` sim-kit прогнан локально; `CHANGES.md`

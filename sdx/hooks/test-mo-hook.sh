@@ -12,7 +12,9 @@
 #  [5]  hook rc 2 -> JSON deny with the hook's stderr as reason, exit 0, no duplicate on stderr
 #  [6]  hook rc 0 (stderr passed through once) + stdin byte-for-byte (200 KB, multi-line) + argv/env
 #  [7]  mailbox guard for Write-family tools (+ controls that are NOT the guard: named boundary)
-#  [8]  real vendored hook (needs python3 + PyYAML, else INFO-skip): deny/notice/outside/Bash/lease
+#  [8]  real vendored hook (needs python3 + PyYAML, else INFO-skip): deny/notice/outside/Bash/lease;
+#       (h) sim-kit 0.9 mandate scope: DENY [MO-scope] passes through the wrapper (red side: TRANSLATE);
+#       (h3) is a sanity check only — the wrapper's MO-EARLY-EXIT precedes the hook, no mutant targets it
 #  [9]  no __pycache__ after real runs (scenarios 4 and 8), by substance
 #  [10] scenarios 3-8 repeated in a project without .claude/ (not a VCS repo) and in a repo on "main"
 #  [11] the checkout sdx/mo/ is untouched (no __pycache__)
@@ -23,7 +25,7 @@
 # MO_HOOK_UNDER_TEST overrides the wrapper path (used to show the whole suite red without an implementation).
 # Environment without python3/PyYAML: scenarios 4, 8, 9 and the parity part of [2] are INFO-skipped, not PASS.
 set -uo pipefail
-# Hermetic against the caller's environment: the BYTECODE mutants prove that the WRAPPER sets
+# Hermetic against the caller's environment: the BYTECODE-ENV mutant proves that the WRAPPER sets
 # PYTHONDONTWRITEBYTECODE=1 itself; an inherited value (e.g. exported by the claude process) would
 # leak into the mutant and make those checks pass vacuously.
 unset PYTHONDONTWRITEBYTECODE
@@ -99,6 +101,8 @@ hook_file_real() {
 }
 # ep <text>: write .mesh/endpoint.yaml
 ep() { mkdir -p "$fx/proj/.mesh"; printf '%s\n' "$1" > "$fx/proj/.mesh/endpoint.yaml"; }
+# mandate_yaml <on_write> <scope-path>: sim-kit 0.9 development mandate beside endpoint.yaml (written by the node); scope paths are repo-relative
+mandate_yaml() { mkdir -p "$fx/proj/.mesh"; printf 'mandate:\n  executor: sdx-test\n  digest: 0123456789ab\n  on_write: %s\n  scope:\n    paths: [%s]\n' "$1" "$2" > "$fx/proj/.mesh/mandate.yaml"; }
 # block_yaml: a yaml module that fails to import (python3 present, PyYAML "absent")
 block_yaml() { mkdir -p "$fx/stubyaml"; printf 'raise ImportError("blocked for test")\n' > "$fx/stubyaml/yaml.py"; }
 
@@ -425,11 +429,27 @@ scen8() {
   setup_real deny; run_hook "$(jq -nc --arg p "$dep/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
   if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && printf '%s' "$(reason)" | grep -q 'DENY \[MO-exec-paths\]'; then pass "[8a$LBL] deny: Write into exec_paths -> JSON deny with DENY [MO-exec-paths], exit 0, stderr empty"
   else fail "[8a$LBL] deny Write" "rc=$RC out=[$OUT] err=[$ERR]"; fi
-  if [ "${SCEN8_MIN:-0}" = 1 ]; then   # mutation runs: only the Bash deny check (g) on top of (a)
+  # (h) sim-kit 0.9: .mesh/mandate.yaml beside endpoint.yaml — a write outside scope.paths is the hook's own
+  # DENY [MO-scope] (exit 2); the wrapper must translate it exactly like exec_paths (red side: TRANSLATE mutant).
+  setup_real deny; mandate_yaml deny "src/"; mkdir -p "$fx/proj/src" "$fx/proj/docs"
+  run_hook "$(jq -nc --arg p "$fx/proj/docs/x.md" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && printf '%s' "$(reason)" | grep -q 'DENY \[MO-scope\]'; then pass "[8h$LBL] mandate deny: Write outside scope.paths -> JSON deny with DENY [MO-scope], exit 0"
+  else fail "[8h$LBL] mandate deny" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  if [ "${SCEN8_MIN:-0}" = 1 ]; then   # mutation runs: only the Bash deny check (g) on top of (a) and (h)
     setup_real deny; run_hook "$(jq -nc --arg c "touch $dep/x" '{tool_name:"Bash",tool_input:{command:$c},cwd:"/",session_id:"s8"}')"
     if [ "$RC" = 0 ] && is_json_deny; then pass "[8g$LBL] deny: Bash touch in exec_paths -> JSON deny"; else fail "[8g$LBL] deny Bash" "rc=$RC out=[$OUT] err=[$ERR]"; fi
     return 0
   fi
+  run_hook "$(jq -nc --arg p "$fx/proj/src/a.py" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  expect_silent "[8h2$LBL] mandate deny: Write inside scope.paths (and outside exec_paths) -> silent"
+  new_fx; bin_set real yes; hook_file_real; mandate_yaml deny "src/"   # mandate without endpoint.yaml
+  run_hook "$(jq -nc --arg p "$fx/proj/docs/x.md" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  expect_silent "[8h3$LBL] mandate.yaml without endpoint.yaml -> not an MO repo, silent (sanity: MO-EARLY-EXIT precedes the hook)"
+  # (h4) the two on_write modes are independent in the hook: endpoint notice + mandate deny still blocks on scope
+  setup_real notice; mandate_yaml deny "src/"; mkdir -p "$fx/proj/src" "$fx/proj/docs"
+  run_hook "$(jq -nc --arg p "$fx/proj/docs/x.md" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  if [ "$RC" = 0 ] && is_json_deny && printf '%s' "$(reason)" | grep -q 'DENY \[MO-scope\]'; then pass "[8h4$LBL] endpoint notice + mandate deny: scope write -> JSON deny (mandate.on_write is independent)"
+  else fail "[8h4$LBL] mandate.on_write independence" "rc=$RC out=[$OUT] err=[$ERR]"; fi
   setup_real notice; run_hook "$(jq -nc --arg p "$dep/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
   expect_silent "[8b$LBL] notice: same write -> exit 0, nothing on stdout/stderr"
   setup_real deny; run_hook "$(jq -nc --arg p "$fx/other/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
@@ -537,7 +557,10 @@ mutate RC2          's|exit 0   # MO-RC2|exit 2|' 'cell3 "no python3" deny; SCEN
 mutate TRANSLATE    's|^    deny_json .*# MO-TRANSLATE$|    printf "%s\\n" "$err" >\&2; exit 2 ;;|' 'SCEN_MIN=1 scen5; SCEN8_MIN=1 scen8'
 mutate NO-STDIN     's|<<<"\$input")"; rc=\$?|</dev/null)"; rc=$?|' 'scen6'
 mutate BYTECODE-ENV 's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'scen6'
-mutate BYTECODE-FS  's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'SCEN8_MIN=1 scen8; scen9'
+# BYTECODE-FS (wrapper without the env var -> __pycache__ appears, caught by scen9) was retired with
+# sim-kit 0.9.0: since 0.7.4 the hook sets sys.dont_write_bytecode itself (devagent_hook.py:53), so
+# that mutant can no longer turn scen9 red. scen9 stays as a substance check; the wrapper's own
+# guarantee is proven by BYTECODE-ENV (scen6 reads the variable from the stub's log).
 mutate NO-GUARD     '/# MO-GUARD/d' 'GUARD_SET=min scen7'
 mutate NO-NORM      's|^  case "\$fp" in /\*) ;; \*) fp=.*# MO-NORM$|  :|' 'GUARD_SET=norm scen7'
 mutate NO-PHYS      's|for d in "\$proj_abs" "\$proj_phys"; do|for d in "$proj_abs"; do|' 'scen7f'

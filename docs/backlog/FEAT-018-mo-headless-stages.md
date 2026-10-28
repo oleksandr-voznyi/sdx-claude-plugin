@@ -15,7 +15,7 @@ links: [FEAT-016, FEAT-017, PROC-019, PROC-020, FEAT-007, IDEA-002, ADR-014]
 Профиль П3 концепции МО: узел сам запускает стадии SDX в своём рабочем дереве (`claude -p`) по мандату и заказу —
 `sdx run <stage> --mandate <m.yaml> --order <o.yaml>`; код возврата `0` — стадия завершена, `1` — нужен человек (файл
 вопросов), `2` — отказ по мандату (факт в `sdx.log`). Аудит пакета (`sdx run audit --change <CHANGE.yaml> --rubric
-<review.yaml>`) исполняется узлом: механизм в 0.9.0 уже есть (`dev.py audit()`, `llm_review`), от SDX нужен **профиль
+<review.yaml>` — CLI-форма записки; фактический контракт эталона — переменные окружения, см. п.3) исполняется узлом: механизм в 0.9.0 уже есть (`dev.py audit()`, `llm_review`), от SDX нужен **профиль
 ревьюера** — fresh-eyes субагент без контекста сессии исполнителя, с рубрикой из `review.yaml` и вердиктом
 `approve | return | reject` по файлам. Владелец МО ставит П3 последним (§5 п.5), после пилота на новом проекте.
 
@@ -35,8 +35,8 @@ links: [FEAT-016, FEAT-017, PROC-019, PROC-020, FEAT-007, IDEA-002, ADR-014]
    читаются из `answers.yaml` при повторном запуске; `rc 0` — стадия завершена, `[STAGE_CHANGE]` в логе. Файловый канал
    вопросов сводится с `FEAT-007` (асинхронный HITL-inbox) и `FEAT-012` (карточка HITL как допущения) — один формат, не три.
 3. Профиль ревьюера для `audit` — по контракту `dev.py llm_review()` (`dev.py:326–337`): узел задаёт `reviewer` командой в
-   `policy/review.yaml`; вход — переменные окружения `MO_CHANGE` (манифест JSON), `MO_FILES` (список файлов), `MO_RUBRIC`
-   (рубрика JSON); выход — JSON **последней строкой stdout** `{verdict: approve|return|reject, notes: [...]}`. SDX даёт такую
+   `policy/review.yaml`; вход — переменные окружения `MO_CHANGE` (сводка пакета `{repo, ref, head, commitment, executor,
+   files}` JSON — `dev.py:415`, не сам `CHANGE.yaml`), `MO_FILES` (список файлов), `MO_RUBRIC` (рубрика JSON); выход — JSON **последней строкой stdout** `{verdict: approve|return|reject, notes: [...]}`. SDX даёт такую
    команду-обёртку над `claude -p` с субагентом `reviewer`; контракт изоляции тот же, что у `/sdx:verify` (без контекста сессии
    исполнителя, без `Bash`).
 4. `sdx run pr` = `/sdx:pr` headless. `sdx run spec|design|plan` — вне этой записи: П3 по §5 п.5 владельца ограничен

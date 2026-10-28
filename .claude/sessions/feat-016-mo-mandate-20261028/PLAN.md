@@ -87,7 +87,7 @@
   - DoD: `bash sdx/hooks/test-sdx-stage.sh` — [1]–[39] зелёные кроме `active-set`/`start-stage`; в частности [30] (регресс) и [31]–[38] зелёные; `grep -n python3 sdx/hooks/sdx-stage.sh` пусто.
   - Закрывает: REQ-MAND-8, 9, 10, 11; критерии 5, 6, 7, 8.
 
-- [ ] **T10** `[CODE]` [PROC-020] `sdx-stage.sh`: подкоманды `start-stage` и `active-set`, usage-строка
+- [x] **T10** `[CODE]` [PROC-020] `sdx-stage.sh`: подкоманды `start-stage` и `active-set`, usage-строка
   - Зависит от: T09
   - Файлы: `sdx/hooks/sdx-stage.sh`
   - Что: `start-stage <желаемый> <no_code> <no_gates>` (литералы и взаимоисключение флагов как в `init`, rc 2; `no_gates` → кандидат только `Execution`, при исключении rc 1 с текстом; иначе вперёд по каноническому порядку до первого неисключённого; нечитаемый мандат → rc 1); `active-set <sid>` (девять строк `<Этап>\t<active|excluded:…>`, `MANDATE-ERROR <причина>` rc 1); usage-строка диспетчера расширена `start-stage|active-set` (К-10).

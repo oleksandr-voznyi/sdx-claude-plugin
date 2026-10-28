@@ -2,7 +2,8 @@
 # SDX sdx-stage (REQ-SCALE-1..9, REQ-FLAG-1..4, REQ-LEGAL-1..4, REQ-COMPAT-1..3, REQ-NAV-1..2):
 # the SOLE writer of `.stage` in session_state.json. NOT a hooks.json hook (no PreToolUse
 # matcher) — a CLI called by /sdx:* commands via the Bash tool, the same pattern already
-# used for archive-verify.sh <id>. Subcommands: init | next.
+# used for archive-verify.sh <id>. Subcommands: init | next | start-stage | active-set (the last two
+# are read-only, FEAT-016: they answer "first active stage" and "why is a stage excluded").
 #
 # ADR-020 replaces the former two-dimensional stage matrix with a single, canonical ordered
 # table of stage names (SDX_STAGE_TABLE) — one row per stage, no second dimension. Ceremony
@@ -114,17 +115,28 @@ is_excluded_by_no_code() {
 # unknown boundary is never read as "no boundary"). The mandate is the node's data; it is read, never run.
 MANDATE_ON=0
 
-# mandate_gate_load <refusal-rc>: init -> 2, next/start-stage -> 1. Exits with <refusal-rc> on failure.
-mandate_gate_load() {
+# _mandate_try -> rc 0 and (in mandate mode) MANDATE_ON=1 with the mandate loaded; rc 1 with MANDATE_FAIL
+# set when the mandate cannot be read. Outside mandate mode it does nothing and returns 0.
+_mandate_try() {
   [ -f "$proj/.mesh/endpoint.yaml" ] && [ -f "$proj/.mesh/mandate.yaml" ] || return 0        # MAND-MODE
   local lib="${BASH_SOURCE[0]%/*}/lib/mandate.sh"
-  [ -f "$lib" ] || { echo "SDX sdx-stage: lib/mandate.sh плагина не найдена — мандат МО не проверить, отказ (fail-closed)." >&2; exit "$1"; }
+  if [ ! -f "$lib" ]; then
+    MANDATE_FAIL="lib/mandate.sh плагина не найдена — мандат МО не проверить, отказ (fail-closed)."
+    return 1
+  fi
   . "$lib"
   if ! mandate_load "$proj"; then
-    echo "SDX sdx-stage: мандат МО (.mesh/mandate.yaml) не разобран: $MANDATE_ERR — отказ (fail-closed: неизвестная граница не трактуется как «без границ»). Мандат выдаёт и правит узел МО." >&2
-    exit "$1"
+    MANDATE_FAIL="мандат МО (.mesh/mandate.yaml) не разобран: $MANDATE_ERR — отказ (fail-closed: неизвестная граница не трактуется как «без границ»). Мандат выдаёт и правит узел МО."
+    return 1
   fi
   MANDATE_ON=1
+  return 0
+}
+
+# mandate_gate_load <refusal-rc>: init -> 2, next/start-stage -> 1. Exits with <refusal-rc> on failure.
+mandate_gate_load() {
+  MANDATE_FAIL=""
+  _mandate_try || { echo "SDX sdx-stage: $MANDATE_FAIL" >&2; exit "$1"; }
 }
 
 # is_excluded_by_mandate <stage> -> exit 0 if the loaded mandate excludes <stage> (never true outside mandate mode)
@@ -448,6 +460,72 @@ cmd_next() {
   echo "OK $stage -> $candidate"
 }
 
+# start-stage <desired_stage> <no_code> <no_gates>
+# Read-only (REQ-MAND-11): prints the first ACTIVE stage at or after <desired_stage> in the canonical
+# order, given the three narrowing sources (no_code, no_gates, mandate). The sole deterministic answer
+# to "which stage may this session start on"; /sdx:start and /sdx:import call it before `init`.
+cmd_start_stage() {
+  if [ "$#" -ne 3 ]; then
+    echo "SDX sdx-stage: использование: sdx-stage.sh start-stage <stage> <no_code> <no_gates>" >&2
+    exit 2
+  fi
+  local want="$1" no_code="$2" no_gates="$3"
+  case "$no_code" in true|false) ;; *) echo "SDX sdx-stage: no_code должен быть 'true' или 'false', получено '$no_code'." >&2; exit 2 ;; esac
+  case "$no_gates" in true|false) ;; *) echo "SDX sdx-stage: no_gates должен быть 'true' или 'false', получено '$no_gates'." >&2; exit 2 ;; esac
+  if [ "$no_code" = "true" ] && [ "$no_gates" = "true" ]; then
+    echo "SDX sdx-stage: no_code и no_gates не могут оба быть true." >&2
+    exit 2
+  fi
+  if ! stage_exists "$want"; then
+    echo "SDX sdx-stage: '$want' не распознан как имя этапа протокола SDX." >&2
+    exit 2
+  fi
+  mandate_gate_load 1
+  if [ "$no_gates" = "true" ]; then
+    if is_excluded_by_mandate "Execution"; then
+      echo "SDX sdx-stage: нет допустимого стартового этапа: no_gates допускает только Execution, а мандат МО исключает его (mandate.stages без execute)." >&2
+      exit 1
+    fi
+    echo "Execution"
+    return 0
+  fi
+  local idx candidate="$want"
+  idx="$(stage_index "$want")"
+  while is_skipped "$candidate" "$no_code" && [ "$candidate" != "Closeout" ]; do
+    idx=$((idx + 1))
+    candidate="$(stage_names | sed -n "${idx}p")"
+  done
+  echo "$candidate"
+}
+
+# active-set <sid>
+# Read-only (REQ-MAND-26): nine rows "<stage>\t<active|excluded:<sources>>" for /sdx:status. Sources, in this
+# order: no_gates, no_code, mandate(<class>). An unreadable mandate: first line "MANDATE-ERROR <reason>"
+# (the rows follow, computed without the mandate) and rc 1.
+cmd_active_set() {
+  if [ "$#" -ne 1 ]; then
+    echo "SDX sdx-stage: использование: sdx-stage.sh active-set <sid>" >&2
+    exit 2
+  fi
+  local sid="$1" sf="$proj/.claude/sessions/$1/session_state.json" no_code no_gates s src rc=0
+  [ -f "$sf" ] || { echo "SDX sdx-stage: не найден session_state.json для сессии '$sid'." >&2; exit 2; }
+  no_code="$(jq -r '.no_code // false' "$sf" 2>/dev/null || echo false)"
+  no_gates="$(jq -r '.no_gates // false' "$sf" 2>/dev/null || echo false)"
+  MANDATE_FAIL=""
+  if ! _mandate_try; then
+    echo "MANDATE-ERROR ${MANDATE_FAIL}"
+    rc=1
+  fi
+  while IFS= read -r s; do
+    src=""
+    if [ "$no_gates" = "true" ] && [ "$s" != "Execution" ]; then src="no_gates"; fi
+    if [ "$no_code" = "true" ] && is_excluded_by_no_code "$s"; then src="${src:+$src,}no_code"; fi
+    if is_excluded_by_mandate "$s"; then src="${src:+$src,}mandate($(mandate_stage_class "$s"))"; fi
+    if [ -z "$src" ]; then printf '%s\tactive\n' "$s"; else printf '%s\texcluded:%s\n' "$s" "$src"; fi
+  done < <(stage_names)
+  return "$rc"
+}
+
 # ---- dispatcher ---------------------------------------------------------------------------
 
 sub="${1:-}"
@@ -464,8 +542,16 @@ case "$sub" in
     fi
     cmd_next "$@"
     ;;
+  start-stage)
+    shift
+    cmd_start_stage "$@"
+    ;;
+  active-set)
+    shift
+    cmd_active_set "$@"
+    ;;
   *)
-    echo "SDX sdx-stage: использование: sdx-stage.sh <init|next> <args...>" >&2
+    echo "SDX sdx-stage: использование: sdx-stage.sh <init|next|start-stage|active-set> <args...>" >&2
     exit 2
     ;;
 esac

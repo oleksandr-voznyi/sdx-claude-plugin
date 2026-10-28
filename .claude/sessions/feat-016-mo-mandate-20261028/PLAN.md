@@ -94,7 +94,7 @@
   - DoD: `bash sdx/hooks/test-sdx-stage.sh` — [30]–[40] зелёные; без мандата `start-stage Business Spec false false` печатает `Business Spec`.
   - Закрывает: REQ-MAND-11, 26; критерии 8, 18 (источники сужения).
 
-- [ ] **T11** `[TEST]` [PROC-020] `test-sdx-stage.sh`: мутационная секция [41]
+- [x] **T11** `[TEST]` [PROC-020] `test-sdx-stage.sh`: мутационная секция [41]
   - Зависит от: T10
   - Файлы: `sdx/hooks/test-sdx-stage.sh`
   - Что: хелпер копирования `sdx-stage.sh` + `lib/` в temp (в сьюте мутантов раньше не было); мутанты `MAND-MODE` (режим без endpoint), `MAND-EXCL` (мандат не исключает), `MAND-SKIP` (цикл не пропускает), `MAND-DEPLOY` (Deployment допущен), `MAND-TO` (нет отказа `--to`) — каждый краснит свой сценарий ([30]/[31]/[33]/[34] соответственно).

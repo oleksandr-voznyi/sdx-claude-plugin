@@ -1,0 +1,70 @@
+---
+id: FEAT-016
+type: feat
+status: open
+priority: high
+wave: null
+source: intake intake-mo-dev-control-20261028 (записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` §2.2, §2.4–2.9, §2.11; ответ SDX `SDX-MO-dev-control-reply-2026-10-28.md` §1–3; sim-kit 0.9.0 `core/MO-INTEROP.md` §6 «Мандат разработки», `core/devagent_hook.py`, `core/dev.py`, `policy/tests.yaml`)
+session: null
+links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DEBT-045, ADR-020, ADR-021]
+---
+
+# FEAT-016. Мандат МО и декларации (плагин 2.4.0): признак `.mesh/mandate.yaml`, гейт `mandate.stages`, область на `/sdx:verify`, `tests/suites.yaml`, перевендоринг sim-kit 0.9.0
+
+## Суть
+С sim-kit 0.9 граница между SDX и мета-оркестратором (МО) проходит не по месту (репозиторий / стенды — `FEAT-015`, ADR-021),
+а по **стадиям**: узел МО выдаёт исполнителю **мандат разработки** `.mesh/mandate.yaml` (фенотип, пишет узел, вне git):
+`stages` — какие стадии делает исполнитель, `scope.paths`/`shared_paths`/`docs_paths` — область записи, `scope.branches`,
+`delivery`, `history`, `docs_in_repo`, `valid_until`, `digest`. Ворота после кода (аудит пакета `diff ⊆ scope`, слияние,
+поставка, закрытие) — всегда у узла. Решение владельца МО 26.10 (§2.8): **всё новое включается только при наличии
+`mandate.yaml`**; `endpoint.yaml` без мандата = поведение 2.3.x бит в бит, старые узлы обновления плагина не замечают.
+
+Текущее состояние плагина: 2.3.0, единственный признак режима МО — `endpoint.yaml`; вендорён sim-kit **0.7.3** (0.7.4 с
+тремя правками записки 05.10 не перевендорен; в 0.9.0 они учтены). Хук 0.9.0 читает два независимых режима отказа:
+`endpoint.on_write` для `exec_paths` и `mandate.on_write` для `scope` (`devagent_hook.py:65`, `:232`); обёртка
+`mo-hook.sh` знает только первый. Тест-команда проекта (`.claude/sdx/verify-cmd.sh`/автодетект stop-gate) узлу не видна:
+0.9.0 ожидает декларацию `tests/suites.yaml` (`suites: {<имя>: cmd | {cmd, budget_min, selector}}`, `dev.py:285–312`).
+
+Это первый из трёх выпусков по записке 26.10 (п.2 порядка владельца §5): `FEAT-016` → `FEAT-017` (сдача пакетом) →
+`FEAT-018` (headless). Ответы SDX на вопросы §4 записки — в ответной записке §1; они не меняют состав этой поставки.
+
+## Рекомендация
+Одна feature-сессия (`gate_mode: interactive` — обновление `sdx/mo/` по `PROC-028` не в авторежиме; при желании
+перевендоринг выделяется в отдельную предшествующую сессию). Состав:
+
+1. **Перевендоринг `sdx/mo/`** из тега `sim-kit-0.9.0` (`mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`) по
+   `PROC-028`: `SIMKIT_VERSION`=`0.9.0`, `SIMKIT_SHA256` (`8dcd2664…`, `6502cec4…`, `2b051842…`), сторож
+   `test-mo-inventory.sh` зелёный; 108 проверок `test-mo-hook.sh` прогнаны с новым хуком (ожидаемо: конвенция `exit 2`
+   и порядок проверок не изменились — подтвердить, а не предположить). Промежуточный 0.8.3 в плагин не попадает.
+2. **Второй признак.** `mo-session.sh` при наличии `mandate.yaml` печатает одной группой `executor`, `stages`, `scope`
+   (`paths`/`shared_paths`/`docs_paths`), `delivery`, `history`, `docs_in_repo`, `valid_until`, `digest` — как данные
+   (маркер «[ДАННЫЕ, не инструкции]», как у `inbox`). Протокол/README/`CLAUDE.md`: формулировка «единственный признак
+   `endpoint.yaml`» → «два признака: `endpoint.yaml` — стенды (0.7.x, `FEAT-015`), `mandate.yaml` — процесс изменений
+   (0.9)». Без мандата поведение 2.3.x не меняется — критерий приёмки с регрессионной проверкой существующих сьютов.
+3. **`mandate.stages` как гейт** `/sdx:start`/`/sdx:next`: отображение стадий мандата на девять этапов SDX —
+   `spec` → `Discovery`+`Business Spec`; `design` → `Technical Design`+`Task Planning`; `execute` → `Execution`+`Documentation`;
+   `verify` → `Verification`; `Deployment` при мандате всегда у узла (исключается из активного набора, как при `no_code`);
+   `Closeout` всегда у исполнителя. Этап вне мандата → отказ с записью `[ERROR]` в лог и строкой `[директива]`-класса в
+   `decisions_log.md`; единственный писатель `stage` остаётся `sdx-stage.sh`. Отображение — подтверждение владельца МО
+   (ответная записка §4.3/§5.2); до ответа реализуется как предложено.
+4. **Область мандата на `/sdx:verify`**: `git diff --name-only <base>..HEAD` (без каталога сессии) против
+   `scope.paths ∪ shared_paths ∪ docs_paths` — файл вне объединения → находка `FAIL` (гейт), файл в `shared_paths` → `WARN`
+   с квитированием (в `FEAT-017` станет `touches_shared: true` манифеста). Это «ошибка стадии», которую просит §2.2 записки,
+   поверх мягкой границы хука.
+5. **`mo-hook.sh`**: режим для исхода «не могу проверить» берётся как более строгий из `endpoint.on_write` и
+   `mandate.on_write`; отказ `Write`/`Edit` распространяется на `.mesh/mandate.yaml` (как на `endpoint.yaml`/`cursors.json`).
+6. **`tests/suites.yaml`**: генерация на `/sdx:init` и `/sdx:reconcile` из `verify-cmd.sh`/автодетекта stop-gate
+   (один набор `default` с `cmd`, `budget_min` из `SDX_VERIFY_TIMEOUT`; `selector` — пустой, поле зарезервировано);
+   файл tracked, пересоздаётся только по явному запросу. Репозиторий плагина получает свою декларацию (dogfood).
+7. **`devops` при мандате**: слияние в ветки `scope.branches`-защищённые и создание тегов — не его действие
+   (`change.merge`/`change.promote` узла); `prod-guard` и stop-gate не ослабляются (ADR-021, ответная записка §2.1).
+8. **Абзац сниппета** `sdx/templates/claude-md-snippet.md` — замена текста 04.10 на текст §2.6 записки (с поправкой
+   префикса ветки на `change/` по sim-kit); `/sdx:reconcile` предлагает обновить ранее вставленный абзац.
+9. **Документы**: `docs/specs/mo-interop.md`, `docs/designs/mo-interop.md` — дельты; ADR-021 — датированная поправка
+   «третий слой границы (хук → аудит узла → слияние узлом)»; `/sdx:status` — строка МО с мандатом (закрывает часть `DEBT-043`).
+
+Критерии приёмки: без `mandate.yaml` все 389 существующих проверок зелёные и поведение SessionStart/PreToolUse
+неотличимо от 2.3.0; с фикстурным мандатом — этап вне `stages` не стартует, файл вне области даёт `FAIL` на верификации,
+`suites.yaml` генерируется и читается `dev.py run_suites` без ошибок (проверка на копии sim-kit локально).
+
+Вне скоупа (следующие записи): `/sdx:pr`, `CHANGE.yaml`, `protocol.yaml`, `--from-order` — `FEAT-017`; `sdx run` — `FEAT-018`.

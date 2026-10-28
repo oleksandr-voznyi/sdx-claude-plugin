@@ -36,6 +36,8 @@ mode=notice
 if text="$(cat "$proj/.mesh/endpoint.yaml" 2>/dev/null)" && [[ $text =~ $mode_re ]]; then
   case "${BASH_REMATCH[2]}" in [dD][eE][nN][yY]) mode=deny ;; esac
 fi
+# FEAT-016: mandate.yaml (read only past the early exit above) may raise the mode to deny; absent key or read error keeps it.
+[ "$mode" = deny ] || { [ -f "$proj/.mesh/mandate.yaml" ] && text="$(cat "$proj/.mesh/mandate.yaml" 2>/dev/null)" && [[ $text =~ $mode_re ]] && case "${BASH_REMATCH[2]}" in [dD][eE][nN][yY]) mode=deny ;; esac; }   # MAND-MODE2
 
 # deny_json <reason> — JSON block decision on stdout, exit 0. Needs jq (checked before any caller).
 deny_json() {
@@ -84,14 +86,14 @@ norm_path() {   # absolute path -> collapsed ("//", "/./", "/../"); builtins onl
   printf '%s' "${res:-/}"
 }
 
-is_mailbox_file() {   # $1 = file path from the tool input, $2 = cwd from the tool input
-  local fp="$1" base proj_abs proj_phys d f
+is_mailbox_file() {   # $1 = file path from the tool input, $2 = cwd from the tool input, $3 = file names (default: endpoint.yaml cursors.json)
+  local fp="$1" base proj_abs proj_phys d f names="${3:-endpoint.yaml cursors.json}"
   proj_abs="$(cd "$proj" 2>/dev/null && pwd)" || return 1
   proj_phys="$(cd "$proj" 2>/dev/null && pwd -P)" || return 1
   case "$2" in /*) base="$2" ;; *) base="$proj_abs" ;; esac
   case "$fp" in /*) ;; *) fp="$base/$fp" ;; esac; fp="$(norm_path "$fp")"   # MO-NORM
   for d in "$proj_abs" "$proj_phys"; do
-    for f in endpoint.yaml cursors.json; do
+    for f in $names; do
       [ "$fp" = "$d/.mesh/$f" ] && return 0
     done
   done
@@ -103,6 +105,7 @@ case "$tool" in
     fp="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input" 2>/dev/null)"
     cwd0="$(jq -r '.cwd // empty' <<<"$input" 2>/dev/null)"
     [ -n "$fp" ] && is_mailbox_file "$fp" "$cwd0" && deny_json "SDX mo-hook: .mesh/endpoint.yaml и .mesh/cursors.json пишет узел МО, не dev-agent (MO-INTEROP §0). Запись остановлена."   # MO-GUARD
+    [ -n "$fp" ] && is_mailbox_file "$fp" "$cwd0" "mandate.yaml" && deny_json "SDX mo-hook: .mesh/mandate.yaml выдаёт узел МО, не dev-agent: сессия не расширяет собственную область (MO-INTEROP §7). Запись остановлена."   # MO-GUARD-MANDATE
     ;;
 esac
 

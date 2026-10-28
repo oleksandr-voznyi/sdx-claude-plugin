@@ -542,7 +542,7 @@ scen8i() {
     run_hook "$(mk_bash 'ls')"
     if is_json_deny && [ "$RC" = 0 ]; then got=deny; else got=notice; fi
     oracle="$(PYTHONDONTWRITEBYTECODE=1 "$REAL_PY" -c 'import sys,yaml; v=(yaml.safe_load(open(sys.argv[1])).get("mandate") or {}).get("on_write"); print(str(v).lower() if v is not None else "-")' "$fx/proj/.mesh/mandate.yaml" 2>/dev/null)"
-    if [ "$oracle" = "deny" ] && [ "$got" = deny ] || [ "$oracle" != "deny" ] && [ "$got" = notice ]; then pass "[8i.$n$LBL] $name: wrapper=$got, safe_load on_write=$oracle"
+    if { [ "$oracle" = deny ] && [ "$got" = deny ]; } || { [ "$oracle" != deny ] && [ "$got" = notice ]; }; then pass "[8i.$n$LBL] $name: wrapper=$got, safe_load on_write=$oracle"
     else fail "[8i.$n$LBL] $name" "wrapper=$got but safe_load on_write=$oracle"; fi
   done <<<"$MANDATE_FORMS"
 }

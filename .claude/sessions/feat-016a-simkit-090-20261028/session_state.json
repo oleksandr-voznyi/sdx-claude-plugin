@@ -1,0 +1,9 @@
+{
+  "session_id": "feat-016a-simkit-090-20261028",
+  "type": "feature",
+  "stage": "Discovery",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/feat-016a-simkit-090-20261028",
+  "no_code": false,
+  "no_gates": false
+}

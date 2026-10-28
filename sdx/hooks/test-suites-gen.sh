@@ -187,6 +187,44 @@ printf '{"scripts":{"test":"x"}}\n' > "$P/composer.json"; twin "priority (verify
 twin_repo; twin none none
 fi
 
+if want 8; then
+echo "[8] dogfood: tests/suites.yaml of this repository"
+DF="$ROOT/tests/suites.yaml"
+if [ -n "${SUITES_GEN_NESTED:-}" ]; then :; else
+if [ -n "$(git -C "$ROOT" ls-files tests/suites.yaml 2>/dev/null)" ]; then pass "[8] tests/suites.yaml is tracked"
+else fail "[8] tracked" "git ls-files finds nothing"; fi
+if [ -f "$DF" ] && [ -f "$LIB/miniyaml.sh" ]; then
+  . "$LIB/miniyaml.sh"; my_load "$DF"
+  [ "$(my_scalar suites.unit.cmd)" = "bash .claude/sdx/verify-cmd.sh" ] && pass "[8] unit.cmd == bash .claude/sdx/verify-cmd.sh" || fail "[8] unit.cmd" "$(my_scalar suites.unit.cmd)"
+  b="$(my_scalar suites.unit.budget_min)"
+  case "$b" in ''|*[!0-9]*) fail "[8] budget_min" "not an integer: [$b]" ;; *) [ "$b" -ge 3 ] && pass "[8] budget_min=$b >= 3" || fail "[8] budget_min" "$b < 3" ;; esac
+  if my_exists suites.module || my_exists suites.regression; then fail "[8] samples" "module/regression active"
+  elif grep -q '^  # module:' "$DF" && grep -q '^  # regression:' "$DF"; then pass "[8] module/regression are comments"
+  else fail "[8] samples" "comment samples missing"; fi
+  if grep -nE '^/?tests(/|$)' "$ROOT/.gitignore" >/dev/null 2>&1; then fail "[8] .gitignore" "ignores tests/"; else pass "[8] .gitignore does not ignore tests/"; fi
+  OUT="$(env -u SDX_VERIFY_TIMEOUT bash "$GEN" --check "$ROOT" 2>/dev/null)"
+  [ "$(first)" = OK ] && pass "[8] suites-gen.sh --check on the repository -> OK" || fail "[8] --check" "out=[$OUT]"
+else fail "[8] dogfood file" "missing: $DF"; fi
+fi
+fi
+
+if want 9; then
+echo "[9] oracle: yaml.safe_load reads the generated sample and the dogfood file"
+if PYTHONDONTWRITEBYTECODE=1 python3 -c 'import yaml' >/dev/null 2>&1; then
+  newproj; with_verify; bash "$GEN" "$P" >/dev/null 2>&1
+  for f in "$P/tests/suites.yaml" "$ROOT/tests/suites.yaml"; do
+    [ -n "${SUITES_GEN_NESTED:-}" ] && [ "$f" = "$ROOT/tests/suites.yaml" ] && continue
+    r="$(PYTHONDONTWRITEBYTECODE=1 python3 -c '
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+u = d["suites"]["unit"]
+ok = isinstance(u["cmd"], str) and isinstance(u["budget_min"], int) and u["selector"] == "" and set(d["suites"]) == {"unit"}
+print("ok" if ok else "bad %r" % (d,))' "$f" 2>&1)"
+    [ "$r" = ok ] && pass "[9] safe_load ok: ${f#$TMP/}" || fail "[9] safe_load $f" "$r"
+  done
+else info "[9] python3/PyYAML not available — oracle skipped (INFO, not PASS)"; fi
+fi
+
 if want P; then
 echo "[P] portability (BUG-010): forbidden constructs absent"
 FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path'

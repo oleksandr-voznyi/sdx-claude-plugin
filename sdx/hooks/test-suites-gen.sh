@@ -208,6 +208,32 @@ if [ -f "$GEN" ]; then
 fi
 fi
 
+if want Mut && [ -z "${SUITES_GEN_NESTED:-}" ]; then
+echo "[Mut] mutation runs: copies of the scripts + lib/ in a temp dir; each mutant must differ and turn its block red"
+MUTROOT="$TMP/mut"; mkdir -p "$MUTROOT"
+# mutate <name> <file relative to hooks/> <sed expr> <blocks>
+mutate() {
+  local name="$1" file="$2" expr="$3" only="$4" d="$MUTROOT/$1" out first
+  if [ ! -f "$SCRIPT_DIR/$file" ]; then fail "[Mut] $name" "no $file to mutate"; return; fi
+  mkdir -p "$d/lib"
+  cp "$SCRIPT_DIR/suites-gen.sh" "$d/" 2>/dev/null; cp "$SCRIPT_DIR"/lib/*.sh "$d/lib/" 2>/dev/null
+  sed "$expr" "$SCRIPT_DIR/$file" > "$d/$file"
+  if cmp -s "$SCRIPT_DIR/$file" "$d/$file"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  out="$(SUITES_GEN_NESTED=1 SUITES_GEN_ONLY="$only" SUITES_GEN_UNDER_TEST="$d/suites-gen.sh" SUITES_GEN_LIB_FOR_TEST="$d/lib" bash "${BASH_SOURCE[0]}" 2>&1)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-110)"
+    pass "[Mut] мутант $name → красный (ожидаемо) в [$only]: ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "blocks [$only] stayed green on the mutant (the check proves nothing)"
+  fi
+}
+mutate SG-CEIL      suites-gen.sh '/# SG-CEIL/s/ + 59//' "1"
+mutate SG-OVERWRITE suites-gen.sh '/# SG-OVERWRITE/s/if \[ -e "\$file" \]; then/if false; then/' "3"
+mutate SG-NOCMD     suites-gen.sh '/# SG-NOCMD/s/if \[ "\$TC_KIND" = none \]; then/if false; then/' "4"
+mutate SG-ORDER     lib/test-cmd.sh '/# SG-ORDER/s/\]; then/] \&\& [ ! -f "$proj\/composer.json" ]; then/' "7"
+mutate SG-BASH      lib/test-cmd.sh '/# SG-BASH/s/"bash \.claude/".claude/' "1"
+fi
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 [ "$FAIL_COUNT" -eq 0 ]

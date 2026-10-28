@@ -529,6 +529,39 @@ scen2m() {
   expect_silent "[2m.orphan$LBL] mandate.yaml (deny) without endpoint.yaml -> silence"
 }
 
+# [2y] (FEAT-016, MAND-PYYAML) deny from mandate.yaml + python3 without PyYAML -> the wrapper itself blocks; needs a real python3
+scen2y() {
+  echo "[2y$LBL] PyYAML absent: deny from the mandate -> JSON deny; notice everywhere -> as before"
+  if [ "$HAVE_PY" != 1 ]; then info "[2y$LBL] no python3: SKIPPED (not a pass)"; return; fi
+  local ev; ev="$(mk_write Write "src/a.txt" "/")"
+  # (a) endpoint notice + mandate deny + no PyYAML -> JSON deny naming PyYAML and the mandate
+  new_fx; bin_set real yes; hook_file_real; block_yaml; ep 'on_write: notice'
+  mandate_yaml deny 'src/'
+  EXTRA_PP="$fx/stubyaml" run_hook "$ev"
+  if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && case "$(reason)" in *PyYAML*мандат*) true ;; *) false ;; esac; then
+    pass "[2y.a$LBL] endpoint notice + mandate deny + no PyYAML -> JSON deny (PyYAML, mandate)"
+  else fail "[2y.a$LBL] mandate deny + no PyYAML" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  [ "${SCEN2Y_MIN:-0}" = 1 ] && return 0
+  # (b) endpoint notice + mandate notice + no PyYAML -> as before: one stderr line, exit 0, no stdout
+  new_fx; bin_set real yes; hook_file_real; block_yaml; ep 'on_write: notice'
+  mandate_yaml notice 'src/'
+  EXTRA_PP="$fx/stubyaml" run_hook "$ev"
+  expect_notice_line "[2y.b$LBL] endpoint notice + mandate notice + no PyYAML -> one stderr line, exit 0"
+  # (c) endpoint deny + no PyYAML -> unchanged: the hook itself refuses (JSON deny from the wrapper)
+  new_fx; bin_set real yes; hook_file_real; block_yaml; ep 'on_write: deny'
+  mandate_yaml notice 'src/'
+  EXTRA_PP="$fx/stubyaml" run_hook "$ev"
+  expect_deny_json "[2y.c$LBL] endpoint deny + no PyYAML -> JSON deny (as before)"
+  # (d) control: PyYAML present, mandate deny, path inside the scope -> the PyYAML check stays silent
+  if [ "$HAVE_YAML" = 1 ]; then
+    new_fx; bin_set real yes; hook_file_real; ep 'on_write: notice'
+    mandate_yaml deny 'src/'
+    run_hook "$(mk_write Write "$fx/proj/src/a.txt" "$fx/proj")"
+    if [ "$RC" = 0 ] && [ -z "$OUT" ]; then pass "[2y.d$LBL] control: PyYAML present, write inside scope -> no block"
+    else fail "[2y.d$LBL] control" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  fi
+}
+
 # [8i] parity of the wrapper's regex and yaml.safe_load(...)['mandate'].get('on_write') on the dump forms
 scen8i() {
   echo "[8i$LBL] wrapper regex vs yaml.safe_load on mandate.yaml forms (needs PyYAML)"
@@ -613,6 +646,7 @@ run_core() {
 scen1
 scen2
 scen2m
+scen2y
 PROJ_KIND=plain; LBL=""
 run_core
 scen7m
@@ -686,6 +720,7 @@ mutate M9-MULTILINE 's|^    last="\${err##\*"\$nl"}"|    last="$err"|' 'scen3m'
 mutate NO-HOOKFILE  '/# MO-HOOKFILE/d' 'cell3 "no hook file" notice'
 # FEAT-016 (REQ-MAND-16, 17): mode from two files and the mandate.yaml guard
 mutate MAND-MODE2   '/# MAND-MODE2/d' 'SCEN2M_MIN=1 scen2m'
+mutate MAND-PYYAML 's|^if \[ "\$mode_from_mandate" = 1 \]\(.*# MAND-PYYAML\)$|if false; then   # MAND-PYYAML|' 'SCEN2Y_MIN=1 scen2y'
 mutate MAND-GUARD-MANDATE '/# MO-GUARD-MANDATE/d' 'GUARD_SET=mand-min scen7m'
 mutate MAND-NAME    's|"mandate.yaml"|"mandate.yml"|' 'GUARD_SET=mand-min scen7m'
 

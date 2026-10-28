@@ -469,6 +469,10 @@ src_text="$(cat "$HOOK")"
 mutate() {
   local name="$1" old="$2" new="$3" out
   case "$src_text" in *"$old"*) ;; *) return 1 ;; esac
+  # bash >= 5.2 expands '&' in the replacement to the matched text (patsub_replacement): a mutant
+  # containing '>&2' would otherwise turn into a redirect to a FILE named after the match (stray
+  # files in the cwd, seen 2026-10-29). Keep the replacement literal; the shopt is absent on older bash.
+  shopt -u patsub_replacement 2>/dev/null
   out="${src_text//"$old"/$new}"
   [ "$out" != "$src_text" ] || return 1
   printf '%s\n' "$out" > "$MUT/$name.sh"

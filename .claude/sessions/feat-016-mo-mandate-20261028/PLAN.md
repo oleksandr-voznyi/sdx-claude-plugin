@@ -1,7 +1,7 @@
 # Implementation Plan: FEAT-016 п.2–9 — мандат МО и декларации (плагин 2.4.0)
 
 ## Статус реализации
-15/52 задач Execution (T01–T52; дорожка Ф T01–T15 выполнена, gate Ф зелёный), 0/3 задач Closeout (C1–C3). Этап: Execution.
+42/52 задач Execution (T01–T52; дорожка Ф T01–T15 выполнена, gate Ф зелёный), 0/3 задач Closeout (C1–C3). Этап: Execution.
 
 Условные обозначения. `SPEC`/`DESIGN` — одноимённые файлы этой сессии (SPEC включает раздел «Поправки по коллизиям DESIGN» К-1…К-6, обязательный). `ДЛ-N` — `decisions_log.md`. `К-N` — коллизии DESIGN. `A1…A21` — критерии приёмки SPEC №1…21 (ниже «Критерий N»). Якоря `# MAND-*`/`# MO-*` — метки для мутационных прогонов (определены в DESIGN). Дорожки: **Ф** — фундамент (последовательно, один исполнитель), **A**, **B**, **C** — параллельные `developer` после Ф, **З** — завершение (последовательно, после A/B/C).
 
@@ -133,56 +133,56 @@
 
 ### Дорожка A — `mo-hook.sh` и `mo-session.sh` (после T07; независима от B, C; файлы: `mo-hook.sh`, `mo-session.sh`, `test-mo-hook.sh`, `test-mo-session.sh`)
 
-- [ ] **T16** `[TEST]` [PROC-020] `test-mo-hook.sh`: `[2m]` (режим из двух файлов), `[7m]` (охрана `mandate.yaml`), `[8i]` (паритет формы дампа) — красные
+- [x] **T16** `[TEST]` [PROC-020] `test-mo-hook.sh`: `[2m]` (режим из двух файлов), `[7m]` (охрана `mandate.yaml`), `[8i]` (паритет формы дампа) — красные
   - Зависит от: T07
   - Файлы: `sdx/hooks/test-mo-hook.sh` (только добавление; `[1]–[13]`, `mutate`, `scen*` не правятся)
   - Что: `[2m]` матрица `{endpoint: notice|deny|нет ключа} × {mandate: нет файла|notice|deny|Deny|блочная форма дампа с `on_write: 'deny'`|flow}` в сценарии «не могу проверить» (нет `python3`) → JSON deny ⇔ `deny` хотя бы в одном; `mandate.yaml` без `endpoint.yaml` — тишина. `[7m]` `Write|Edit|MultiEdit|NotebookEdit` × формы пути (`abs`, `rel`, `dots`, `dslash`, `updir`, физический через симлинк) × режим × (область / пустая область / файла `mandate.yaml` нет) → JSON deny, rc 0, причина называет `mandate.yaml`; контроли `.mesh/other.yaml`, `.mesh/inbox/x.json` не блокируются; текст отказа для `endpoint.yaml`/`cursors.json` не изменился (сверка с прежней строкой). `[8i]` паритет `mode_re` и `yaml.safe_load(...)['mandate'].get('on_write')` на формах корпуса (нужен PyYAML, иначе INFO-skip).
   - DoD: `bash sdx/hooks/test-mo-hook.sh` — `[1]–[13]` зелёные, `[2m]` (ячейка «endpoint notice, mandate deny») и `[7m]` красные; перечень приложен.
   - Закрывает: REQ-MAND-16, 17, 1; критерии 11, 12 (тестовая часть).
 
-- [ ] **T17** `[CODE]` [PROC-020] `mo-hook.sh`: `MAND-MODE2` (режим из двух файлов)
+- [x] **T17** `[CODE]` [PROC-020] `mo-hook.sh`: `MAND-MODE2` (режим из двух файлов)
   - Зависит от: T16
   - Файлы: `sdx/hooks/mo-hook.sh`
   - Что: одна строка-якорь сразу после блока `mode=notice … # MO-MODE` (DESIGN, `# MAND-MODE2`); `mode_re` тот же; `mandate.yaml` читается только после раннего выхода по `endpoint.yaml` (`# MO-EARLY-EXIT` не меняется); файл автономен — `source` не подключается.
   - DoD: `bash sdx/hooks/test-mo-hook.sh` — `[2m]` и `[8i]` зелёные (или честный INFO-skip для `[8i]`), `[1]–[13]` зелёные; `! grep -qE 'git |resolve-session|source |^\. ' sdx/hooks/mo-hook.sh`.
   - Закрывает: REQ-MAND-16, 2, 33; критерий 11.
 
-- [ ] **T18** `[CODE]` [PROC-020] `mo-hook.sh`: `MO-GUARD-MANDATE` (охрана `mandate.yaml`)
+- [x] **T18** `[CODE]` [PROC-020] `mo-hook.sh`: `MO-GUARD-MANDATE` (охрана `mandate.yaml`)
   - Зависит от: T17
   - Файлы: `sdx/hooks/mo-hook.sh`
   - Что: `is_mailbox_file` получает третий параметр-список имён (дефолт `"endpoint.yaml cursors.json"`, цикл `for f in $names`); вызов для `endpoint/cursors` и его текст/якорь `# MO-GUARD` не меняются; второй вызов `… "mandate.yaml" && deny_json "…"  # MO-GUARD-MANDATE` с текстом DESIGN; охрана безусловна по наличию файла `mandate.yaml` и действует в обоих режимах (К-4).
   - DoD: `bash sdx/hooks/test-mo-hook.sh` — `[7m]` зелёный, `[1]–[13]` без правок утверждений зелёные.
   - Закрывает: REQ-MAND-17; критерий 12.
 
-- [ ] **T19** `[TEST]` [PROC-020] `test-mo-hook.sh`: мутанты в `[13]` (+2) и портируемость
+- [x] **T19** `[TEST]` [PROC-020] `test-mo-hook.sh`: мутанты в `[13]` (+2) и портируемость
   - Зависит от: T18
   - Файлы: `sdx/hooks/test-mo-hook.sh`
   - Что: два вызова `mutate` в `[13]`: `MAND-MODE2` (`/# MAND-MODE2/d` → краснит `[2m]` «endpoint notice, mandate deny»), `MAND-GUARD-MANDATE` (`/# MO-GUARD-MANDATE/d`) и `MAND-NAME` (`s|"mandate.yaml"|"mandate.yml"|`) → краснит `[7m]`; `[12]` (портируемость) по-прежнему зелёный.
   - DoD: `bash sdx/hooks/test-mo-hook.sh` → `Results: N passed, 0 failed`; 3 строки «мутант … → красный»; прирост времени сьюта ≤ 4 с (`time`); `ls -a sdx/mo` без `__pycache__`.
   - Закрывает: REQ-MAND-16, 17, 31; критерии 11, 12.
 
-- [ ] **T20** `[TEST]` [PROC-020] `test-mo-session.sh`: сценарии `[10]`–`[12]` (мандат) — красные
+- [x] **T20** `[TEST]` [PROC-020] `test-mo-session.sh`: сценарии `[10]`–`[12]` (мандат) — красные
   - Зависит от: T07
   - Файлы: `sdx/hooks/test-mo-session.sh` (добавление; прежние «old»-фрагменты и сценарии не правятся)
   - Что: фикстурный корень получает `cp` `sdx/hooks/lib/{miniyaml,mandate}.sh`. `[10]` мандат без `endpoint.yaml` → ровно одна строка, rc 0, python/jq не запускались; `[11]` с мандатом (обе формы): группа под `[ДАННЫЕ, не инструкции]` после строк `inbox`/`leases` и до финальной строки, поля, `on_write` только если задан, враждебные значения не ломают вывод (все строки с префиксом), предупреждения области/срока, rc 0; `[12]` без `python3/PyYAML` + мандат → ровно одна строка, содержащая «не прочитан» (К-2: **мандат при этом показывается и в вырожденном режиме?** — следовать SPEC-поправке REQ-MAND-4: показ мандата не зависит от python/PyYAML, т.е. группа полей печатается в stderr рядом со строкой-предупреждением о зависимостях; сверить с текстом DESIGN «Ветка нет python3/PyYAML» и зафиксировать итоговую форму в тесте; без мандата строка бит-в-бит прежняя).
   - DoD: `bash sdx/hooks/test-mo-session.sh` — сценарии 1–9 прежние зелёные, `[10]`–`[12]` красные; перечень приложен.
   - Закрывает: REQ-MAND-3, 4, 6, 7, 1; критерии 2, 3 (тестовая часть).
 
-- [ ] **T21** `[CODE]` [PROC-020] `mo-session.sh`: `MAND-ORPHAN` (мандат без endpoint)
+- [x] **T21** `[CODE]` [PROC-020] `mo-session.sh`: `MAND-ORPHAN` (мандат без endpoint)
   - Зависит от: T20
   - Файлы: `sdx/hooks/mo-session.sh`
   - Что: определения `P=…` и `say()` переносятся выше корневой проверки без изменения текста; перед `[ -f endpoint.yaml ] || exit 0` (дословно сохраняется) добавляется одна строка `# MAND-ORPHAN` (ровно одна строка в обеих ветках; нет lib → резервный текст); новых слов «exit» в комментариях нет (тест `[9]` ищет построчно).
   - DoD: `bash sdx/hooks/test-mo-session.sh` — `[10]` зелёный, прежние сценарии зелёные; без `mandate.yaml` и без `endpoint.yaml` вывод пуст.
   - Закрывает: REQ-MAND-3, 1; критерий 2.
 
-- [ ] **T22** `[CODE]` [PROC-020] `mo-session.sh`: `MAND-SHOW` и суффикс `mnote` (поправка К-2)
+- [x] **T22** `[CODE]` [PROC-020] `mo-session.sh`: `MAND-SHOW` и суффикс `mnote` (поправка К-2)
   - Зависит от: T21, T06
   - Файлы: `sdx/hooks/mo-session.sh`
   - Что: блок `# MAND-SHOW` после `leases` и до финальной строки (`mandate_report "$proj" "$P" >&2`, резервный `say` при недоступной lib); показ мандата не зависит от `python3`/PyYAML (К-2 принят) — блок стоит также на ветке вырожденного режима, строка-предупреждение о зависимостях остаётся одной и получает суффикс `mnote=" Мандат .mesh/mandate.yaml не прочитан."`/ либо фактическую форму по тесту T20 (без мандата строка бит-в-бит прежняя); все выходы `exit 0`.
   - DoD: `bash sdx/hooks/test-mo-session.sh` — `[10]`–`[12]` и сценарии 1–9 зелёные; `grep -n 'exit' sdx/hooks/mo-session.sh | grep -v 'exit 0'` пусто.
   - Закрывает: REQ-MAND-4, 6, 7; критерий 3.
 
-- [ ] **T23** `[TEST]` [PROC-020] `test-mo-session.sh`: мутанты
+- [x] **T23** `[TEST]` [PROC-020] `test-mo-session.sh`: мутанты
   - Зависит от: T22
   - Файлы: `sdx/hooks/test-mo-session.sh`
   - Что: мутанты через `red`: `no-orphan` (убрать `MAND-ORPHAN`), `orphan-two-lines`, `no-show` (убрать `MAND-SHOW`), `show-before-inbox`, `no-marker` (убрать «[ДАННЫЕ, не инструкции]» в копии lib), `mnote-always` (суффикс без условия — краснит «без мандата строка прежняя»).
@@ -191,49 +191,49 @@
 
 ### Дорожка B — `tests/suites.yaml`, `suites-gen.sh`, `snippet-check.sh` (после T07; независима от A, C; файлы: `lib/test-cmd.sh`, `suites-gen.sh`, `snippet-check.sh`, `tests/suites.yaml`, `test-suites-gen.sh`, `test-snippet-check.sh`)
 
-- [ ] **T24** `[TEST]` [PROC-020] `test-suites-gen.sh`: сценарии (1)–(7), (10) — красные
+- [x] **T24** `[TEST]` [PROC-020] `test-suites-gen.sh`: сценарии (1)–(7), (10) — красные
   - Зависит от: T07
   - Файлы: `sdx/hooks/test-suites-gen.sh` (новый)
   - Что: (1) `verify-cmd.sh` + `SDX_VERIFY_TIMEOUT` 180→`budget_min: 3`, 61→2, 60→1, 1→1, 181→4, нечисло→fallback 3 + stderr, `cmd: bash .claude/sdx/verify-cmd.sh`; (2) побайтовая детерминированность (два каталога); (3) идемпотентность (`OK`, файл без изменений; ручная правка `unit.cmd` → `DIFFERS`, файл не изменён; форма `unit: "<cmd>"` читается; `--check` без файла → `ABSENT`); (4) `NOCMD` — файл не создан; (5) автодетект `composer`/`npm`/`phpunit` и приоритет (verify-cmd.sh побеждает); (6) структура: корень `suites`, `unit` — `{cmd, budget_min, selector}`, закомментированные `module`/`regression` присутствуют и **не** активны (`my_exists suites.module` = нет); (7) тест-близнец с `stop-gate.sh` (по классу команды: ветка `sdx/t`, `stage=Execution`, `SDX_STOP_GATE=1`, заглушки `composer`/`npm`/`vendor/bin/phpunit` пишут метку; метка запуска настоящего `stop-gate.sh` совпадает с `TC_KIND`); (10) портируемость.
   - DoD: `bash sdx/hooks/test-suites-gen.sh; echo $?` != 0 (нет `suites-gen.sh`/`lib/test-cmd.sh`); `bash -n`; перечень красных строк приложен.
   - Закрывает: REQ-MAND-18, 19, 20; критерий 13 (тестовая часть).
 
-- [ ] **T25** `[CODE]` [PROC-020] `lib/test-cmd.sh`: `test_cmd_resolve`
+- [x] **T25** `[CODE]` [PROC-020] `lib/test-cmd.sh`: `test_cmd_resolve`
   - Зависит от: T24
   - Файлы: `sdx/hooks/lib/test-cmd.sh` (новый)
   - Что: зеркало блока `stop-gate.sh:49–64` (порядок `.claude/sdx/verify-cmd.sh` → `composer.json` с `"test"` → `package.json` с `"test"` → `phpunit.xml|.dist`), результаты `TC_KIND` (`verify-cmd|composer|npm|phpunit|none`), `TC_CMD` (`bash .claude/sdx/verify-cmd.sh` | `composer test` | `npm test --silent` | `./vendor/bin/phpunit`). `stop-gate.sh` не трогать.
   - DoD: `bash sdx/hooks/test-suites-gen.sh` — (5) и (7) (близнец) зелёные на уровне `TC_KIND`; `git diff --stat sdx/hooks/stop-gate.sh` пуст.
   - Закрывает: REQ-MAND-18, 20 (одна правда с stop-gate).
 
-- [ ] **T26** `[CODE]` [PROC-020] `suites-gen.sh`: создание, `--check`, исходы
+- [x] **T26** `[CODE]` [PROC-020] `suites-gen.sh`: создание, `--check`, исходы
   - Зависит от: T25
   - Файлы: `sdx/hooks/suites-gen.sh` (новый)
   - Что: исходы `CREATED|OK|DIFFERS|ABSENT|NOCMD` и rc 2 по таблице DESIGN; `budget_min = ceil(S/60)`, `S=${SDX_VERIFY_TIMEOUT:-180}`, не целое положительное → 180 + stderr (метка `# SG-CEIL`); побайтово детерминированный шаблон с комментариями-образцами `module`/`regression`; `cmd` с `bash` (`# SG-BASH`); не перезаписывает (`# SG-OVERWRITE`), `NOCMD` без файла (`# SG-NOCMD`); чтение существующего файла через `my_*` (обе формы `unit`); запись атомарна (`mktemp` + `mv`), `mkdir -p tests`; скаляры со служебными символами квотируются.
   - DoD: `bash sdx/hooks/test-suites-gen.sh` — (1)–(7), (10) зелёные.
   - Закрывает: REQ-MAND-18, 19, 20; критерий 13.
 
-- [ ] **T27** `[TEST]` [PROC-020] `test-suites-gen.sh`: мутанты `SG-*`
+- [x] **T27** `[TEST]` [PROC-020] `test-suites-gen.sh`: мутанты `SG-*`
   - Зависит от: T26
   - Файлы: `sdx/hooks/test-suites-gen.sh`
   - Что: мутанты `SG-CEIL`, `SG-OVERWRITE`, `SG-NOCMD`, `SG-ORDER` (composer раньше verify-cmd.sh — ловит близнец), `SG-BASH` — каждый краснит свой сценарий.
   - DoD: `bash sdx/hooks/test-suites-gen.sh` → `Results: N passed, 0 failed`, 5 строк «мутант … → красный»; время сьюта ≤ 6 с.
   - Закрывает: REQ-MAND-31, 18–20; критерий 13.
 
-- [ ] **T28** `[CODE]` `tests/suites.yaml` (dogfood) + сценарии (8), (9)
+- [x] **T28** `[CODE]` `tests/suites.yaml` (dogfood) + сценарии (8), (9)
   - Зависит от: T27
   - Файлы: `tests/suites.yaml` (новый, tracked), `sdx/hooks/test-suites-gen.sh`
   - Что: сначала сценарии (8) (файл tracked: `git ls-files tests/suites.yaml`; `unit.cmd` == `bash .claude/sdx/verify-cmd.sh`; `budget_min` ≥ 3; `module`/`regression` — комментарии) и (9) (при PyYAML — `safe_load` образца и dogfood-файла; INFO-skip иначе) — красные; затем файл получается запуском `bash sdx/hooks/suites-gen.sh` в корне репозитория (`CREATED`; `.gitignore` не правится) и коммитится.
   - DoD: `bash sdx/hooks/test-suites-gen.sh` — (8), (9) зелёные; `bash sdx/hooks/suites-gen.sh --check` → `OK`; `git ls-files tests/suites.yaml` непусто; `grep -n 'tests/' .gitignore` не находит игнорирования.
   - Закрывает: REQ-MAND-21, 20; критерий 14 (автоматическая часть; `run_suites` вживую — ручной сценарий п.3).
 
-- [ ] **T29** `[TEST]` [PROC-020] `test-snippet-check.sh` — красный
+- [x] **T29** `[TEST]` [PROC-020] `test-snippet-check.sh` — красный
   - Зависит от: T07
   - Файлы: `sdx/hooks/test-snippet-check.sh` (новый)
   - Что: `ABSENT` (нет маркеров), `OK`, `STALE`, `BROKEN` (два блока, нет `SDX:END`); CRLF и хвостовые пробелы допустимы; текст вне маркеров не влияет; встроенный мутант «сравнение без учёта содержимого» → красный; портируемость.
   - DoD: `bash sdx/hooks/test-snippet-check.sh; echo $?` != 0 (нет `snippet-check.sh`).
   - Закрывает: REQ-MAND-25; критерий 17 (тестовая часть).
 
-- [ ] **T30** `[CODE]` `snippet-check.sh`
+- [x] **T30** `[CODE]` `snippet-check.sh`
   - Зависит от: T29
   - Файлы: `sdx/hooks/snippet-check.sh` (новый)
   - Что: `bash snippet-check.sh <CLAUDE.md> [шаблон]` (шаблон по умолчанию `claude-md-snippet.md` рядом с плагином, путь вычисляется от `${BASH_SOURCE[0]}`); stdout `ABSENT|BROKEN|OK|STALE`, rc 0; без записи; без `--replace`.
@@ -242,84 +242,84 @@
 
 ### Дорожка C — Проза и документы (после T07 для интерфейсов; зависимости от скриптов — только по именам и CLI из DESIGN; файлы: `commands/*`, `agents/devops.md`, `sdx/templates/claude-md-snippet.md`, `sdx/protocol.md`, `docs/*`, `README*`, `CLAUDE.md`, `test-mo-prose.sh`)
 
-- [ ] **T31** `[TEST]` `test-mo-prose.sh`: инварианты `[9]`–`[16]` — красные
+- [x] **T31** `[TEST]` `test-mo-prose.sh`: инварианты `[9]`–`[16]` — красные
   - Зависит от: —
   - Файлы: `sdx/hooks/test-mo-prose.sh` (только добавление; `[17]` — T47)
   - Что: `[9]` «два признака» (`protocol.md`, `docs/designs/mo-interop.md`, `README.md`, `README.en.md`, `docs/DECISIONS.md` ADR-021 п.3): есть `mandate.yaml` в формулировке признака и **нет** «единственный признак»/«единственным признаком»; `[10]` `agents/devops.md`: `mandate.yaml`, `scope.branches`, `теги`, переключатель `endpoint.yaml`, `PYTHONDONTWRITEBYTECODE=1`; `[11]` сниппет: одно предложение о `.mesh/mandate.yaml`, нет `/sdx:pr`, маркеры `SDX:BEGIN`/`SDX:END` по одному; `[12]` `commands/archive.md` и протокол: `bridge`, `(n/a, мандат)`, `closeout-check`, «`archive-verify.sh` не вызывается» при мандате, `change/<C>-<exec>`, `undefined`; `[13]` `commands/verify.md`: `mandate-scope.sh`, `--into`, `--planned`; `[14]` `commands/start.md`: `mandate-info.sh show`, `start-stage`; `[15]` протокол «Активность этапа»: мандат — третий сужающий источник, `Deployment` исключён при мандате, абзац «`Deployment` под МО» сохраняет `Deployment`/`artifact.offer` (инвариант прежнего `[5b]`); `[16]` `docs/DECISIONS.md`: поправки к ADR-020 и ADR-021 с датой. Красная сторона каждого — той же функцией на повреждённой копии (файл без слова / со старой формулировкой).
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — прежние `[1]–[8]` зелёные, `[9]`–`[16]` красные (перечень приложен); на повреждённых копиях инварианты красные — показано.
   - Закрывает: REQ-MAND-22, 23, 24, 27, 28; критерии 15, 16, 17, 19 (тестовая часть).
 
-- [ ] **T32** `[DOC]` `commands/start.md` и `commands/import.md`: показ мандата и `start-stage`
+- [x] **T32** `[DOC]` `commands/start.md` и `commands/import.md`: показ мандата и `start-stage`
   - Зависит от: T31
   - Файлы: `commands/start.md`, `commands/import.md`
   - Что: `start.md` — шаг 1а (`bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/mandate-info.sh" show`, вывод показать пользователю **дословно**; ссылка на DEBT-045), шаг 3 — стартовый этап проходит через `sdx-stage.sh start-stage "<stage>" "<no_code>" "<no_gates>"`, ненулевой rc → показать stderr и остановиться до шага 5 (ветка не создаётся), шаг 6 — описание кода `2` дополнено «или мандат МО исключает стартовый этап/не разобран»; `import.md` — тот же `start-stage` перед `init`.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[14]` зелёный; `git diff --stat` затрагивает только эти два файла.
   - Закрывает: REQ-MAND-5, 10, 11; критерии 4, 7, 8.
 
-- [ ] **T33** `[DOC]` `commands/next.md` и `commands/status.md`
+- [x] **T33** `[DOC]` `commands/next.md` и `commands/status.md`
   - Зависит от: T31
   - Файлы: `commands/next.md`, `commands/status.md`
   - Что: `next.md` — «ограничение цели по флагу» дополнено «и мандатом МО (`stages`; `Deployment` при мандате исключён всегда)», код `1` с причиной «мандат МО исключает этап» = обычный отказ перехода (`[ERROR] Ошибка перехода: …`, `stage` не изменён), при мандате `artifact.offer` отправляется на `Execution`/`Verification` (ДЛ-1); `status.md` — новый чисто читающий шаг между 5 и 6: `mandate-info.sh status` + `sdx-stage.sh active-set <id>`, вывести строку МО и таблицу активности с источниками.
   - DoD: `grep -c 'mandate-info.sh status' commands/status.md` ≥ 1, `grep -c 'active-set' commands/status.md` ≥ 1; `grep -c 'мандат' commands/next.md` ≥ 1; в `status.md` нет инструментов записи (команда остаётся «чисто читающей»: `git diff commands/status.md` не добавляет `Write`/`Edit`/запись файлов).
   - Закрывает: REQ-MAND-8, 9, 11, 26; критерии 5, 6, 18.
 
-- [ ] **T34** `[DOC]` `commands/verify.md`: шаг 6а
+- [x] **T34** `[DOC]` `commands/verify.md`: шаг 6а
   - Зависит от: T31
   - Файлы: `commands/verify.md`
   - Что: шаг 6а после создания `verification_report.md` ревьюером и до шага 7: при `mandate-info.sh mode == on` блок `git -c core.quotepath=off diff --name-only "$def"...sdx/<id> -- . ':!.claude/sessions/**' | bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/mandate-scope.sh" --into <verification_report.md> --planned …`; правило `--planned` (`docs/specs/` — есть `SPEC.md` или `change_note.md`; `docs/designs/` — есть `DESIGN.md`; `docs/history/plans/` — есть `PLAN.md`; `docs/history/sessions-log.md` и `docs/backlog/` — всегда; `docs/DECISIONS.md` — если сессия вводит/правит ADR, при сомнении включать); затем прочитать отчёт с блоком и свести находки; `mandate_expired` → строка в сводку; без мандата шаг не выполняется. `agents/reviewer.md` не менять.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[13]` зелёный; `git diff --stat agents/reviewer.md` пуст.
   - Закрывает: REQ-MAND-12, 13, 14, 15, 7; критерии 9, 10.
 
-- [ ] **T35** `[DOC]` `commands/archive.md`: мост Closeout
+- [x] **T35** `[DOC]` `commands/archive.md`: мост Closeout
   - Зависит от: T31
   - Файлы: `commands/archive.md`
   - Что: `mandate-info.sh closeout-mode`: `standard` — прежний чек-лист; `bridge` — шаги 1–5 (п.2 с учётом `docs_in_repo`: `none` → `(n/a, docs_in_repo: none)` для переносов в `docs/specs|designs` и ADR, `final`/`full` — штатно, К-6), шаги 6–8 `(n/a, мандат)`, вместо `archive-verify.sh` — `closeout-check <sid>`, ветка `sdx/<id>` остаётся, пошаговая инструкция ручной сборки пакета `change/<C>-<exec>` (squash из `sdx/<id>` + `CHANGE.yaml` по `CHANGE.template.yaml` sim-kit; «до `/sdx:pr`, `FEAT-017`»); `undefined:<delivery>` и `error:…` — остановка и вопрос пользователю (стоп-рубрика «контракт»); rc 1 `sdx-stage.sh` при нечитаемом мандате — «гейт не пройден, чек-лист не начинается».
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[12]` по `archive.md` зелёный; стандартная ветка чек-листа (шаги 1–8) в диффе не изменена (`git diff commands/archive.md` — только добавления).
   - Закрывает: REQ-MAND-23, 23a, 23b; критерий 16.
 
-- [ ] **T36** `[DOC]` `commands/init.md` и `commands/reconcile.md`: `tests/suites.yaml`, устаревший SDX-блок
+- [x] **T36** `[DOC]` `commands/init.md` и `commands/reconcile.md`: `tests/suites.yaml`, устаревший SDX-блок
   - Зависит от: T31
   - Файлы: `commands/init.md`, `commands/reconcile.md`
   - Что: `init.md` — шаг 2c («`tests/suites.yaml` создаёт сверка (шаг 4, `/sdx:reconcile`) вызовом `suites-gen.sh`; файл tracked, паттерн `.gitignore` не добавляется»), шаг 6 (отчёт) включает исход `CREATED|OK|DIFFERS|NOCMD`; `reconcile.md` — шаг 6, две новые категории: (е) `tests/suites.yaml` — `suites-gen.sh --check` (`ABSENT` → применимо на шаге 10 по подтверждению группы вызовом без `--check`; `DIFFERS`/`NOCMD` — только находка), (ж) «устаревший SDX-блок `CLAUDE.md`» — `snippet-check.sh`, замена блока целиком между маркерами **только с явного согласия**; в `--scan-only` ничего не пишется.
   - DoD: `grep -c 'suites-gen.sh' commands/init.md commands/reconcile.md` ≥ 1 в каждом; `grep -c 'snippet-check.sh' commands/reconcile.md` ≥ 1; `bash sdx/hooks/test-init-patterns.sh` зелёный (паттерны `.gitignore` не менялись).
   - Закрывает: REQ-MAND-18, 20, 25; критерии 13, 17.
 
-- [ ] **T37** `[DOC]` [PROC-020] `agents/devops.md` и сниппет `claude-md-snippet.md`
+- [x] **T37** `[DOC]` [PROC-020] `agents/devops.md` и сниппет `claude-md-snippet.md`
   - Зависит от: T31
   - Файлы: `agents/devops.md`, `sdx/templates/claude-md-snippet.md`
   - Что: `devops.md` — «Режим МО» различает два признака; подпункт про мандат (не сливать в ветки вне `scope.branches`, не создавать теги — это `change.merge`/`change.promote` узла; пустой `scope.branches` = «ограничение не задано», но слияние в `main`/`dev`/`stage` и теги под мандатом не действие `devops`; `Deployment` исключён, `prod-guard` и stop-gate не ослабляются); п.3 «Инструкций» уточнён; ссылка «`endpoint.yaml`/`cursors.json` не правишь» → «и `.mesh/mandate.yaml`»; frontmatter не менять. Сниппет — одно предложение в абзаце «МО над стендами» (до фразы «Нет `.mesh/endpoint.yaml` — пункт неприменим»), без `/sdx:pr`, маркеры не менять.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[10]`, `[11]` зелёные (и красные на повреждённых копиях); `sed -n '1,/^---$/p' agents/devops.md` совпадает с `git show main:agents/devops.md`; `bash sdx/hooks/snippet-check.sh CLAUDE.md sdx/templates/claude-md-snippet.md` — не падает.
   - Закрывает: REQ-MAND-22, 24; критерии 15, 17.
 
-- [ ] **T38** `[DOC]` `sdx/protocol.md`: подраздел «Мандат», «два признака», границы (а)–(д)
+- [x] **T38** `[DOC]` `sdx/protocol.md`: подраздел «Мандат», «два признака», границы (а)–(д)
   - Зависит от: T31
   - Файлы: `sdx/protocol.md`
   - Что: «МО-хук» — «два признака» (`endpoint.yaml` — стенды, 0.7.x, FEAT-015; `mandate.yaml` — процесс изменений, 0.9); новый подраздел «Мандат» (признак, показ и `[ДАННЫЕ, не инструкции]`, гейт стадий и таблица отображения, область `verify` с различием `_in_scope` хука и `glob_any`+`docs_paths`, `--planned`, мост Closeout, граница К-8 «разбор — подмножество YAML, строже `safe_load` в сторону отказа», переиздание мандата в середине сессии, В13); границы (а)–(д): (д) снимается, (а) дополняется `mandate.yaml` и безусловной охраной (К-4); ссылки «MI §6 мандат» → §7.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[9]` по `protocol.md` зелёный; `grep -cE 'единственн(ый|ым) признак' sdx/protocol.md` = 0.
   - Закрывает: REQ-MAND-27, 29; критерий 19.
 
-- [ ] **T39** `[DOC]` `sdx/protocol.md`: «Активность этапа», «Механизм перехода», «Closeout», «Deployment под МО»
+- [x] **T39** `[DOC]` `sdx/protocol.md`: «Активность этапа», «Механизм перехода», «Closeout», «Deployment под МО»
   - Зависит от: T38 (тот же файл)
   - Файлы: `sdx/protocol.md`
   - Что: «Единая шкала…»/«Активность этапа» — мандат как третий сужающий источник, порядок приоритета `no_gates` → флаги/мандат → объём дельты; абзац «`Deployment` под МО`: при мандате исключён всегда, `artifact.offer` — на `Execution`/`Verification`; для `endpoint.yaml` без мандата норма прежняя; таблицу этапов не менять; «Механизм перехода» — `start-stage`, `active-set`, коды отказа мандата (init 2 / next 1, К-7); «Контракт закрытия» — ветка `bridge` (шаги 1–5, `(n/a, мандат)` для 6–8, `closeout-check` вместо `archive-verify.sh`, `undefined:<delivery>` → остановка, `change/<C>-<exec>`).
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[12]` по протоколу и `[15]` зелёные (в т.ч. прежний `[5b]`); `bash sdx/hooks/test-sdx-stage.sh` зелёный (таблица этапов не тронута); список пунктов стоп-рубрики без изменений (`diff` с `git show main:sdx/protocol.md` по этому разделу пуст).
   - Закрывает: REQ-MAND-9, 11a, 23, 29; критерии 5, 16, 19.
 
-- [ ] **T40** `[DOC]` `docs/DECISIONS.md`: поправки к ADR-020 и ADR-021
+- [x] **T40** `[DOC]` `docs/DECISIONS.md`: поправки к ADR-020 и ADR-021
   - Зависит от: T39
   - Файлы: `docs/DECISIONS.md`
   - Что: датированная (2026-10-28) поправка к ADR-020 («мандат МО — третий сужающий источник активного набора; `Deployment` при мандате исключён»); датированная поправка к ADR-021 («третий слой границы: мягкая (хук по `scope`) → жёсткая (аудит `diff ⊆ scope` на `/sdx:verify` и у узла) → окончательная (слияние узлом)»; снятие промежуточной границы (д); п.3 «два признака»; п.7 — для `endpoint.yaml` без мандата; безусловная охрана `mandate.yaml`, К-4); перечень имён файлов `mesh_endpoint.py`/`devagent_hook.py`/`MO-INTEROP.md` не уменьшать.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[16]` и `[9]` (ADR-021) зелёные; `grep -c 'mesh_endpoint.py\|devagent_hook.py\|MO-INTEROP.md' docs/DECISIONS.md` не меньше значения на `main`.
   - Закрывает: REQ-MAND-11a, 27, 28; критерий 19.
 
-- [ ] **T41** `[DOC]` Дельты `docs/specs/mo-interop.md` и `docs/designs/mo-interop.md`
+- [x] **T41** `[DOC]` Дельты `docs/specs/mo-interop.md` и `docs/designs/mo-interop.md`
   - Зависит от: T40
   - Файлы: `docs/specs/mo-interop.md`, `docs/designs/mo-interop.md`
   - Что: перенести дельты этой поставки (REQ-MAND-* в сжатом виде с пометкой `[ADDED]/[MODIFIED]` и ссылкой на ADR); убрать «промежуточная граница до `FEAT-016`» (пункт (7) поправки в шапке дизайна; границы в SPEC); «два признака» в дизайне (`:39`, `:280` и аналогичные места); ссылки на `from.kit`/`version-skew` — как названные отступы.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[9]` по дизайну зелёный; `grep -n 'до `FEAT-016`' docs/specs/mo-interop.md docs/designs/mo-interop.md` пусто; `bash sdx/hooks/test-mo-inventory.sh` зелёный.
   - Закрывает: REQ-MAND-27, 29; критерий 19.
 
-- [ ] **T42** `[DOC]` `README.md`, `README.en.md`, `CLAUDE.md`: «два признака», состав
+- [x] **T42** `[DOC]` `README.md`, `README.en.md`, `CLAUDE.md`: «два признака», состав
   - Зависит от: T38
   - Файлы: `README.md`, `README.en.md`, `CLAUDE.md`
   - Что: абзац про активацию МО-хуков → «два признака» (RU/EN симметрично, одни и те же факты); перечень `sdx/hooks/` (lib, `mandate-*`, `suites-gen`, `snippet-check`) и `tests/suites.yaml`; запись о версии 2.4.0 (двуязычно); `CLAUDE.md` §6 — тот же перечень и «два признака» (§3 упоминания МО нет — править только то, что есть); три имени `mesh_endpoint.py`/`devagent_hook.py`/`MO-INTEROP.md` остаются на каждой поверхности (проверка (д) `test-mo-inventory.sh`).
@@ -480,3 +480,9 @@
 10. **L2/L5.** Список допустимых расхождений с `safe_load` (оракул, 62 фикстуры) — 12 имён: `anchor block-scalar doc-end-marker dup-key dup-top flow-dict list-of-dicts list-outside-key nested-flow not-yaml quoted-key tag`; всё — «подмножество отказывает, `safe_load` принимает». Таблица L5 — 42 случая (в т.ч. `[ab]/x` против `[ab]/**`, единственный случай, где ветка `MAND-GLOB-PREFIX` не дублируется остальными).
 11. **Время (замеры при загруженной машине: load average 2–4, другие процессы; `sys`-время доминирует).** Базовый прогон `verify-cmd.sh` до работ: 55,6 с (15 сьютов). После T15: **86,4 с** (17 сьютов, rc 0). По сьютам: `test-mandate-lib` ≈ 6,0–6,3 с (цель ≤ 8 ✓); `test-sdx-stage` 2,9 → 8,5–11 с (секция `[M30]–[M40]` ≈ +3 с, `[M41]` ≈ +2,5 с: цель ≤ 3 с на `[M41]` ✓, суммарный прирост выше оценки DESIGN «+2 с»); `test-mandate-scope` ≈ 6,7–10 с при цели ≤ 5 с — **не достигнута в этом окружении** (286 запусков процессов в сценариях (1)–(10), мутанты ≈ 3,3 с); дальнейшее сжатие потребует сокращения числа сценариев. Контроль бюджета (180 с) — на gate Closeout (T51).
 
+
+### Отклонения дорожек A/B/C (перенесены оркестратором из отчётов developer, 2026-10-29)
+**A (T16–T23).** T17+T18 одним коммитом `132e77c` (там же исправлен приоритет `&&`/`||` в `[8i]` из T16). Суффикс `mnote` — « Мандат .mesh/mandate.yaml читается без python3 и показан ниже.» вместо «не прочитан» (К-2: мандат в вырожденном режиме показывается; DESIGN «Компоненты» в этом месте устарел). `MAND-SHOW` — функция `mand_show()`, вызывается после `leases`, в вырожденной ветке и при отказе `pull` (расширение). `MAND-ORPHAN` обёрнут `{ …; } >&2`. В сьюте: `date` в `mk_pathdir`, `${PLUGROOT:-$FXROOT}`, `SDX_MANDATE_TODAY`, логирующий `jq` (`jq.log`), `write_mandate`. Flow-форма `[2m]` — flow-списки, `on_write` отдельной строкой. Итог 154 / 43 проверки.
+**B (T24–T30).** Метка `SG-BASH` в `lib/test-cmd.sh`, не в `suites-gen.sh`. `SG-ORDER` — не перестановка веток, а `! -f composer.json` в условии verify-cmd (ловит только близнец). Сверх DESIGN: валидация `SDX_VERIFY_TIMEOUT` (не целое/`0`/длиннее 9 цифр → 180 с + stderr), сравнение `budget_min` только для формы-словаря, квотирование скаляров, атомарная запись через `tests/.suites.XXXXXX`. `snippet-check.sh`: нет `CLAUDE.md` → `ABSENT`; нет шаблона/не ровно один блок → rc 2. Цель T27 «≤ 6 с» не достигнута (10–11 с при load ≈ 9). Итог 63 / 22 проверки.
+**C (T31–T42).** Коммит T26 дорожки B переписан `--amend` (`2110cbe` → `a7cf002`, добавлен `commands/status.md`; сообщение не менялось) — ошибка процесса, дальше не повторялась. `[11]`: `/sdx:pr([^a-z]|$)` (иначе ловился `/sdx:proto`); `[9]` без `grep -i` по кириллице. Унаследованный `[3]` краснеет при `LC_ALL=C` — не трогали. Шаги команд нумерованы «1а/2а/5а/6а» без перенумерации. `docs_in_repo` в мосте берётся из `mandate-info.sh show`. Итог `test-mo-prose.sh` 79.
+**Оркестратор.** Сьют `test-mo-session.sh` писал в cwd файлы `mandate_orphan_line` и `out=…`: `${src//old/new}` в bash ≥ 5.2 раскрывает `&` в замене (`patsub_replacement`) — мутанты с `>&2`/`2>&1` превращались в редиректы в файл. Исправлено `shopt -u patsub_replacement` в `mutate()`; мутанты `orphan-two-lines`/`show-before-inbox` теперь настоящие.

@@ -73,7 +73,7 @@
 
 #### Ф-2. `sdx-stage.sh` + `test-sdx-stage.sh [30]–[41]`
 
-- [ ] **T08** `[TEST]` [PROC-020] `test-sdx-stage.sh`: хелпер `setup_mandate`, сценарии [30]–[40] — красные
+- [x] **T08** `[TEST]` [PROC-020] `test-sdx-stage.sh`: хелпер `setup_mandate`, сценарии [30]–[40] — красные
   - Зависит от: T07
   - Файлы: `sdx/hooks/test-sdx-stage.sh` (только добавление; `[1]–[29]` не правятся)
   - Что: хелпер `setup_mandate <block|flow> <stages…>` (пишет `.mesh/endpoint.yaml` + `.mesh/mandate.yaml` в `TMPPROJ`); [30] регресс без мандата (нет `.mesh/`; только endpoint; только mandate со `stages: [spec]` → `next` идёт на `Technical Design`); [31] `[spec]` (оба вида): `Business Spec`→`Verification` одним `next`, `Verification`→`Closeout`; [32] `[execute, verify]`: `init Discovery` rc 2, `start-stage Discovery false false`→`Execution`; [33] `Deployment` исключён при `delivery` ∈ {pr, branch, artifact.offer}; [34] `--to` исключённого → rc 1, байтовое сравнение `session_state.json`, причина называет стадию; `--to` активного — штатно; [35] нечитаемые мандаты → `next` rc 1, `init` rc 2, файл состояния не создан/не изменён; [36] пустой/отсутствующий `stages`: `Execution`→`Verification`; [37] `no_gates=true` без `execute`: `init Execution` rc 2, `start-stage … true` rc 1; с `execute` штатно; `next` у существующей `no_gates`-сессии — `OK no-op Execution` независимо от мандата; [38] `no_code`+`[execute, verify]`: `start-stage Discovery true false`→`Verification`; [39] `active-set` (источники `no_code`, `no_gates`, `mandate(spec)`; при нечитаемом — rc 1 и `MANDATE-ERROR`); [40] read-only (снимок `find|cksum` до/после `start-stage`/`active-set`).

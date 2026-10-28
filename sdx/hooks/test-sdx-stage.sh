@@ -716,6 +716,293 @@ cleanup
 # this scenario's own contribution -- confirming cmd_next does not choke on or strip legacy
 # fields -- is asserted green only, by design, matching DESIGN.md's DoD table row B verbatim.
 
+# ======================================================================================
+# FEAT-016: mandate mode (REQ-MAND-8..11). Scenarios [30]-[40]; mutation section [41] (T11).
+# Mandate mode = BOTH .mesh/endpoint.yaml and .mesh/mandate.yaml in the project; otherwise nothing below applies.
+# ======================================================================================
+
+# setup_mandate <block|flow|absent> [stage...]: writes .mesh/endpoint.yaml + .mesh/mandate.yaml into $TMPPROJ.
+#   block  -> the node dump shape (indentless list; no stages -> an empty "stages:" key)
+#   flow   -> "stages: [a, b]" ("[]" without stages)
+#   absent -> no stages key at all
+# MAND_DELIVERY (default artifact.offer) sets mandate.delivery.
+setup_mandate() {
+  local form="$1" y s; shift
+  mkdir -p "$TMPPROJ/.mesh"
+  printf 'endpoint:\n  on_write: notice\n' > "$TMPPROJ/.mesh/endpoint.yaml"
+  y="mandate:\n  executor: sdx-test\n  digest: 0123456789ab\n  delivery: ${MAND_DELIVERY:-artifact.offer}\n"
+  case "$form" in
+    block)
+      if [ "$#" -eq 0 ]; then y="${y}  stages:\n"
+      else y="${y}  stages:\n"; for s in "$@"; do y="${y}  - $s\n"; done; fi ;;
+    flow)
+      if [ "$#" -eq 0 ]; then y="${y}  stages: []\n"
+      else y="${y}  stages: [$(IFS=,; echo "$*" | sed 's/,/, /g')]\n"; fi ;;
+    absent) ;;
+  esac
+  printf "$y" > "$TMPPROJ/.mesh/mandate.yaml"
+}
+# put_artifact <sid> <file>: a non-empty artifact in the session directory
+put_artifact() { printf 'x\n' > "$TMPPROJ/.claude/sessions/$1/$2"; }
+# tree_sum: content snapshot of the whole temp project
+tree_sum() { (cd "$TMPPROJ" && find . -type f | sort | while read -r f; do printf '%s ' "$f"; cksum < "$f"; done); }
+# active_status <active-set output> <stage>: the status column for a stage
+active_status() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" '$1 == s { print $2 }'; }
+
+# ---- Scenario 30: regression — no mandate mode means 2.3.x behaviour ----
+echo "[30] without mandate mode next behaves as before (no .mesh / endpoint only / mandate only)"
+for variant in none endpoint-only mandate-only; do
+  setup_sdx_repo "m30" "Business Spec"
+  put_artifact m30 SPEC.md
+  case "$variant" in
+    endpoint-only) mkdir -p "$TMPPROJ/.mesh"; printf 'on_write: deny\n' > "$TMPPROJ/.mesh/endpoint.yaml" ;;
+    mandate-only)  mkdir -p "$TMPPROJ/.mesh"; printf 'mandate:\n  stages: [spec]\n' > "$TMPPROJ/.mesh/mandate.yaml" ;;
+  esac
+  out="$(run_stage next m30 2>&1)"; ec=$?
+  if [ "$ec" -eq 0 ] && [ "$out" = "OK Business Spec -> Technical Design" ]; then
+    pass "[30] $variant: Business Spec -> Technical Design as in 2.3.x"
+  else
+    fail "[30] $variant" "ec=$ec out='$out'"
+  fi
+  cleanup
+done
+
+# ---- Scenario 31: stages [spec] (block and flow) skips design/execute stages; Verification -> Closeout skips Deployment ----
+echo "[31] stages [spec]: Business Spec -> Verification in one next; Verification -> Closeout"
+for form in block flow; do
+  setup_sdx_repo "m31" "Business Spec"
+  setup_mandate "$form" spec
+  put_artifact m31 SPEC.md
+  out="$(run_stage next m31 2>&1)"; ec=$?
+  if [ "$ec" -eq 0 ] && [ "$out" = "OK Business Spec -> Verification" ] && [ "$(jq -r .stage "$(state_file m31)")" = "Verification" ]; then
+    pass "[31] $form: Business Spec -> Verification (design/execute/documentation skipped)"
+  else
+    fail "[31] $form forward" "ec=$ec out='$out'"
+  fi
+  put_artifact m31 verification_report.md
+  out="$(run_stage next m31 2>&1)"; ec=$?
+  if [ "$ec" -eq 0 ] && [ "$out" = "OK Verification -> Closeout" ]; then
+    pass "[31] $form: Verification -> Closeout (Deployment skipped)"
+  else
+    fail "[31] $form to Closeout" "ec=$ec out='$out'"
+  fi
+  cleanup
+done
+
+# ---- Scenario 32: stages [execute, verify]: init on Discovery refused, start-stage finds Execution ----
+echo "[32] stages [execute, verify]: init Discovery -> rc 2; start-stage Discovery -> Execution"
+for form in block flow; do
+  TMPPROJ="$(mktemp -d)"
+  setup_mandate "$form" execute verify
+  out="$(run_stage init "m32" "feature" "Discovery" "interactive" "sdx/m32" "false" "false" 2>&1)"; ec=$?
+  if [ "$ec" -eq 2 ] && [ ! -f "$(state_file m32)" ] && printf '%s' "$out" | grep -q 'Discovery' && printf '%s' "$out" | grep -q 'start-stage'; then
+    pass "[32] $form: init on an excluded stage -> rc 2, no state file, message names the stage and start-stage"
+  else
+    fail "[32] $form init" "ec=$ec out='$out' state=$([ -f "$(state_file m32)" ] && echo yes || echo no)"
+  fi
+  out="$(run_stage start-stage "Discovery" "false" "false" 2>&1)"; ec=$?
+  if [ "$ec" -eq 0 ] && [ "$out" = "Execution" ]; then pass "[32] $form: start-stage Discovery -> Execution"
+  else fail "[32] $form start-stage" "ec=$ec out='$out'"; fi
+  out="$(run_stage init "m32" "feature" "Execution" "interactive" "sdx/m32" "false" "false" 2>&1)"; ec=$?
+  if [ "$ec" -eq 0 ] && [ "$(jq -r .stage "$(state_file m32)")" = "Execution" ]; then pass "[32] $form: init on the allowed stage works"
+  else fail "[32] $form init allowed" "ec=$ec out='$out'"; fi
+  cleanup
+done
+
+# ---- Scenario 33: Deployment excluded for every delivery (including artifact.offer) ----
+echo "[33] Deployment is excluded for delivery pr / branch / artifact.offer"
+for dlv in pr branch artifact.offer; do
+  setup_sdx_repo "m33" "Verification"
+  MAND_DELIVERY="$dlv" setup_mandate block spec design execute verify
+  put_artifact m33 verification_report.md
+  out="$(run_stage next m33 2>&1)"; ec=$?
+  if [ "$ec" -eq 0 ] && [ "$out" = "OK Verification -> Closeout" ]; then pass "[33] delivery=$dlv: Verification -> Closeout, Deployment never offered"
+  else fail "[33] delivery=$dlv" "ec=$ec out='$out'"; fi
+  cleanup
+done
+
+# ---- Scenario 34: --to an excluded stage refused (rc 1, state byte-identical); --to an active stage works ----
+echo "[34] next --to <excluded> -> rc 1, state unchanged, stage named; --to <active> works"
+setup_sdx_repo "m34" "Verification"
+setup_mandate flow spec
+sf="$(state_file m34)"
+before="$(cksum < "$sf")"
+out="$(run_stage next m34 --to "Execution" 2>&1)"; ec=$?
+after="$(cksum < "$sf")"
+if [ "$ec" -eq 1 ] && [ "$before" = "$after" ] && printf '%s' "$out" | grep -q 'Execution' && printf '%s' "$out" | grep -q 'execute'; then
+  pass "[34] --to Execution refused: rc 1, state file byte-identical, message names the stage and its class"
+else
+  fail "[34] --to excluded" "ec=$ec same=$([ "$before" = "$after" ] && echo yes || echo no) out='$out'"
+fi
+out="$(run_stage next m34 --to "Deployment" 2>&1)"; ec=$?
+if [ "$ec" -eq 1 ] && [ "$(jq -r .stage "$sf")" = "Verification" ]; then pass "[34] --to Deployment refused under a mandate"
+else fail "[34] --to Deployment" "ec=$ec out='$out'"; fi
+out="$(run_stage next m34 --to "Business Spec" 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(jq -r .stage "$sf")" = "Business Spec" ]; then pass "[34] --to an active stage works as before"
+else fail "[34] --to active" "ec=$ec out='$out'"; fi
+cleanup
+
+# ---- Scenario 35: unreadable mandates: next rc 1 (state untouched), init rc 2 (state not created) ----
+echo "[35] unreadable mandate: next -> rc 1, init -> rc 2, fail-closed"
+for bad in "not yaml at all" $'repo: x\n' $'mandate:\n  stages: spec\n' $'mandate:\n  stages: [lint]\n' $'mandate:\n\tstages: [spec]\n'; do
+  label="$(printf '%s' "$bad" | head -c 30 | tr '\n\t' '~~')"
+  setup_sdx_repo "m35" "Business Spec"
+  put_artifact m35 SPEC.md
+  mkdir -p "$TMPPROJ/.mesh"
+  printf 'on_write: notice\n' > "$TMPPROJ/.mesh/endpoint.yaml"
+  printf '%s' "$bad" > "$TMPPROJ/.mesh/mandate.yaml"
+  sf="$(state_file m35)"; before="$(cksum < "$sf")"
+  out="$(run_stage next m35 2>&1)"; ec=$?
+  if [ "$ec" -eq 1 ] && [ "$before" = "$(cksum < "$sf")" ] && printf '%s' "$out" | grep -q 'не разобран'; then
+    pass "[35] next, mandate [$label]: rc 1, state unchanged, reason shown"
+  else
+    fail "[35] next [$label]" "ec=$ec out='$out'"
+  fi
+  rm -f "$sf"
+  out="$(run_stage init "m35" "feature" "Business Spec" "interactive" "sdx/m35" "false" "false" 2>&1)"; ec=$?
+  if [ "$ec" -eq 2 ] && [ ! -f "$sf" ]; then pass "[35] init, mandate [$label]: rc 2, no state file"
+  else fail "[35] init [$label]" "ec=$ec out='$out'"; fi
+  cleanup
+done
+
+# ---- Scenario 36: empty / absent stages -> only Verification and Closeout are active ----
+echo "[36] stages empty / [] / absent: Execution -> Verification"
+for form in block flow absent; do
+  setup_sdx_repo "m36" "Execution"
+  setup_mandate "$form"
+  out="$(run_stage next m36 2>&1)"; ec=$?
+  if [ "$ec" -eq 0 ] && [ "$out" = "OK Execution -> Verification" ]; then pass "[36] $form: Execution -> Verification"
+  else fail "[36] $form" "ec=$ec out='$out'"; fi
+  cleanup
+done
+TMPPROJ="$(mktemp -d)"; setup_mandate block
+out="$(run_stage start-stage "Discovery" "false" "false" 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$out" = "Verification" ]; then pass "[36] start-stage Discovery with empty stages -> Verification"
+else fail "[36] start-stage" "ec=$ec out='$out'"; fi
+cleanup
+
+# ---- Scenario 37: no_gates needs execute in the mandate; an existing no_gates session ignores the mandate ----
+echo "[37] no_gates: init / start-stage need execute; next on an existing no_gates session is a no-op"
+TMPPROJ="$(mktemp -d)"; setup_mandate flow spec verify
+out="$(run_stage init "m37" "proto" "Execution" "interactive" "sdx/m37" "false" "true" 2>&1)"; ec=$?
+if [ "$ec" -eq 2 ] && [ ! -f "$(state_file m37)" ]; then pass "[37] init Execution no_gates=true without execute -> rc 2"
+else fail "[37] init no_gates" "ec=$ec out='$out'"; fi
+out="$(run_stage start-stage "Execution" "false" "true" 2>&1)"; ec=$?
+if [ "$ec" -eq 1 ] && printf '%s' "$out" | grep -q 'no_gates'; then pass "[37] start-stage no_gates=true without execute -> rc 1, message names no_gates"
+else fail "[37] start-stage no_gates" "ec=$ec out='$out'"; fi
+cleanup
+TMPPROJ="$(mktemp -d)"; setup_mandate flow execute
+out="$(run_stage start-stage "Execution" "false" "true" 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$out" = "Execution" ]; then pass "[37] start-stage no_gates=true with execute -> Execution"
+else fail "[37] start-stage no_gates ok" "ec=$ec out='$out'"; fi
+out="$(run_stage init "m37" "proto" "Execution" "interactive" "sdx/m37" "false" "true" 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(jq -r .no_gates "$(state_file m37)")" = "true" ]; then pass "[37] init Execution no_gates=true with execute works"
+else fail "[37] init no_gates ok" "ec=$ec out='$out'"; fi
+cleanup
+setup_sdx_repo "m37b" "Execution" false true
+setup_mandate flow spec
+out="$(run_stage next m37b 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Execution" ]; then pass "[37] existing no_gates session: next -> OK no-op Execution regardless of the mandate"
+else fail "[37] existing no_gates session" "ec=$ec out='$out'"; fi
+printf 'garbage: [' > "$TMPPROJ/.mesh/mandate.yaml"
+out="$(run_stage next m37b 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$out" = "OK no-op Execution" ]; then pass "[37] existing no_gates session: even an unreadable mandate is not read"
+else fail "[37] no_gates unreadable" "ec=$ec out='$out'"; fi
+cleanup
+
+# ---- Scenario 38: no_code + stages [execute, verify] ----
+echo "[38] no_code session type + stages [execute, verify]: start-stage Discovery -> Verification"
+TMPPROJ="$(mktemp -d)"; setup_mandate block execute verify
+out="$(run_stage start-stage "Discovery" "true" "false" 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$out" = "Verification" ]; then pass "[38] no_code + mandate (Execution excluded by no_code): -> Verification"
+else fail "[38] start-stage no_code" "ec=$ec out='$out'"; fi
+out="$(run_stage start-stage "Business Spec" "false" "false" 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$out" = "Execution" ]; then pass "[38] start-stage Business Spec without flags -> Execution"
+else fail "[38] start-stage plain" "ec=$ec out='$out'"; fi
+out="$(run_stage start-stage "Closeout" "false" "false" 2>&1)"; ec=$?
+[ "$ec" -eq 0 ] && [ "$out" = "Closeout" ] && pass "[38] start-stage Closeout stays Closeout" || fail "[38] start-stage Closeout" "ec=$ec out='$out'"
+out="$(run_stage start-stage "Deployment" "false" "false" 2>&1)"; ec=$?
+[ "$ec" -eq 0 ] && [ "$out" = "Closeout" ] && pass "[38] start-stage Deployment under a mandate -> Closeout" || fail "[38] start-stage Deployment" "ec=$ec out='$out'"
+out="$(run_stage start-stage "Nonsense" "false" "false" 2>&1)"; ec=$?
+[ "$ec" -eq 2 ] && pass "[38] start-stage with an unknown stage -> rc 2" || fail "[38] start-stage unknown" "ec=$ec out='$out'"
+out="$(run_stage start-stage "Discovery" "true" "true" 2>&1)"; ec=$?
+[ "$ec" -eq 2 ] && pass "[38] start-stage with no_code and no_gates both true -> rc 2" || fail "[38] start-stage both flags" "ec=$ec out='$out'"
+out="$(run_stage start-stage "Discovery" "maybe" "false" 2>&1)"; ec=$?
+[ "$ec" -eq 2 ] && pass "[38] start-stage with a non-boolean flag -> rc 2" || fail "[38] start-stage literal" "ec=$ec out='$out'"
+cleanup
+TMPPROJ="$(mktemp -d)"
+out="$(run_stage start-stage "Business Spec" "false" "false" 2>&1)"; ec=$?
+[ "$ec" -eq 0 ] && [ "$out" = "Business Spec" ] && pass "[38] no mandate: start-stage Business Spec prints Business Spec" || fail "[38] start-stage without mandate" "ec=$ec out='$out'"
+out="$(run_stage start-stage "Execution" "true" "false" 2>&1)"; ec=$?
+[ "$ec" -eq 0 ] && [ "$out" = "Verification" ] && pass "[38] no mandate, no_code: start-stage Execution -> Verification (flag only)" || fail "[38] start-stage no_code only" "ec=$ec out='$out'"
+cleanup
+
+# ---- Scenario 39: active-set ----
+echo "[39] active-set prints nine rows with the narrowing sources"
+setup_sdx_repo "m39" "Discovery"
+setup_mandate block spec
+out="$(run_stage active-set m39 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c .)" -eq 9 ] \
+   && [ "$(active_status "$out" "Discovery")" = "active" ] && [ "$(active_status "$out" "Business Spec")" = "active" ] \
+   && [ "$(active_status "$out" "Technical Design")" = "excluded:mandate(design)" ] \
+   && [ "$(active_status "$out" "Execution")" = "excluded:mandate(execute)" ] \
+   && [ "$(active_status "$out" "Deployment")" = "excluded:mandate(never)" ] \
+   && [ "$(active_status "$out" "Verification")" = "active" ] && [ "$(active_status "$out" "Closeout")" = "active" ]; then
+  pass "[39] stages [spec]: statuses and mandate(<class>) sources"
+else
+  fail "[39] active-set mandate" "ec=$ec out='$out'"
+fi
+cleanup
+setup_sdx_repo "m39b" "Discovery" true false
+setup_mandate flow execute verify
+out="$(run_stage active-set m39b 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(active_status "$out" "Discovery")" = "excluded:mandate(spec)" ] \
+   && [ "$(active_status "$out" "Task Planning")" = "excluded:no_code,mandate(design)" ] \
+   && [ "$(active_status "$out" "Execution")" = "excluded:no_code" ] \
+   && [ "$(active_status "$out" "Deployment")" = "excluded:no_code,mandate(never)" ] \
+   && [ "$(active_status "$out" "Verification")" = "active" ]; then
+  pass "[39] no_code + mandate: both sources listed, no_code first"
+else
+  fail "[39] active-set no_code" "ec=$ec out='$out'"
+fi
+cleanup
+setup_sdx_repo "m39c" "Execution" false true
+setup_mandate flow execute
+out="$(run_stage active-set m39c 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(active_status "$out" "Execution")" = "active" ] \
+   && [ "$(active_status "$out" "Discovery")" = "excluded:no_gates,mandate(spec)" ] \
+   && [ "$(active_status "$out" "Closeout")" = "excluded:no_gates" ]; then
+  pass "[39] no_gates: only Execution active; sources no_gates (+ mandate)"
+else
+  fail "[39] active-set no_gates" "ec=$ec out='$out'"
+fi
+cleanup
+setup_sdx_repo "m39d" "Discovery"
+out="$(run_stage active-set m39d 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c 'active$')" -eq 9 ]; then pass "[39] no flags, no mandate: all nine stages active"
+else fail "[39] active-set plain" "ec=$ec out='$out'"; fi
+cleanup
+setup_sdx_repo "m39e" "Discovery"
+mkdir -p "$TMPPROJ/.mesh"; printf 'on_write: notice\n' > "$TMPPROJ/.mesh/endpoint.yaml"; printf 'mandate:\n  stages: [lint]\n' > "$TMPPROJ/.mesh/mandate.yaml"
+out="$(run_stage active-set m39e 2>/dev/null)"; ec=$?
+first="$(printf '%s\n' "$out" | head -1)"
+case "$first" in "MANDATE-ERROR "*) [ "$ec" -eq 1 ] && pass "[39] unreadable mandate: rc 1 and first line MANDATE-ERROR" || fail "[39] MANDATE-ERROR rc" "ec=$ec" ;; *) fail "[39] MANDATE-ERROR" "ec=$ec out='$out'" ;; esac
+cleanup
+
+# ---- Scenario 40: start-stage / active-set are read-only ----
+echo "[40] start-stage and active-set change no file"
+setup_sdx_repo "m40" "Discovery"
+setup_mandate block spec
+snap1="$(tree_sum)"
+o1="$(run_stage start-stage "Discovery" "false" "false" 2>&1)"; e1=$?
+o2="$(run_stage start-stage "Execution" "false" "true" 2>&1)"; e2=$?
+o3="$(run_stage active-set m40 2>&1)"; e3=$?
+snap2="$(tree_sum)"
+if [ "$e1" -eq 0 ] && [ "$o1" = "Discovery" ] && [ "$e2" -eq 1 ] && [ "$e3" -eq 0 ] && [ -n "$o3" ] && [ -n "$snap1" ] && [ "$snap1" = "$snap2" ]; then
+  pass "[40] the commands ran (rc 0/1/0) and the project tree is byte-identical afterwards"
+else fail "[40] read-only" "rc=$e1/$e2/$e3 o1='$o1' tree-same=$([ "$snap1" = "$snap2" ] && echo yes || echo no)"; fi
+cleanup
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -eq 0 ]; then

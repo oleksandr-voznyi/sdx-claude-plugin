@@ -22,7 +22,7 @@
 
 #### Ф-1. `lib/miniyaml.sh` + `lib/mandate.sh` + `test-mandate-lib.sh`
 
-- [ ] **T01** `[TEST]` [PROC-020] `test-mandate-lib.sh`: каркас, корпус L1 (miniyaml-часть), L3, L9
+- [x] **T01** `[TEST]` [PROC-020] `test-mandate-lib.sh`: каркас, корпус L1 (miniyaml-часть), L3, L9
   - Зависит от: —
   - Файлы: `sdx/hooks/test-mandate-lib.sh` (новый; шапка-комментарий как у `test-mo-inventory.sh`)
   - Что: каркас (`mktemp -d`, `trap`, `pass/fail`, `Results:`); хелпер `fx <имя> <содержимое>`; статическая таблица корпуса ~35 фикстур для `my_parse`/`my_load`/`my_*`: блочные списки с отступом и без, flow (одно- и многострочные), смешанная форма, CRLF, комментарии, `---`, кавычки (`''`, `\"`, `\\`), `valid_until: '2026-12-31'`, пустой/`null`/`[]` `stages`; отказы: не YAML, табуляция в отступе, второй документ, дубликат ключа, flow-словарь, якорь/алиас/тег, ключ под скаляром, ключ после элементов списка. L3 — реальный дамп узла (полный `how_to_deliver`, `format: 1`). L9 — портируемость lib-файлов (`FORBID`) + красная сторона на копии с `mapfile`; `grep -n python3` по `lib/*.sh` и `sdx-stage.sh` пусто (инвариант REQ-MAND-33).

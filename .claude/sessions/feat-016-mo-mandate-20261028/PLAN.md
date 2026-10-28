@@ -103,7 +103,7 @@
 
 #### Ф-3. `mandate-info.sh`, `mandate-scope.sh`, `test-mandate-scope.sh`
 
-- [ ] **T12** `[TEST]` [PROC-020] `test-mandate-scope.sh`: каркас, сценарии (1)–(10) `mandate-scope.sh` и блок [M] `mandate-info.sh` — красные
+- [x] **T12** `[TEST]` [PROC-020] `test-mandate-scope.sh`: каркас, сценарии (1)–(10) `mandate-scope.sh` и блок [M] `mandate-info.sh` — красные
   - Зависит от: T07
   - Файлы: `sdx/hooks/test-mandate-scope.sh` (новый)
   - Что: фикстуры — временный git-репозиторий (`main`, `sdx/s1`, файлы в диффе), мандат в обеих формах. (1) нет мандата и мандат без endpoint → нет вывода, отчёт побайтно не тронут; (2) файл вне объединения → `### [FAIL]`, rc 1, `^### \[FAIL\]` срабатывает; (3) `shared_paths` → `### [WARN]`, в т.ч. файл одновременно в `paths` и `shared`; (4) пустой `scope.paths` → нет `FAIL`, `WARN` по `shared` остаётся; (5) `docs_paths` не задан → `docs/**`, `docs/DECISIONS.md` в диффе ok; (6) `--planned docs/DECISIONS.md` при узком `docs_paths` → `FAIL` с причиной; при `docs/**` — нет; пустой `paths` — не FAIL; (7) повторный `--into` заменяет блок, остальной отчёт побайтно сохранён; (8) нечитаемый мандат → `FAIL`-блок, rc 1; (9) сверочные случаи `glob_any` через скрипт; (10) просроченный мандат → не-заголовочная строка `> Предупреждение:` и rc != 1; rc 2 при отсутствии `--into`. Блок [M]: `mode` (три значения), `show` (`none` — пусто; `orphan` — ровно одна строка; `on` — вывод равен `mandate_report`), `status` (все поля; `PyYAML` без записи на диск, снимок до/после), `closeout-mode` (`standard` без мандата и при `artifact.offer`; `bridge` при `pr|branch`; `undefined:patch`; `error:…` при нечитаемом), `closeout-check <sid>` (зелёный; красные: не та ветка, грязное дерево, каталог сессии в `HEAD`).

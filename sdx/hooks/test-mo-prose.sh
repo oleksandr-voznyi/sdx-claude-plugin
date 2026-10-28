@@ -103,8 +103,8 @@ adr_section() {  # adr_section <file> <ADR-NNN> — the body of one ADR (heading
 }
 chk_two_signs() {  # the MO activation is "two signs" and mandate.yaml is named; the old "single sign" wording is gone
   grep -qF 'mandate.yaml' "$1" || { echo "no mandate.yaml in $1"; return 1; }
-  grep -qiE 'два признака|two (activation )?(signs|markers|criteria)' "$1" || { echo "no 'два признака' / 'two signs' in $1"; return 1; }
-  if grep -qiE 'единственн(ый|ым) признак|(single|only) (activation )?(sign|marker|criterion)' "$1"; then echo "stale 'single sign' wording in $1"; return 1; fi
+  grep -qE '(д|Д)ва признака|[Tt]wo (activation )?(signs|markers|criteria)' "$1" || { echo "no 'два признака' / 'two signs' in $1"; return 1; }
+  if grep -qE '(е|Е)динственн(ый|ым) признак|([Ss]ingle|[Oo]nly) (activation )?(sign|marker|criterion)' "$1"; then echo "stale 'single sign' wording in $1"; return 1; fi
   return 0
 }
 chk_two_signs_adr() {  # ADR-021 only (point 3 of the decision)

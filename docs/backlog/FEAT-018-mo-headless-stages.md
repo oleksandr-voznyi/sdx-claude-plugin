@@ -32,10 +32,15 @@ links: [FEAT-016, FEAT-017, PROC-019, PROC-020, FEAT-007, IDEA-002, ADR-014]
 2. Обёртка `sdx run <stage>` (bash, в плагине; вызов `claude -p` с профилем стадии): `rc 2` при стадии вне
    `mandate.stages` (переиспользует гейт `FEAT-016` п.3), `rc 1` — когда стоп-рубрика требует человека: вопросы пишутся в
    `questions.yaml` (`id`, `what`, `options`, `default`, `tag` из восьми тегов журнала) вместо `AskUserQuestion`, ответы
-   читаются из `answers.yaml` при повторном запуске; `rc 0` — стадия завершена, `[STAGE_CHANGE]` в логе.
-3. Профиль ревьюера для `audit`: вход — манифест, `delivery.diff` пакета, рубрика; выход — `audit.yaml` в формате
-   `dev.py` (`verdict`, `notes[]` по файлам); контракт изоляции тот же, что у `/sdx:verify` (только `Task`, без `Bash`).
-4. `sdx run pr` = `/sdx:pr` headless.
+   читаются из `answers.yaml` при повторном запуске; `rc 0` — стадия завершена, `[STAGE_CHANGE]` в логе. Файловый канал
+   вопросов сводится с `FEAT-007` (асинхронный HITL-inbox) и `FEAT-012` (карточка HITL как допущения) — один формат, не три.
+3. Профиль ревьюера для `audit` — по контракту `dev.py llm_review()` (`dev.py:326–337`): узел задаёт `reviewer` командой в
+   `policy/review.yaml`; вход — переменные окружения `MO_CHANGE` (манифест JSON), `MO_FILES` (список файлов), `MO_RUBRIC`
+   (рубрика JSON); выход — JSON **последней строкой stdout** `{verdict: approve|return|reject, notes: [...]}`. SDX даёт такую
+   команду-обёртку над `claude -p` с субагентом `reviewer`; контракт изоляции тот же, что у `/sdx:verify` (без контекста сессии
+   исполнителя, без `Bash`).
+4. `sdx run pr` = `/sdx:pr` headless. `sdx run spec|design|plan` — вне этой записи: П3 по §5 п.5 владельца ограничен
+   `execute`/`verify`/`audit`; планировочные стадии headless — после пилота, отдельной записью при необходимости.
 
 Критерии приёмки: П3-прогон на фикстурном репозитории от `work.order` до `change/<C>-<exec>` без единого интерактивного
 вопроса при полном мандате; при заказе с коллизией триады — `rc 1` и непустой `questions.yaml`.

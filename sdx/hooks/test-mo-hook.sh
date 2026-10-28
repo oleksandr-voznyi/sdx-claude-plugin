@@ -23,6 +23,10 @@
 # MO_HOOK_UNDER_TEST overrides the wrapper path (used to show the whole suite red without an implementation).
 # Environment without python3/PyYAML: scenarios 4, 8, 9 and the parity part of [2] are INFO-skipped, not PASS.
 set -uo pipefail
+# Hermetic against the caller's environment: the BYTECODE mutants prove that the WRAPPER sets
+# PYTHONDONTWRITEBYTECODE=1 itself; an inherited value (e.g. exported by the claude process) would
+# leak into the mutant and make those checks pass vacuously.
+unset PYTHONDONTWRITEBYTECODE
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

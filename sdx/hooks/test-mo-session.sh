@@ -11,6 +11,10 @@
 #
 # Usage: bash sdx/hooks/test-mo-session.sh
 set -uo pipefail
+# Hermetic against the caller's environment: the BYTECODE mutants prove that the WRAPPER sets
+# PYTHONDONTWRITEBYTECODE=1 itself; an inherited value (e.g. exported by the claude process) would
+# leak into the mutant and make those checks pass vacuously.
+unset PYTHONDONTWRITEBYTECODE
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

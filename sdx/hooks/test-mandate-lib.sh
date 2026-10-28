@@ -120,7 +120,7 @@ chk comments-only    "ok:" $'# nothing\n\n# here\n'
 chk numeric-scalar   "ok:" $'mandate:\n  format: 1\n' "mandate.format=1"
 chk empty-quoted     "ok:" $'mandate:\n  executor: ""\n' "mandate.executor="
 chk on-write-quoted  "ok:" $'mandate:\n  on_write: \'deny\'\n' "mandate.on_write=deny"
-chk sibling-after-list "ok:spec" $'mandate:\n  stages:\n  - spec\n  delivery: pr\n  history: squash\n' "mandate.delivery=pr" "mandate.history=squash"
+chk sibling-after-list "ok:spec" $'mandate:\n  stages:\n  - spec\n  delivery: pr\n  history: executor\n' "mandate.delivery=pr" "mandate.history=executor"
 chk flow-then-key    "ok:spec,verify" $'mandate:\n  stages: [spec,\n   verify]\n  delivery: branch\n' "mandate.delivery=branch"
 chk dash-plain-scalar "ok:" $'mandate:\n  node: -x-y\n' "mandate.node=-x-y"
 chk top-level-two-keys "ok:spec" $'repo: r\nmandate:\n  stages: [spec]\nformat: 1\n' "repo=r" "format=1"
@@ -257,7 +257,7 @@ fi
 # ============================================================== [L3] real node dump
 if want L3; then
 echo "[L3] real node dump (yaml.safe_dump(sort_keys=False) shape)"
-DUMP=$'mandate:\n  repo: app1\n  stages:\n  - spec\n  - design\n  - execute\n  - verify\n  scope:\n    paths:\n    - src/**\n    - tests/**\n    shared_paths:\n    - composer.lock\n    branches:\n    - dev\n    docs_paths:\n    - docs/**\n  delivery: artifact.offer\n  history: squash\n  docs_in_repo: final\n  valid_until: \'2026-12-31\'\n  on_write: deny\n  executor: sdx-dev1\n  issued: \'2026-10-28T10:00:00+00:00\'\n  node: mo-node-1\n  digest: 0123456789ab\n  format: 1\n  how_to_deliver:\n    branch: change/<C>-sdx-dev1\n    manifest: CHANGE.yaml\n    fields:\n    - format\n    - commitment\n    - executor\n'
+DUMP=$'mandate:\n  repo: app1\n  stages:\n  - spec\n  - design\n  - execute\n  - verify\n  scope:\n    paths:\n    - src/**\n    - tests/**\n    shared_paths:\n    - composer.lock\n    branches:\n    - dev\n    docs_paths:\n    - docs/**\n  delivery: artifact.offer\n  history: executor\n  docs_in_repo: final\n  valid_until: \'2026-12-31\'\n  on_write: deny\n  executor: sdx-dev1\n  issued: \'2026-10-28T10:00:00+00:00\'\n  node: mo-node-1\n  digest: 0123456789ab\n  format: 1\n  how_to_deliver:\n    branch: change/<C>-sdx-dev1\n    manifest: CHANGE.yaml\n    fields:\n    - format\n    - commitment\n    - executor\n'
 chk real-dump "ok:spec,design,execute,verify" "$DUMP" \
   "mandate.executor=sdx-dev1" "mandate.digest=0123456789ab" "mandate.valid_until=2026-12-31" "mandate.delivery=artifact.offer" \
   "mandate.scope.paths@src/**,tests/**" "mandate.scope.shared_paths@composer.lock" "mandate.scope.docs_paths@docs/**" "mandate.scope.branches@dev" \

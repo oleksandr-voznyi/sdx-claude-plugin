@@ -99,6 +99,8 @@ hook_file_real() {
 }
 # ep <text>: write .mesh/endpoint.yaml
 ep() { mkdir -p "$fx/proj/.mesh"; printf '%s\n' "$1" > "$fx/proj/.mesh/endpoint.yaml"; }
+# mandate_yaml <on_write> <scope-path>: sim-kit 0.9 development mandate beside endpoint.yaml (written by the node); scope paths are repo-relative
+mandate_yaml() { mkdir -p "$fx/proj/.mesh"; printf 'mandate:\n  executor: sdx-test\n  digest: 0123456789ab\n  on_write: %s\n  scope:\n    paths: [%s]\n' "$1" "$2" > "$fx/proj/.mesh/mandate.yaml"; }
 # block_yaml: a yaml module that fails to import (python3 present, PyYAML "absent")
 block_yaml() { mkdir -p "$fx/stubyaml"; printf 'raise ImportError("blocked for test")\n' > "$fx/stubyaml/yaml.py"; }
 
@@ -425,11 +427,22 @@ scen8() {
   setup_real deny; run_hook "$(jq -nc --arg p "$dep/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
   if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && printf '%s' "$(reason)" | grep -q 'DENY \[MO-exec-paths\]'; then pass "[8a$LBL] deny: Write into exec_paths -> JSON deny with DENY [MO-exec-paths], exit 0, stderr empty"
   else fail "[8a$LBL] deny Write" "rc=$RC out=[$OUT] err=[$ERR]"; fi
-  if [ "${SCEN8_MIN:-0}" = 1 ]; then   # mutation runs: only the Bash deny check (g) on top of (a)
+  # (h) sim-kit 0.9: .mesh/mandate.yaml beside endpoint.yaml — a write outside scope.paths is the hook's own
+  # DENY [MO-scope] (exit 2); the wrapper must translate it exactly like exec_paths (red side: TRANSLATE mutant).
+  setup_real deny; mandate_yaml deny "src/"; mkdir -p "$fx/proj/src" "$fx/proj/docs"
+  run_hook "$(jq -nc --arg p "$fx/proj/docs/x.md" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && printf '%s' "$(reason)" | grep -q 'DENY \[MO-scope\]'; then pass "[8h$LBL] mandate deny: Write outside scope.paths -> JSON deny with DENY [MO-scope], exit 0"
+  else fail "[8h$LBL] mandate deny" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  if [ "${SCEN8_MIN:-0}" = 1 ]; then   # mutation runs: only the Bash deny check (g) on top of (a) and (h)
     setup_real deny; run_hook "$(jq -nc --arg c "touch $dep/x" '{tool_name:"Bash",tool_input:{command:$c},cwd:"/",session_id:"s8"}')"
     if [ "$RC" = 0 ] && is_json_deny; then pass "[8g$LBL] deny: Bash touch in exec_paths -> JSON deny"; else fail "[8g$LBL] deny Bash" "rc=$RC out=[$OUT] err=[$ERR]"; fi
     return 0
   fi
+  run_hook "$(jq -nc --arg p "$fx/proj/src/a.py" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  expect_silent "[8h2$LBL] mandate deny: Write inside scope.paths (and outside exec_paths) -> silent"
+  new_fx; bin_set real yes; hook_file_real; mandate_yaml deny "src/"   # mandate without endpoint.yaml
+  run_hook "$(jq -nc --arg p "$fx/proj/docs/x.md" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  expect_silent "[8h3$LBL] mandate.yaml without endpoint.yaml -> not an MO repo, silent"
   setup_real notice; run_hook "$(jq -nc --arg p "$dep/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
   expect_silent "[8b$LBL] notice: same write -> exit 0, nothing on stdout/stderr"
   setup_real deny; run_hook "$(jq -nc --arg p "$fx/other/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"

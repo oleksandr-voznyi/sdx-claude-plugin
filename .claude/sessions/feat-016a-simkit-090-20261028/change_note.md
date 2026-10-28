@@ -16,16 +16,22 @@
   deny; `DENY [MO-exec-paths]` в stderr; `MESH_ENDPOINT_DIR`), не изменились — подтверждено прогоном.
 - `test-mo-hook.sh`: мутант `BYTECODE-FS` снят (хук 0.9.0 не пишет байткод и без переменной — `devagent_hook.py:53`,
   мутант перестал различать); `BYTECODE-ENV` остаётся доказательством гарантии обёртки; `scen9` остаётся проверкой по
-  существу. 107 проверок / 10 мутантов.
+  существу. Добавлен сценарий `[8h]` (мандат 0.9 через обёртку: запись вне `scope.paths` → JSON deny с `DENY [MO-scope]`; внутри — тихо;
+  `mandate.yaml` без `endpoint.yaml` — тихо), красная сторона — мутант `TRANSLATE` (входит в `SCEN8_MIN`). 113 проверок / 12 мутантов.
 - Проза: `sdx/protocol.md` («граница (г)» переписана; политика отказа «та же в 0.9.0»), `docs/DECISIONS.md` ADR-021 п.5,
-  `docs/specs/mo-interop.md` (поправка к границе REQ-MO-VEND-1), `docs/designs/mo-interop.md` п.1, `sdx/mo/README.md`
-  (упоминание области мандата). README/README.en/CLAUDE.md версии не называют — без правок.
+  `docs/specs/mo-interop.md` (поправка: REQ-MO-VEND-1, критерий 1, `DH:N`, REQ-MO-DEVOPS-2, REQ-MO-HOOK-7, норма Deployment
+  согласована с 0.7.4), `docs/designs/mo-interop.md` (поправка к п.1 и к блоку о байткоде), `agents/devops.md` (абзац о флаге),
+  `sdx/mo/README.md` (упоминание области мандата). Число версии в протоколе/ADR не называется (PROC-028 п.2) — только в SPEC/DESIGN
+  как исторический факт поставки. README/README.en/CLAUDE.md версии не называют — без правок.
 
 ## Проверки
-- `bash .claude/sdx/verify-cmd.sh` — 15/15 сьютов; `test-mo-hook.sh` 107/107 (10 мутантов красные); `test-mo-inventory.sh` зелёный на новых хешах.
-- `tests/kit.sh` sim-kit (на рабочем дереве `aibok` HEAD `72849ff`, не на теге): `ok=331 fail=0`.
+- `bash .claude/sdx/verify-cmd.sh` — 15/15 сьютов; `test-mo-hook.sh` 113/113 (12 мутантов красные); `test-mo-inventory.sh` зелёный на новых хешах.
+- `tests/kit.sh` sim-kit на выгрузке тега `sim-kit-0.9.0` (`git archive` во временный каталог, корень передан аргументом): `ok=331 fail=0`, rc 0; ранее тот же итог на рабочем дереве HEAD `72849ff`.
 
 ## Границы
-Без мандата поведение SDX-слоя не меняется (обёртки `mo-hook.sh`/`mo-session.sh` не правились). Второй источник режима
+**Промежуточное состояние до второй сессии `FEAT-016`:** после мёржа в `main` плагин несёт хук 0.9.0, и в проекте, где узел уже
+выдал `.mesh/mandate.yaml`, запись вне `scope.paths` будет давать `notice {scope.write}` узлу или блок по `mandate.on_write: deny`
+(через обёртку, сценарий `[8h]`) — без показа мандата на старте и без гейта стадий. Это ожидаемое поведение эталона, не дефект;
+SDX-слой его не маскирует. Без мандата поведение SDX-слоя не меняется (обёртки `mo-hook.sh`/`mo-session.sh` не правились). Второй источник режима
 `mandate.on_write`, отказ правок `.mesh/mandate.yaml`, показ мандата, гейт `mandate.stages`, `tests/suites.yaml` — вторая
 сессия `FEAT-016` (п.2–9). Два заголовка `## 6` в `MO-INTEROP.md` 0.9.0 — находка upstream (ответная записка §4.6), не правится.

@@ -286,6 +286,7 @@ mo() { PYTHONDONTWRITEBYTECODE=1 MESH_ENDPOINT_DIR="$proj" python3 "$tools/mesh_
 > - **деактивированы** деплой, миграции на стенды и обслуживание стендов (п.3 «Выполни деплой…» **не выполняется**); запрошенный деплой превращается в `request` узлу МО, о чём ты сообщаешь пользователю;
 > - **остаются** сборка в рабочем дереве (`build/` — каталог исполнения, если назван в `exec_paths` `endpoint.yaml`; тогда сборка идёт только под арендой МО — проверь `leases`), тесты против тестовой базы, упаковка артефакта и `artifact.offer`;
 > - запись в `exec_paths` без аренды — не делай; её видит узел (`env.foreign-write`), а `mo-hook` в режиме `deny` её остановит.
+> *(Поправка 2026-10-28, sim-kit 0.9.0: с 0.7.4 хук сам ставит `sys.dont_write_bytecode` — байткод штатно не пишется никем, флаг — страховка; мутант `BYTECODE-FS` в строках ниже снят, `[9]` остаётся проверкой по существу; `DH:17–18`/`MI` §5 флаг ставят.)*
 > **Вызовы инструментов — только с `PYTHONDONTWRITEBYTECODE=1`** (байткод пишет `devagent_hook.py` при импорте `mesh_endpoint`; `mesh_endpoint.py` как скрипт не пишет, флаг — страховка; иначе python создаст `sdx/mo/__pycache__/` в корне плагина — нарушение ADR-013 и находка сторожа; примеры в `${CLAUDE_PLUGIN_ROOT}/sdx/mo/MO-INTEROP.md` §5 флага не содержат и в этом плагине не правятся — подставляй сам):
 > ```bash
 > mo() { PYTHONDONTWRITEBYTECODE=1 MESH_ENDPOINT_DIR="$CLAUDE_PROJECT_DIR" python3 "${CLAUDE_PLUGIN_ROOT}/sdx/mo/mesh_endpoint.py" "$@"; }

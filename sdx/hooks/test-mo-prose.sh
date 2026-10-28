@@ -22,6 +22,11 @@ DEVOPS_MD="$ROOT/agents/devops.md"
 INIT_MD="$ROOT/commands/init.md"
 SNIPPET="$ROOT/sdx/templates/claude-md-snippet.md"
 DECISIONS="$ROOT/docs/DECISIONS.md"
+ARCHIVE_MD="$ROOT/commands/archive.md"
+START_MD="$ROOT/commands/start.md"
+DESIGN_MO="$ROOT/docs/designs/mo-interop.md"
+README_RU="$ROOT/README.md"
+README_EN="$ROOT/README.en.md"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -90,6 +95,71 @@ chk_snippet() {
 }
 chk_adr() {
   grep -E '^## ADR-021\.' "$1" | grep -qF 'мета-оркестратор' || { echo "no heading '## ADR-021.' naming мета-оркестратор in $1"; return 1; }
+}
+
+# ---- FEAT-016 (mandate) checks -------------------------------------------------------------
+adr_section() {  # adr_section <file> <ADR-NNN> — the body of one ADR (heading up to the next '## ')
+  awk -v h="## $2." 'index($0, h) == 1 { p = 1; print; next } /^## / { p = 0 } p' "$1"
+}
+chk_two_signs() {  # the MO activation is "two signs" and mandate.yaml is named; the old "single sign" wording is gone
+  grep -qF 'mandate.yaml' "$1" || { echo "no mandate.yaml in $1"; return 1; }
+  grep -qiE 'два признака|two (activation )?(signs|markers|criteria)' "$1" || { echo "no 'два признака' / 'two signs' in $1"; return 1; }
+  if grep -qiE 'единственн(ый|ым) признак|(single|only) (activation )?(sign|marker|criterion)' "$1"; then echo "stale 'single sign' wording in $1"; return 1; fi
+  return 0
+}
+chk_two_signs_adr() {  # ADR-021 only (point 3 of the decision)
+  local t="$TMP/adr21.$$.md"
+  adr_section "$1" ADR-021 > "$t"
+  [ -s "$t" ] || { echo "no ADR-021 section in $1"; return 1; }
+  chk_two_signs "$t"
+}
+chk_devops_mandate() {
+  local f="$1" t
+  chk_devops "$f" || return 1
+  for t in 'mandate.yaml' 'scope.branches' 'теги' 'prod-guard'; do
+    grep -qF "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  return 0
+}
+chk_snippet_mandate() {
+  local f="$1" block n
+  block="$(sed -n '/SDX:BEGIN/,/SDX:END/p' "$f")"
+  n="$(printf '%s\n' "$block" | grep -cF '.mesh/mandate.yaml' || true)"
+  [ "$n" = 1 ] || { echo "'.mesh/mandate.yaml' must occur on exactly one line of the SDX block, found $n"; return 1; }
+  if grep -qF '/sdx:pr' "$f"; then echo "/sdx:pr in $f"; return 1; fi
+  [ "$(grep -c 'SDX:BEGIN' "$f")" = 1 ] && [ "$(grep -c 'SDX:END' "$f")" = 1 ] || { echo "SDX:BEGIN/SDX:END markers not exactly once in $f"; return 1; }
+  return 0
+}
+chk_bridge() {  # Closeout bridge under a mandate (REQ-MAND-23, 23a)
+  local f="$1" t
+  for t in 'bridge' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  grep -F 'archive-verify.sh' "$f" | grep -qF 'не вызывается' || { echo "no line saying archive-verify.sh 'не вызывается' in $f"; return 1; }
+  return 0
+}
+chk_verify_scope() {
+  local f="$1" t
+  for t in 'mandate-scope.sh' '--into' '--planned'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+}
+chk_start_mandate() {
+  grep -qF 'mandate-info.sh" show' "$1" || grep -qF 'mandate-info.sh show' "$1" || { echo "no 'mandate-info.sh show' in $1"; return 1; }
+  grep -qF 'start-stage' "$1" || { echo "no start-stage in $1"; return 1; }
+}
+chk_protocol_activity() {  # mandate = third narrowing source; Deployment excluded under a mandate; old [5b] paragraph kept
+  grep -qF 'третий сужающий источник' "$1" || { echo "no 'третий сужающий источник' in $1"; return 1; }
+  grep -F 'Deployment' "$1" | grep -F 'мандат' | grep -qE 'исключ' || { echo "no line with Deployment + мандат + исключ in $1"; return 1; }
+  chk_protocol_deploy "$1"
+}
+chk_adr_amendments() {  # dated amendments to ADR-020 and ADR-021 by the mandate session
+  local f="$1" a
+  for a in ADR-020 ADR-021; do
+    adr_section "$f" "$a" | grep -F 'Поправка 2026-10-28' | grep -qF 'feat-016-mo-mandate-20261028' || { echo "no dated amendment of $a by feat-016-mo-mandate-20261028 in $f"; return 1; }
+  done
+  adr_section "$f" ADR-020 | grep -qF 'третий сужающий источник' || { echo "ADR-020 amendment lacks 'третий сужающий источник'"; return 1; }
+  return 0
 }
 
 echo "=== test-mo-prose.sh ==="
@@ -168,6 +238,93 @@ sed 's/^## ADR-021\..*/## ADR-021. Интероп/' "$DECISIONS" > "$TMP/a2.md"
 expect_red "red: ADR-021 heading without 'мета-оркестратор'" chk_adr "$TMP/a2.md"
 { grep -v '^## ADR-021\.' "$DECISIONS"; echo 'см. ADR-021, мета-оркестратор'; } > "$TMP/a3.md"
 expect_red "red: bare ADR-021 mention is not the heading" chk_adr "$TMP/a3.md"
+
+echo ""
+echo "[9] two signs (endpoint.yaml + mandate.yaml): protocol, design, READMEs, ADR-021"
+for pair in "protocol.md:$PROTOCOL" "designs/mo-interop.md:$DESIGN_MO" "README.md:$README_RU" "README.en.md:$README_EN"; do
+  expect_ok "${pair%%:*}" chk_two_signs "${pair#*:}"
+done
+expect_ok "DECISIONS.md ADR-021" chk_two_signs_adr "$DECISIONS"
+sed 's/mandate\.yaml/x.yaml/g' "$PROTOCOL" > "$TMP/t9a.md"
+expect_red "red: protocol without mandate.yaml" chk_two_signs "$TMP/t9a.md"
+{ cat "$README_RU"; echo 'единственный признак — endpoint.yaml'; } > "$TMP/t9b.md"
+expect_red "red: README with 'единственный признак'" chk_two_signs "$TMP/t9b.md"
+{ cat "$README_EN"; echo 'the only activation marker is endpoint.yaml'; } > "$TMP/t9c.md"
+expect_red "red: README.en with 'only activation marker'" chk_two_signs "$TMP/t9c.md"
+sed 's/два признака/один признак/g; s/Два признака/Один признак/g' "$DESIGN_MO" > "$TMP/t9d.md"
+expect_red "red: design without 'два признака'" chk_two_signs "$TMP/t9d.md"
+adr_section "$DECISIONS" ADR-021 | sed 's/два признака/один признак/g' > "$TMP/t9e.md"
+{ echo '## ADR-021. x'; sed 1d "$TMP/t9e.md"; } > "$TMP/t9f.md"
+expect_red "red: ADR-021 without 'два признака'" chk_two_signs_adr "$TMP/t9f.md"
+
+echo ""
+echo "[10] agents/devops.md: mandate mode (mandate.yaml, scope.branches, теги), endpoint switch kept"
+expect_ok "devops.md" chk_devops_mandate "$DEVOPS_MD"
+for t in 'mandate\.yaml' 'scope\.branches' 'теги' 'prod-guard'; do
+  sed "s/$t/zz-removed/g" "$DEVOPS_MD" > "$TMP/t10.md"
+  expect_red "red: devops without '$t'" chk_devops_mandate "$TMP/t10.md"
+done
+{ cat "$DEVOPS_MD"; echo 'python3 sdx/mo/mesh_endpoint.py pull'; } > "$TMP/t10b.md"
+expect_red "red: flagless mesh_endpoint.py call" chk_devops_mandate "$TMP/t10b.md"
+
+echo ""
+echo "[11] CLAUDE.md snippet: one sentence on .mesh/mandate.yaml, no /sdx:pr, markers once"
+expect_ok "snippet" chk_snippet_mandate "$SNIPPET"
+grep -vF '.mesh/mandate.yaml' "$SNIPPET" > "$TMP/t11a.md"
+expect_red "red: snippet without the mandate sentence" chk_snippet_mandate "$TMP/t11a.md"
+{ cat "$SNIPPET"; echo 'см. /sdx:pr'; } > "$TMP/t11b.md"
+expect_red "red: snippet with /sdx:pr" chk_snippet_mandate "$TMP/t11b.md"
+sed 's/<!-- SDX:END/<!-- SDX:END2/' "$SNIPPET" | grep -v 'SDX:END2' > "$TMP/t11c.md"
+expect_red "red: snippet without the SDX:END marker" chk_snippet_mandate "$TMP/t11c.md"
+{ cat "$SNIPPET"; } | awk '{print} /\.mesh\/mandate\.yaml/ && !d {print "второй `.mesh/mandate.yaml`"; d=1}' > "$TMP/t11d.md"
+expect_red "red: mandate sentence on two lines" chk_snippet_mandate "$TMP/t11d.md"
+
+echo ""
+echo "[12] Closeout bridge: commands/archive.md and protocol.md"
+expect_ok "archive.md" chk_bridge "$ARCHIVE_MD"
+expect_ok "protocol.md" chk_bridge "$PROTOCOL"
+for t in 'bridge' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'не вызывается'; do
+  for pair in "archive.md:$ARCHIVE_MD" "protocol.md:$PROTOCOL"; do
+    grep -vF -- "$t" "${pair#*:}" > "$TMP/t12.md"
+    expect_red "red: ${pair%%:*} without '$t'" chk_bridge "$TMP/t12.md"
+  done
+done
+
+echo ""
+echo "[13] commands/verify.md: step 6a calls mandate-scope.sh --into … --planned"
+expect_ok "verify.md" chk_verify_scope "$VERIFY_MD"
+for t in 'mandate-scope\.sh' '--into' '--planned'; do
+  sed "s/$t/zz-removed/g" "$VERIFY_MD" > "$TMP/t13.md"
+  expect_red "red: verify.md without '$t'" chk_verify_scope "$TMP/t13.md"
+done
+
+echo ""
+echo "[14] commands/start.md: mandate-info.sh show, start-stage"
+expect_ok "start.md" chk_start_mandate "$START_MD"
+sed 's/mandate-info\.sh/zz-removed/g' "$START_MD" > "$TMP/t14a.md"
+expect_red "red: start.md without mandate-info.sh" chk_start_mandate "$TMP/t14a.md"
+sed 's/start-stage/zz-removed/g' "$START_MD" > "$TMP/t14b.md"
+expect_red "red: start.md without start-stage" chk_start_mandate "$TMP/t14b.md"
+
+echo ""
+echo "[15] protocol.md: mandate is the third narrowing source; Deployment excluded under a mandate; artifact.offer paragraph kept"
+expect_ok "protocol.md" chk_protocol_activity "$PROTOCOL"
+sed 's/третий сужающий источник/источник/g' "$PROTOCOL" > "$TMP/t15a.md"
+expect_red "red: protocol without 'третий сужающий источник'" chk_protocol_activity "$TMP/t15a.md"
+sed '/Deployment/{/мандат/s/исключ/допущ/g;}' "$PROTOCOL" > "$TMP/t15b.md"
+expect_red "red: protocol without Deployment-excluded-under-mandate line" chk_protocol_activity "$TMP/t15b.md"
+sed 's/artifact\.offer/offer-x/g' "$PROTOCOL" > "$TMP/t15c.md"
+expect_red "red: protocol without artifact.offer" chk_protocol_activity "$TMP/t15c.md"
+
+echo ""
+echo "[16] docs/DECISIONS.md: dated amendments of ADR-020 and ADR-021 by the mandate session"
+expect_ok "DECISIONS.md" chk_adr_amendments "$DECISIONS"
+sed 's/feat-016-mo-mandate-20261028/zz-session/g' "$DECISIONS" > "$TMP/t16a.md"
+expect_red "red: amendments without the session id" chk_adr_amendments "$TMP/t16a.md"
+awk '/^## ADR-020\./{p=1} /^## ADR-021\./{p=0} p && /Поправка 2026-10-28/ {gsub(/feat-016-mo-mandate-20261028/,"zz")} {print}' "$DECISIONS" > "$TMP/t16b.md"
+expect_red "red: ADR-020 amendment missing" chk_adr_amendments "$TMP/t16b.md"
+sed 's/третий сужающий источник/источник/g' "$DECISIONS" > "$TMP/t16c.md"
+expect_red "red: ADR-020 amendment without 'третий сужающий источник'" chk_adr_amendments "$TMP/t16c.md"
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

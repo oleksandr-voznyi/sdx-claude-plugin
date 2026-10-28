@@ -43,11 +43,13 @@ echo ""
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# Mutation re-runs stop at the first red check (all [Mut] needs; keeps the suite fast).
+if [ -n "${MANDATE_SCOPE_NESTED:-}" ]; then fail() { echo "  FAIL: $1 — $2"; exit 1; }; fi
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
 # ---------------------------------------------------------------- fixtures
 # put <dir> <relpath> <content>: write a file (parents created)
-put() { mkdir -p "$(dirname "$1/$2")"; printf '%s' "$3" > "$1/$2"; }
+put() { local pd="$1/$2"; pd="${pd%/*}"; [ -d "$pd" ] || mkdir -p "$pd"; printf '%s' "$3" > "$1/$2"; }
 # gitc <dir> <git args...>
 gitc() { local d="$1"; shift; git -C "$d" "$@"; }
 
@@ -71,30 +73,33 @@ mkrepo() {
 difflist() { gitc "$1" -c core.quotepath=off diff --name-only "main...sdx/s1" -- . ':!.claude/sessions/**'; }
 # mesh <repo> <endpoint 0|1> <mandate-content or ->: (re)write the untracked .mesh files
 mesh() {
-  rm -rf "$1/.mesh"; mkdir -p "$1/.mesh"
-  [ "$2" = 1 ] && printf 'on_write: notice\n' > "$1/.mesh/endpoint.yaml"
-  if [ "$3" != "-" ]; then printf '%s' "$3" > "$1/.mesh/mandate.yaml"; fi
+  [ -d "$1/.mesh" ] || mkdir -p "$1/.mesh"
+  if [ "$2" = 1 ]; then printf 'on_write: notice\n' > "$1/.mesh/endpoint.yaml"; else rm -f "$1/.mesh/endpoint.yaml"; fi
+  if [ "$3" != "-" ]; then printf '%s' "$3" > "$1/.mesh/mandate.yaml"; else rm -f "$1/.mesh/mandate.yaml"; fi
   return 0
 }
 # scope <repo> <report> [args...]: run the script with the repo's diff list on stdin. Sets OUT, RC.
 scope() {
   local d="$1" rep="$2"; shift 2
-  OUT="$(difflist "$d" | bash "$SCOPE" --proj "$d" --into "$rep" "$@" 2>"$TMP/scope.err")"; RC=$?
-  ERRTXT="$(cat "$TMP/scope.err")"
+  OUT="$(printf '%s\n' "$DIFFL" | bash "$SCOPE" --proj "$d" --into "$rep" "$@" 2>"$TMP/scope.err")"; RC=$?
+  ERRTXT="$(<"$TMP/scope.err")"
 }
 # scope_in <repo> <report> <stdin text> [args...]
 scope_in() {
   local d="$1" rep="$2" in="$3"; shift 3
   OUT="$(printf '%s\n' "$in" | bash "$SCOPE" --proj "$d" --into "$rep" "$@" 2>"$TMP/scope.err")"; RC=$?
-  ERRTXT="$(cat "$TMP/scope.err")"
+  ERRTXT="$(<"$TMP/scope.err")"
 }
-has() { grep -qF -- "$2" "$1"; }
+has() { local c; c="$(<"$1")"; case "$c" in *"$2"*) return 0 ;; esac; return 1; }   # no process spawned
 REPORT_SEED=$'# Verification report\n\n## Итог\n- PASS\n'
 fresh_report() { printf '%s' "$REPORT_SEED" > "$1"; }
 
+if want 1 || want 2 || want 3 || want 4 || want 5 || want 6 || want 7 || want 8 || want 9 || want 10; then
 REPO="$(mkrepo main)"
-DIFFN="$(difflist "$REPO" | grep -c .)"
+DIFFL="$(difflist "$REPO")"   # computed once: the same list /sdx:verify would pipe in
+DIFFN="$(printf '%s\n' "$DIFFL" | grep -c .)"
 if [ "$DIFFN" -ne 7 ]; then echo "fixture broken: expected 7 changed paths, got $DIFFN"; exit 1; fi
+fi
 
 # ================================================================ (1) silent outside mandate mode
 if want 1; then
@@ -261,15 +266,15 @@ if want 10; then
 echo "(10) expired mandate: warning line, not a heading, no block; usage errors rc 2"
 mesh "$REPO" 1 $'mandate:\n  valid_until: \'2020-01-01\'\n  scope:\n    paths: [src/**, other/**, notes.md, composer.lock]\n'
 R="$TMP/r10.md"; fresh_report "$R"
-OUT="$(difflist "$REPO" | SDX_MANDATE_TODAY=2026-10-28 bash "$SCOPE" --proj "$REPO" --into "$R" 2>&1)"; RC=$?
+OUT="$(printf '%s\n' "$DIFFL" | SDX_MANDATE_TODAY=2026-10-28 bash "$SCOPE" --proj "$REPO" --into "$R" 2>&1)"; RC=$?
 if [ "$RC" -ne 1 ] && grep -q '^> Предупреждение:.*мандат истёк' "$R" && ! grep -q '^#.*истёк' "$R"; then pass "(10) expired: '> Предупреждение:' line (not a heading), rc $RC != 1"
 else fail "(10) expired" "rc=$RC"; fi
 mesh "$REPO" 1 $'mandate:\n  valid_until: \'2999-01-01\'\n  scope:\n    paths: [src/**, other/**, notes.md, composer.lock]\n'
 R="$TMP/r10b.md"; fresh_report "$R"; scope "$REPO" "$R"
 has "$R" 'SDX-MANDATE-SCOPE:BEGIN' && ! grep -q 'Предупреждение' "$R" && pass "(10) a valid mandate carries no expiry line" || fail "(10) valid" "warning present"
-OUT="$(difflist "$REPO" | bash "$SCOPE" --proj "$REPO" 2>&1)"; RC=$?
+OUT="$(printf '%s\n' "$DIFFL" | bash "$SCOPE" --proj "$REPO" 2>&1)"; RC=$?
 [ "$RC" -eq 2 ] && pass "(10) no --into -> rc 2" || fail "(10) usage" "rc=$RC"
-OUT="$(difflist "$REPO" | bash "$SCOPE" --proj "$REPO" --into "$TMP/no-such-dir/r.md" 2>&1)"; RC=$?
+OUT="$(printf '%s\n' "$DIFFL" | bash "$SCOPE" --proj "$REPO" --into "$TMP/no-such-dir/r.md" 2>&1)"; RC=$?
 [ "$RC" -eq 2 ] && pass "(10) report in a missing directory -> rc 2" || fail "(10) unwritable report" "rc=$RC"
 OUT="$(bash "$SCOPE" --proj "$REPO" --into "$R" --bogus 2>&1 </dev/null)"; RC=$?
 [ "$RC" -eq 2 ] && pass "(10) unknown option -> rc 2" || fail "(10) unknown option" "rc=$RC"
@@ -283,13 +288,14 @@ mkd() {
   if [ "$3" != "-" ]; then printf '%s' "$3" > "$d/.mesh/mandate.yaml"; fi
   printf '%s' "$d"
 }
-info_run() { OUT="$(bash "$INFO" "$@" 2>"$TMP/info.err")"; RC=$?; ERRTXT="$(cat "$TMP/info.err")"; }
+info_run() { OUT="$(bash "$INFO" "$@" 2>"$TMP/info.err")"; RC=$?; ERRTXT="$(<"$TMP/info.err")"; }
 MAND_OK=$'mandate:\n  executor: e1\n  digest: abc123\n  valid_until: \'2999-12-31\'\n  delivery: pr\n  on_write: deny\n  stages: [spec, execute]\n  scope:\n    paths: [src/**, .claude/**]\n'
 
-if want M; then
+if want M || want Mcm || want Mcc; then
 echo "[M] mandate-info.sh"
-# ---- mode
 D_ON="$(mkd on $'on_write: notice\n' "$MAND_OK")"; D_OR="$(mkd orphan - "$MAND_OK")"; D_NO="$(mkd none $'on_write: notice\n' -)"
+if want M; then
+# ---- mode
 for t in "on:$D_ON" "orphan:$D_OR" "none:$D_NO"; do
   info_run mode "${t#*:}"
   if [ "$RC" -eq 0 ] && [ "$OUT" = "${t%%:*}" ]; then pass "[M] mode -> ${t%%:*}"; else fail "[M] mode ${t%%:*}" "rc=$RC out=[$OUT]"; fi
@@ -344,6 +350,8 @@ rm -f "$NOPY/jq"
 OUT="$(PATH="$NOPY" bash "$INFO" status "$D_ON" 2>&1)"; RC=$?
 printf '%s' "$OUT" | grep -qF 'jq=нет' && pass "[M] status without jq: jq=нет" || fail "[M] status no jq" "rc=$RC out=[$OUT]"
 
+fi   # mode / show / status
+if want M || want Mcm; then
 # ---- closeout-mode
 cm() { # name mandate-body expected
   local d; d="$(mkd "cm-$1" $'on_write: notice\n' "$2")"
@@ -367,6 +375,8 @@ D_OR2="$(mkd or2 - $'mandate:\n  delivery: pr\n')"
 info_run closeout-mode "$D_OR2"
 [ "$RC" -eq 0 ] && [ "$OUT" = standard ] && pass "[M] closeout-mode with an orphan mandate -> standard (mandate mode is off)" || fail "[M] closeout-mode orphan" "out=[$OUT]"
 
+fi   # closeout-mode
+if want M || want Mcc; then
 # ---- closeout-check
 mkco() { # name: git repo on sdx/s1, clean tree, no session path in HEAD
   local d="$TMP/co-$1"; mkdir -p "$d"
@@ -401,7 +411,8 @@ info_run closeout-check
 [ "$RC" -eq 2 ] && pass "[M] closeout-check without <sid> -> rc 2" || fail "[M] closeout-check usage" "rc=$RC"
 info_run no-such-subcommand
 [ "$RC" -eq 2 ] && pass "[M] unknown subcommand -> rc 2" || fail "[M] unknown subcommand" "rc=$RC"
-fi
+fi   # closeout-check
+fi   # [M]
 
 # ================================================================ [P] portability
 if want P; then
@@ -422,7 +433,35 @@ hits="$(grep -n "$PYNAME" "$SCRIPT_DIR/mandate-scope.sh" 2>/dev/null)"
 if [ -f "$SCRIPT_DIR/mandate-scope.sh" ] && [ -z "$hits" ]; then pass "[P] no python in mandate-scope.sh"; else fail "[P] no python in mandate-scope.sh" "${hits:-file missing}"; fi
 fi
 
-# [Mut] mutation runs: added with T15
+# ================================================================ [Mut] mutation runs
+if want Mut && [ -z "${MANDATE_SCOPE_NESTED:-}" ]; then
+echo "[Mut] mutation runs: copies of the scripts + lib/ in a temp dir; each mutant must differ and turn its block red"
+MUTROOT="$TMP/mut"; mkdir -p "$MUTROOT"
+# mutate <name> <script file> <sed expr> <blocks>
+mutate() {
+  local name="$1" file="$2" expr="$3" only="$4" d="$MUTROOT/$1" out first
+  if [ ! -f "$SCRIPT_DIR/$file" ]; then fail "[Mut] $name" "no $file to mutate"; return; fi
+  mkdir -p "$d/lib"
+  cp "$SCRIPT_DIR/mandate-scope.sh" "$SCRIPT_DIR/mandate-info.sh" "$d/" 2>/dev/null; cp "$SCRIPT_DIR"/lib/*.sh "$d/lib/" 2>/dev/null
+  sed "$expr" "$SCRIPT_DIR/$file" > "$d/$file"
+  if cmp -s "$SCRIPT_DIR/$file" "$d/$file"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  out="$(MANDATE_SCOPE_NESTED=1 MANDATE_SCOPE_ONLY="$only" MANDATE_SCOPE_UNDER_TEST="$d/mandate-scope.sh" MANDATE_INFO_UNDER_TEST="$d/mandate-info.sh" bash "${BASH_SOURCE[0]}" 2>&1)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-110)"
+    pass "[Mut] мутант $name → красный (ожидаемо) в [$only]: ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "blocks [$only] stayed green on the mutant (the check proves nothing)"
+  fi
+}
+mutate MAND-OUTSIDE      mandate-scope.sh '/# MAND-OUTSIDE/s/if \[ "\$restricted" = 1 \] \&\& ! mandate_in_union "\$f"; then/if false; then/' "2"
+mutate MAND-SHARED       mandate-scope.sh '/# MAND-SHARED/s/if mandate_match_list "\$f" "\$MANDATE_SHARED"; then/if false; then/' "3"
+mutate MAND-EMPTY-PATHS  mandate-scope.sh '/# MAND-EMPTY-PATHS/s/\[ -n "\$MANDATE_PATHS" \] \&\& restricted=1/restricted=1/' "4"
+mutate MAND-PLANNED      mandate-scope.sh '/# MAND-PLANNED/s/while IFS= read -r f; do/while false; do/' "6"
+mutate MAND-REPLACE      mandate-scope.sh '/# MAND-REPLACE/s/if \[ "\$have_block" = 1 \]; then/if false; then/' "7"
+mutate MAND-BRIDGE       mandate-info.sh '/# MAND-BRIDGE/s/echo standard/echo bridge/' "Mcm"
+mutate MAND-CHECK-TREE   mandate-info.sh '/# MAND-CHECK-TREE/s/\[ -z "\$dirty" \]/true/' "Mcc"
+mutate MAND-CHECK-SESSION mandate-info.sh '/# MAND-CHECK-SESSION/s/\[ -z "\$insess" \]/true/' "Mcc"
+fi
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 [ "$FAIL_COUNT" -eq 0 ]

@@ -85,8 +85,8 @@ case "$sub" in
     fi
     _my_scalar mandate.delivery
     case "$MY_S" in
-      artifact.offer) echo standard ;;
-      pr|branch) echo bridge ;;   # MAND-BRIDGE
+      artifact.offer) echo standard ;;   # MAND-BRIDGE
+      pr|branch) echo bridge ;;
       "") echo "undefined:unset" ;;
       *) echo "undefined:$(safe "$MY_S" 40)" ;;
     esac

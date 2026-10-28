@@ -124,7 +124,7 @@
   - DoD: `bash sdx/hooks/test-mandate-scope.sh` — (1)–(10) и [M] зелёные; `grep -n 'python' sdx/hooks/mandate-scope.sh` пусто.
   - Закрывает: REQ-MAND-12, 13, 14, 15, 7; критерии 9, 10.
 
-- [ ] **T15** `[TEST]` [PROC-020] `test-mandate-scope.sh`: мутанты и портируемость
+- [x] **T15** `[TEST]` [PROC-020] `test-mandate-scope.sh`: мутанты и портируемость
   - Зависит от: T14
   - Файлы: `sdx/hooks/test-mandate-scope.sh`
   - Что: мутанты (копия скриптов + lib в temp) `MAND-OUTSIDE`, `MAND-SHARED`, `MAND-EMPTY-PATHS`, `MAND-PLANNED`, `MAND-REPLACE` (scope), `MAND-BRIDGE`, `MAND-CHECK-TREE`, `MAND-CHECK-SESSION` (info) — каждый краснит свой сценарий; портируемость (`FORBID`) по `mandate-scope.sh`/`mandate-info.sh`.

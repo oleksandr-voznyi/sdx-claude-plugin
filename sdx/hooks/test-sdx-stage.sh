@@ -1029,6 +1029,8 @@ mkdir -p "$TMPPROJ/.mesh"; printf 'on_write: notice\n' > "$TMPPROJ/.mesh/endpoin
 out="$(run_stage active-set m39e 2>/dev/null)"; ec=$?
 first="$(printf '%s\n' "$out" | head -1)"
 case "$first" in "MANDATE-ERROR "*) [ "$ec" -eq 1 ] && pass "[M39] unreadable mandate: rc 1 and first line MANDATE-ERROR" || fail "[M39] MANDATE-ERROR rc" "ec=$ec" ;; *) fail "[M39] MANDATE-ERROR" "ec=$ec out='$out'" ;; esac
+if [ "$(printf '%s\n' "$out" | grep -c 'unknown:mandate')" -eq 9 ] && ! printf '%s\n' "$out" | grep -q 'active'; then pass "[M39] unreadable mandate: nine rows are unknown:mandate, none claims active"
+else fail "[M39] unreadable mandate rows" "out='$out'"; fi
 cleanup
 
 fi
@@ -1072,6 +1074,7 @@ smut MAND-MODE   sdx-stage.sh '/# MAND-MODE/s|\[ -f "\$proj/.mesh/endpoint.yaml"
 smut MAND-EXCL   sdx-stage.sh '/# MAND-EXCL/s|{ \[ "\$MANDATE_ON" = 1 \] \&\& ! mandate_stage_allowed "\$1"; }|{ return 1; }|' "31 34"
 smut MAND-SKIP   sdx-stage.sh '/# MAND-SKIP/s|while is_skipped .* do|while false; do|' "31"
 smut MAND-DEPLOY lib/mandate.sh '/# MAND-NEVER/s/return 1/return 0/' "33"
+smut SDX-UNKNOWN sdx-stage.sh '/# SDX-UNKNOWN/s|\[ "\$rc" -ne 0 \]|false|' "39"
 smut MAND-TO     sdx-stage.sh '/# MAND-TO/s|if is_excluded_by_mandate "\$to_target"; then|if false; then|' "34"
 rm -rf "$MUTROOT"
 fi

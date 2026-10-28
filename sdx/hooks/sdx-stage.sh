@@ -501,7 +501,8 @@ cmd_start_stage() {
 # active-set <sid>
 # Read-only (REQ-MAND-26): nine rows "<stage>\t<active|excluded:<sources>>" for /sdx:status. Sources, in this
 # order: no_gates, no_code, mandate(<class>). An unreadable mandate: first line "MANDATE-ERROR <reason>"
-# (the rows follow, computed without the mandate) and rc 1.
+# and rc 1; the rows follow with the flag-based exclusions as usual, and every stage that would be "active"
+# is printed as "unknown:mandate" (the mandate may narrow it; not claimed active).
 cmd_active_set() {
   if [ "$#" -ne 1 ]; then
     echo "SDX sdx-stage: использование: sdx-stage.sh active-set <sid>" >&2
@@ -521,7 +522,8 @@ cmd_active_set() {
     if [ "$no_gates" = "true" ] && [ "$s" != "Execution" ]; then src="no_gates"; fi
     if [ "$no_code" = "true" ] && is_excluded_by_no_code "$s"; then src="${src:+$src,}no_code"; fi
     if is_excluded_by_mandate "$s"; then src="${src:+$src,}mandate($(mandate_stage_class "$s"))"; fi
-    if [ -z "$src" ]; then printf '%s\tactive\n' "$s"; else printf '%s\texcluded:%s\n' "$s" "$src"; fi
+    if [ -z "$src" ] && [ "$rc" -ne 0 ]; then printf '%s\tunknown:mandate\n' "$s"   # SDX-UNKNOWN
+    elif [ -z "$src" ]; then printf '%s\tactive\n' "$s"; else printf '%s\texcluded:%s\n' "$s" "$src"; fi
   done < <(stage_names)
   return "$rc"
 }

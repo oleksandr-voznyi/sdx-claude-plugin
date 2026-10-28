@@ -4,7 +4,7 @@ type: feat
 status: open
 priority: high
 wave: null
-source: intake intake-mo-dev-control-20261028 (записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` §2.2, §2.4–2.9, §2.11; ответ SDX `SDX-MO-dev-control-reply-2026-10-28.md` §1–3; sim-kit 0.9.x `core/MO-INTEROP.md` §6 «Мандат разработки», `core/devagent_hook.py`, `core/dev.py`, `policy/tests.yaml`)
+source: intake intake-mo-dev-control-20261028 (записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` §2.2, §2.4–2.9, §2.11; ответ SDX `SDX-MO-dev-control-reply-2026-10-28.md` §1–3; sim-kit 0.9.x `core/MO-INTEROP.md` §7 «Мандат разработки», `core/devagent_hook.py`, `core/dev.py`, `policy/tests.yaml`)
 session: null
 links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DEBT-045, ADR-020, ADR-021]
 ---
@@ -63,7 +63,7 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
    и старые узлы увидят `mesh.version-skew` — это ожидаемо и является вопросом §5.1 владельцу, а не дефектом поставки.
 3. **`mandate.stages` как гейт** `/sdx:start`/`/sdx:next`: отображение стадий мандата на девять этапов SDX —
    `spec` → `Discovery`+`Business Spec`; `design` → `Technical Design`+`Task Planning`; `execute` → `Execution`+`Documentation`;
-   `verify` → `Verification` (стадия исполнителя — `dev.py:23` `STAGES_DELEGABLE`, `MO-INTEROP.md` §6; узел поверх неё
+   `verify` → `Verification` (стадия исполнителя — `dev.py:23` `STAGES_DELEGABLE`, `MO-INTEROP.md` §7; узел поверх неё
    проводит свой аудит пакета). Мандат — **третий сужающий источник** активного набора рядом с `no_code`/`no_gates`: стадия,
    которой нет в `mandate.stages`, исключается из активного набора так же, как при `no_code` (без отказа и без вопроса —
    sim-kit допускает любые подмножества, `dev.py lint`). Исключение — `Verification` и `Closeout`: активны всегда (ADR-020);

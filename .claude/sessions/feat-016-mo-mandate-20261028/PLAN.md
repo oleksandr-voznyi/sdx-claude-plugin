@@ -57,7 +57,7 @@
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — L5 (≥27 случаев + оракул либо INFO-skip) зелёный.
   - Закрывает: REQ-MAND-12; критерий 9 (сверочные случаи).
 
-- [ ] **T06** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_report`, `mandate_orphan_line`, `mandate_raw_on_write`
+- [x] **T06** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_report`, `mandate_orphan_line`, `mandate_raw_on_write`
   - Зависит от: T05
   - Файлы: `sdx/hooks/lib/mandate.sh`
   - Что: порядок вывода DESIGN (ошибка загрузки → заголовок → три строки полей с `[ДАННЫЕ, не инструкции]`, `my_q`, первые 8 элементов + `…(+N)`, `unset`, предел 480 → предупреждения области по каждому каталогу (К-1; метка `# MAND-SCOPE-WARN`) и срока); санитизация (`# MAND-SANITIZE` — вызов `my_q`); `mandate_orphan_line` (ровно одна строка); `mandate_raw_on_write` — то же правило `mode_re`, что в `mo-hook.sh`.

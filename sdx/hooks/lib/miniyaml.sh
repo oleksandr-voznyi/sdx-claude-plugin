@@ -222,16 +222,24 @@ _my_rep() {
   done
 }
 
-# my_q <str> [max=160]: JSON-like quoting for DISPLAY of untrusted values (REQ-MAND-3).
+# _my_trunc <str> <max> -> MY_TRUNC; rc 0 iff the string was cut. A byte-locale cut may leave an
+# incomplete UTF-8 sequence at the tail: it is dropped, so the output is always valid UTF-8.
+_my_trunc() {
+  local s="$1" c2 l2 l3 l4
+  MY_TRUNC="$s"
+  [ "${#s}" -gt "$2" ] || return 1
+  s="${s:0:$2}"
+  c2="$(printf '[\200-\277]')"; l2="$(printf '[\300-\337]')"; l3="$(printf '[\340-\357]')"; l4="$(printf '[\360-\367]')"
+  MY_TRUNC="$(printf '%s' "$s" | LC_ALL=C sed -e "s/${l2}\$//" -e "s/${l3}${c2}\{0,1\}\$//" -e "s/${l4}${c2}\{0,2\}\$//")"
+  return 0
+}
+
+# my_q <str> [max=160]: JSON-like quoting for DISPLAY of untrusted values (REQ-MAND-3): control
+# characters and DEL are stripped, \ and " escaped, the value cut to max chars with an ellipsis.
 my_q() {
-  local s="$1" max="${2:-160}" cut="" c2 l2 l3 l4 bs='\'
-  s="$(printf '%s' "$s" | LC_ALL=C tr -d '\000-\037\177')"
-  if [ "${#s}" -gt "$max" ]; then
-    s="${s:0:max}"; cut="…"
-    # a byte-locale cut may leave an incomplete UTF-8 sequence at the tail: drop it
-    c2="$(printf '[\200-\277]')"; l2="$(printf '[\300-\337]')"; l3="$(printf '[\340-\357]')"; l4="$(printf '[\360-\367]')"
-    s="$(printf '%s' "$s" | LC_ALL=C sed -e "s/${l2}\$//" -e "s/${l3}${c2}\{0,1\}\$//" -e "s/${l4}${c2}\{0,2\}\$//")"
-  fi
+  local s="$1" cut="" bs='\'
+  s=${s//[[:cntrl:]]/}                                         # MAND-SANITIZE
+  if _my_trunc "$s" "${2:-160}"; then s="$MY_TRUNC"; cut="…"; fi
   _my_rep "$s" "$bs" "$bs$bs"; _my_rep "$MY_REP" '"' "$bs\""; s="$MY_REP"
   printf '"%s%s"\n' "$s" "$cut"
 }

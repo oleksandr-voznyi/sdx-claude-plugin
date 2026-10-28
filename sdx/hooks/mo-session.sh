@@ -13,10 +13,11 @@ plugin_root="${CLAUDE_PLUGIN_ROOT:-$(cd "$here/../.." && pwd)}"
 proj="${CLAUDE_PROJECT_DIR:-.}"
 tools="$plugin_root/sdx/mo"
 
-[ -f "$proj/.mesh/endpoint.yaml" ] || exit 0
-
 P="SDX mo-session:"
 say() { printf '%s\n' "$*" >&2; }
+
+[ -f "$proj/.mesh/endpoint.yaml" ] || { [ -f "$proj/.mesh/mandate.yaml" ] && { . "$plugin_root/sdx/hooks/lib/mandate.sh" 2>/dev/null && mandate_orphan_line "$P" >&2 || printf '%s\n' "SDX mo-session: .mesh/mandate.yaml есть, но .mesh/endpoint.yaml нет — мандат без endpoint.yaml не действует."; } >&2; }   # MAND-ORPHAN
+[ -f "$proj/.mesh/endpoint.yaml" ] || exit 0
 mo() { PYTHONDONTWRITEBYTECODE=1 MESH_ENDPOINT_DIR="$proj" python3 "$tools/mesh_endpoint.py" "$@"; }
 
 have_jq=1

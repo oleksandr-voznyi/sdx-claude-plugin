@@ -1,7 +1,7 @@
 # Implementation Plan: FEAT-016 п.2–9 — мандат МО и декларации (плагин 2.4.0)
 
 ## Статус реализации
-42/52 задач Execution (T01–T52; дорожка Ф T01–T15 выполнена, gate Ф зелёный), 0/3 задач Closeout (C1–C3). Этап: Execution.
+52/52 задач Execution (T01–T52; дорожка Ф T01–T15 выполнена, gate Ф зелёный), 0/3 задач Closeout (C1–C3). Этап: Execution.
 
 Условные обозначения. `SPEC`/`DESIGN` — одноимённые файлы этой сессии (SPEC включает раздел «Поправки по коллизиям DESIGN» К-1…К-6, обязательный). `ДЛ-N` — `decisions_log.md`. `К-N` — коллизии DESIGN. `A1…A21` — критерии приёмки SPEC №1…21 (ниже «Критерий N»). Якоря `# MAND-*`/`# MO-*` — метки для мутационных прогонов (определены в DESIGN). Дорожки: **Ф** — фундамент (последовательно, один исполнитель), **A**, **B**, **C** — параллельные `developer` после Ф, **З** — завершение (последовательно, после A/B/C).
 
@@ -328,70 +328,70 @@
 
 ### Дорожка З — Завершение (последовательно, после T15, T19, T23, T30, T28, T42 и остальных дорожки C)
 
-- [ ] **T43** `[TEST]` [CODE] `test-mo-prose.sh [17]` + `plugin.json` 2.4.0
+- [x] **T43** `[TEST]` [CODE] `test-mo-prose.sh [17]` + `plugin.json` 2.4.0
   - Зависит от: T15, T19, T23, T30, T42
   - Файлы: `sdx/hooks/test-mo-prose.sh`, `.claude-plugin/plugin.json` (и `.claude-plugin/marketplace.json`, если версия указана)
   - Что: сначала `[17]` — `jq -r .version .claude-plugin/plugin.json` == `2.4.0` (красная сторона на копии со старой версией) — красный на 2.3.1; затем `version` 2.3.1 → 2.4.0.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` → `Results: N passed, 0 failed`; `jq -r .version .claude-plugin/plugin.json` → `2.4.0`; `grep -n version .claude-plugin/marketplace.json` согласовано.
   - Закрывает: REQ-MAND-30; критерий 19.
 
-- [ ] **T44** `[DOC]` Бэклог `docs/backlog/FEAT-016-…md`
+- [x] **T44** `[DOC]` Бэклог `docs/backlog/FEAT-016-…md`
   - Зависит от: T40
   - Файлы: `docs/backlog/FEAT-016-*.md`
   - Что: привести запись к ДЛ-1 (Deployment исключён при мандате по эталону), ДЛ-2 (имена `unit/module/regression`), 0.9.1 вместо 0.9.0, «389» → без числа; `status` на Closeout (C2), не здесь.
   - DoD: `grep -c '0\.9\.1' docs/backlog/FEAT-016-*.md` ≥ 1; `grep -c '389' docs/backlog/FEAT-016-*.md` = 0; `grep -c 'unit' docs/backlog/FEAT-016-*.md` ≥ 1.
   - Закрывает: REQ-MAND-29; критерий 19.
 
-- [ ] **T45** `[DOC]` `.claude/sdx/verify-cmd.sh`: актуализация комментария о длительности (без изменения логики)
+- [x] **T45** `[DOC]` `.claude/sdx/verify-cmd.sh`: актуализация комментария о длительности (без изменения логики)
   - Зависит от: T46
   - Файлы: `.claude/sdx/verify-cmd.sh`
   - Что: строки комментария «~60 секунд, 15 сьютов» обновить по фактическому замеру T46 (число сьютов и время); исполняемая часть не меняется.
   - DoD: `git diff .claude/sdx/verify-cmd.sh` — только строки комментариев (`grep -v '^#'` по дифф-строкам пуст); `bash -n`.
   - Закрывает: REQ-MAND-32; критерий 20.
 
-- [ ] **T46** `[INFRA]` Полный прогон с замером времени
+- [x] **T46** `[INFRA]` Полный прогон с замером времени
   - Зависит от: T43, T44
   - Файлы: — (проверка; результат в сообщении коммита и `change_note`-заметке)
   - Что: `time bash .claude/sdx/verify-cmd.sh`; приложить итоговые строки `Results:` всех сьютов (включая новые `test-mandate-lib`, `test-mandate-scope`, `test-suites-gen`, `test-snippet-check`); записать, какие оракульные ветки дали PASS, какие INFO-skip (python3/PyYAML).
   - DoD: exit 0, все сьюты `0 failed`; **время ≤ 120 с (цель), ≤ 180 с (предел)** — иначе вернуться к задачам-источникам прироста (сьюты T07/T11/T15/T19/T23/T27) и ужать представителей, не теряя мутантов; `ls -a sdx/mo` без `__pycache__`; `find . -name __pycache__ -not -path './.git/*'` пусто; `git status --porcelain` пуст.
   - Закрывает: REQ-MAND-31, 32; критерий 20.
 
-- [ ] **T47** `[DOC]` `MANUAL_TEST.md` — ручной сценарий для Verification
+- [x] **T47** `[DOC]` `MANUAL_TEST.md` — ручной сценарий для Verification
   - Зависит от: T14, T26 (скрипты существуют)
   - Файлы: `.claude/sessions/feat-016-mo-mandate-20261028/MANUAL_TEST.md` (новый)
   - Что: перенести DESIGN «Ручной сценарий для Verification» (п.1–5) как «действие / предусловие / ожидаемое / результат (заполняется)»: (1) канал SessionStart для модели (DEBT-045; гарантированный канал — вывод `/sdx:start`); (2) реальный мандат узла (`./mo mandate issue` на чекауте sim-kit 0.9.1 либо `dev.mandate_yaml(...)`; точная команда помечена «не проверена») → `start-stage/next`, `mandate-info.sh show`; (3) `dev.py run_suites` читает `tests/suites.yaml` (допустимо подменить `cmd` на `true` во временной копии); (4) мост Closeout `delivery: pr` на одноразовой сессии (проза `archive.md`); (5) взаимодействие двух PreToolUse на `Bash` с `mandate.on_write: deny` и записью вне области; ветка «выполнить нельзя» → «не проверено» записывается как непроверенное допущение; поля версий (`claude --version`, sim-kit).
   - DoD: `grep -c '^## Случай' MANUAL_TEST.md` ≥ 5; у каждого случая есть строки «Ожидаемый результат» и «Результат (заполняется)»; присутствует фраза «не проверено» в ветках невозможности; прогон — задача `qa`/пользователя на Verification.
   - Закрывает: критерии 3 (канал), 7 (реальный дамп), 14 (Л), 16 (проза), 11–12 (живая часть).
 
-- [ ] **T48** `[INFRA]` Проверки инвариантов поставки
+- [x] **T48** `[INFRA]` Проверки инвариантов поставки
   - Зависит от: T46
   - Файлы: —
   - Что: (а) хеши `sdx/mo/*` не изменены: `(cd sdx/mo && sha256sum -c SIMKIT_SHA256)` — `OK`×3 и `git diff --stat main -- sdx/mo` пуст; (б) `git diff --stat main -- hooks/hooks.json sdx/hooks/stop-gate.sh sdx/hooks/archive-verify.sh agents/reviewer.md` пуст; (в) `grep -n python3 sdx/hooks/sdx-stage.sh sdx/hooks/lib/*.sh` пусто; (г) без мандата поведение 2.3.x — прогнать вручную `CLAUDE_PROJECT_DIR=$PWD bash sdx/hooks/mo-hook.sh <<<'{"tool_name":"Bash","tool_input":{"command":"ls"}}'` и `mo-session.sh` в этом репо (`.mesh/` нет) → пустой вывод, rc 0.
   - DoD: все четыре проверки дают указанный результат (вывод приложен).
   - Закрывает: REQ-MAND-1, 31, 33; критерии 1, 20.
 
-- [ ] **T49** `[TEST]` Регресс: все прежние сьюты без правок утверждений
+- [x] **T49** `[TEST]` Регресс: все прежние сьюты без правок утверждений
   - Зависит от: T46
   - Файлы: —
   - Что: `git diff main -- sdx/hooks/test-*.sh` — только добавления (`grep '^-[^-]'` не находит удалённых/изменённых утверждений, кроме нумерации новых секций); `test-stop-gate.sh`, `test-archive-verify.sh`, `test-hook-wiring.sh`, `test-selftest.sh`, `test-mo-inventory.sh` зелёные.
   - DoD: перечисленные сьюты `0 failed`; дифф — только добавление.
   - Закрывает: REQ-MAND-1, 31; критерий 1, 20.
 
-- [ ] **T50** `[DOC]` Заготовка релизных заметок 2.4.0 и записки upstream (текст в каталоге сессии; публикация — на Closeout)
+- [x] **T50** `[DOC]` Заготовка релизных заметок 2.4.0 и записки upstream (текст в каталоге сессии; публикация — на Closeout)
   - Зависит от: T46
   - Файлы: `.claude/sessions/feat-016-mo-mandate-20261028/release_notes_2.4.0.md`, `.claude/sessions/feat-016-mo-mandate-20261028/upstream_note_sim-kit.md` (только в каталоге сессии)
   - Что: двуязычные накопительные заметки (русский блок, `---`, английский; раздел «Границы» с непроверенным: канал SessionStart, `run_suites` вживую, ручной мост Closeout, `Bash`-пути мандата); записка upstream: (1) предложение включить `.claude/sessions/**` в дефолтный `docs_paths` узла (ДЛ-3), (2) ссылки на `/sdx:pr` в §6 эталона, (3) вопросы К-5/К-6 владельцу МО, (4) реестр решений `docs/DECISIONS.md` в `docs_paths`.
   - DoD: оба файла существуют; в заметках есть разделы «Границы»/«Boundaries»; `sdx/mo/*` и `sim-kit` не изменены (`git -C /home/archi/Code/aibok/agentico/meta-orchestrator/sim-kit status --porcelain` пуст относительно начала сессии).
   - Закрывает: REQ-MAND-30; критерий 19 (процесс).
 
-- [ ] **T51** `[INFRA]` Финальная сверка процесса
+- [x] **T51** `[INFRA]` Финальная сверка процесса
   - Зависит от: T46–T50
   - Файлы: —
   - Что: `jq -r .gate_mode .claude/sessions/feat-016-mo-mandate-20261028/session_state.json` != `auto`; перечень красных сторон (T07/T11/T15/T19/T23/T27/T29/T31) отмечен ссылками на коммиты; раздел «Отклонения» заполнен фактами (если были); чек-лист PLAN актуализирован.
   - DoD: перечисленное подтверждено в сообщении коммита.
   - Закрывает: критерий 21; REQ-MAND-31.
 
-- [ ] **T52** `[TEST]` Выборочная проверка тест-близнеца и dogfood после полного прогона
+- [x] **T52** `[TEST]` Выборочная проверка тест-близнеца и dogfood после полного прогона
   - Зависит от: T46
   - Файлы: —
   - Что: на чистом чекауте прогнать `bash sdx/hooks/test-suites-gen.sh` и `bash sdx/hooks/suites-gen.sh --check` (ожидаемо `OK`); при наличии sim-kit 0.9.1 (`/home/archi/Code/aibok/agentico/meta-orchestrator/sim-kit`) — по MANUAL_TEST п.3 прочитать `tests/suites.yaml` через `run_suites` с подменой `cmd` (результат — в `verification`-заметку, не гейт).
@@ -486,3 +486,11 @@
 **B (T24–T30).** Метка `SG-BASH` в `lib/test-cmd.sh`, не в `suites-gen.sh`. `SG-ORDER` — не перестановка веток, а `! -f composer.json` в условии verify-cmd (ловит только близнец). Сверх DESIGN: валидация `SDX_VERIFY_TIMEOUT` (не целое/`0`/длиннее 9 цифр → 180 с + stderr), сравнение `budget_min` только для формы-словаря, квотирование скаляров, атомарная запись через `tests/.suites.XXXXXX`. `snippet-check.sh`: нет `CLAUDE.md` → `ABSENT`; нет шаблона/не ровно один блок → rc 2. Цель T27 «≤ 6 с» не достигнута (10–11 с при load ≈ 9). Итог 63 / 22 проверки.
 **C (T31–T42).** Коммит T26 дорожки B переписан `--amend` (`2110cbe` → `a7cf002`, добавлен `commands/status.md`; сообщение не менялось) — ошибка процесса, дальше не повторялась. `[11]`: `/sdx:pr([^a-z]|$)` (иначе ловился `/sdx:proto`); `[9]` без `grep -i` по кириллице. Унаследованный `[3]` краснеет при `LC_ALL=C` — не трогали. Шаги команд нумерованы «1а/2а/5а/6а» без перенумерации. `docs_in_repo` в мосте берётся из `mandate-info.sh show`. Итог `test-mo-prose.sh` 79.
 **Оркестратор.** Сьют `test-mo-session.sh` писал в cwd файлы `mandate_orphan_line` и `out=…`: `${src//old/new}` в bash ≥ 5.2 раскрывает `&` в замене (`patsub_replacement`) — мутанты с `>&2`/`2>&1` превращались в редиректы в файл. Исправлено `shopt -u patsub_replacement` в `mutate()`; мутанты `orphan-two-lines`/`show-before-inbox` теперь настоящие.
+
+### Отклонения дорожки З (T43–T52)
+1. **T46 — время выше цели.** `time bash .claude/sdx/verify-cmd.sh`: real **2m3,851s (123,9 с)**, user 42,6 с, sys 80,2 с; load average 10,5 / 8,2 / 7,8 на 8 ядрах (машина сильно загружена). Цель 120 с превышена на 3,9 с, предел 180 с выдержан; сьюты не ужимались (прирост — `sys`-время от числа запусков процессов). Rc 0, 19/19 сьютов `0 failed`. Оракульные ветки (L2, L5, `[8i]`, (9), `test-suites-gen [9]`) дали **PASS** (python3 + PyYAML 6.0.3); INFO — только именованные границы (`[2.known]`, `[7d]`, `[7e]`, сц. 7 `mo-session`).
+2. **T48(в) — `grep python3` не пуст.** В `mandate-info.sh` три строки (63, 65, 75): проба **наличия** python3/PyYAML для строки `status` (`PYTHONDONTWRITEBYTECODE=1 python3 -c 'import yaml'`), задокументирована в шапке скрипта; разбор мандата идёт без python. Остальные файлы перечня — пусто.
+3. **T49 — три изменённые строки прежних сьютов** (не утверждения): `test-mo-session.sh` (`date` в PATH-фикстуре; `${PLUGROOT:-$FXROOT}`), `test-sdx-stage.sh` (`SCRIPT=${SDX_STAGE_UNDER_TEST:-…}`); уже указаны в отклонениях Ф/A.
+4. **T50 — имена файлов** `release_notes_draft.md` и `upstream_note_draft.md` (по постановке оркестратора, вместо `release_notes_2.4.0.md`/`upstream_note_sim-kit.md` в тексте задачи); в заметки включена версия 2.3.1 (не выпускалась). `git status` sim-kit показывает только посторонние неотслеживаемые пути родительского репозитория (`Claude outputs/`, `agentico/reviews/SDX-MO-vendoring-note-2026-10-28.md`) — не от этой работы.
+5. **T51 — сверка.** `gate_mode` = `interactive` (не `auto`); все коммиты ветки `main..HEAD` содержат `Co-Authored-By`. Красные стороны: T07 `0f6fe91`, T11 `11b867e`, T15 `d82a1a2`, T19 `0cc1a7c`, T23 `ed57eed`, T27 `275ba9a`, T29 `1d759b2`, T31 `eb61e72`. T45 и T46 зафиксированы в порядке T46 → T45 (T45 зависит от замера).
+6. **T52 — живой `run_suites` не выполнялся** (`dev.py` не импортировался); формат проверен `yaml.safe_load` по схеме строк 285–312: `suites=['unit']`, `unit.cmd` — str, `budget_min=3` — int. «Не проверено» вживую — MANUAL_TEST случай 3.

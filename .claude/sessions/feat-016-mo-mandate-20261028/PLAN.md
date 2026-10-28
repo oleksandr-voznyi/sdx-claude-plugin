@@ -110,7 +110,7 @@
   - DoD: `bash sdx/hooks/test-mandate-scope.sh; echo $?` != 0 (нет скриптов); `bash -n`; перечень красных строк по (1)–(10) и [M] приложен.
   - Закрывает: REQ-MAND-12, 13, 14, 15, 23, 23a, 26; критерии 2, 9, 10, 16, 18 (тестовая часть).
 
-- [ ] **T13** `[CODE]` [PROC-020] `mandate-info.sh`: `mode`, `show`, `status`, `closeout-mode`, `closeout-check`
+- [x] **T13** `[CODE]` [PROC-020] `mandate-info.sh`: `mode`, `show`, `status`, `closeout-mode`, `closeout-check`
   - Зависит от: T12
   - Файлы: `sdx/hooks/mandate-info.sh` (новый)
   - Что: CLI по таблице DESIGN (`proj` по умолчанию `${CLAUDE_PROJECT_DIR:-.}`; rc 0 везде кроме `closeout-check` 0/1); `show` вызывает `mandate_report "$proj" "SDX mandate:"` / `mandate_orphan_line`; `status` — строка МО по шаблону DESIGN (`PyYAML`: `PYTHONDONTWRITEBYTECODE=1 python3 -c 'import yaml'`, ничего не пишется; `on_write` обоих файлов; `valid_until`, `digest`); `closeout-mode` (метка `# MAND-BRIDGE`; `undefined:<delivery>` — К-5; `error:…`); `closeout-check` (ветка == `sdx/<sid>`; `git status --porcelain` пуст `# MAND-CHECK-TREE`; в `HEAD` нет путей `.claude/sessions/<sid>/` `# MAND-CHECK-SESSION`; ветку не удаляет и не сливает).

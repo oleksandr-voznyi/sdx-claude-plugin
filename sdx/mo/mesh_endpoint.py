@@ -29,7 +29,7 @@ except ImportError:
 
 HERE = Path(os.environ.get("MESH_ENDPOINT_DIR") or Path.cwd()) / ".mesh"
 V = 1
-KIT = "0.9.0"  # версия инструментов лист-сессии; уходит в from.kit — узел пишет mesh.version-skew при расхождении (0.7.7)
+KIT = "0.9.1"  # версия инструментов лист-сессии; уходит в from.kit — узел пишет mesh.version-skew при расхождении (0.7.7)
 MAY_SEND = {"artifact.offer", "notice", "escalation", "request", "report", "ack", "nack"}
 MAY_RECV = {"rollout.result", "notice", "directive", "ack", "nack", "lease.granted", "lease.released"}
 REDACT = [r'(?i)("?(?:password|passwd|pwd|secret|token|api[_-]?key|client[_-]?secret)"?\s*[:=]\s*)("[^"]*"|[^\s,;}]+)',

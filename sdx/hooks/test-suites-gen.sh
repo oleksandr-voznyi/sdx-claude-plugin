@@ -159,7 +159,7 @@ if [ -f "$LIB/miniyaml.sh" ] && [ -f "$P/tests/suites.yaml" ]; then
 else fail "[6] structure" "no miniyaml or file"; fi
 fi
 
-if want 7 && [ -f "$GEN" ]; then
+if want 7 && [ -f "$LIB/test-cmd.sh" ]; then
 echo "[7] twin: the real stop-gate.sh runs the command the resolver names"
 MARK="$TMP/mark"; BIN="$TMP/bin"; mkdir -p "$BIN"
 for t in composer npm; do printf '#!/bin/sh\necho %s > "$MARK"\n' "$t" > "$BIN/$t"; chmod +x "$BIN/$t"; done

@@ -253,7 +253,7 @@ expect_red "red: README with 'единственный признак'" chk_two_
 expect_red "red: README.en with 'only activation marker'" chk_two_signs "$TMP/t9c.md"
 sed 's/два признака/один признак/g; s/Два признака/Один признак/g' "$DESIGN_MO" > "$TMP/t9d.md"
 expect_red "red: design without 'два признака'" chk_two_signs "$TMP/t9d.md"
-adr_section "$DECISIONS" ADR-021 | sed 's/два признака/один признак/g' > "$TMP/t9e.md"
+adr_section "$DECISIONS" ADR-021 | sed 's/два признака/один признак/g; s/Два признака/Один признак/g' > "$TMP/t9e.md"
 { echo '## ADR-021. x'; sed 1d "$TMP/t9e.md"; } > "$TMP/t9f.md"
 expect_red "red: ADR-021 without 'два признака'" chk_two_signs_adr "$TMP/t9f.md"
 

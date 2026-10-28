@@ -29,6 +29,8 @@ FAIL_COUNT=0
 pass() { echo "  PASS: $1"; PASS_COUNT=$((PASS_COUNT + 1)); }
 fail() { echo "  FAIL: $1 — $2"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 info() { echo "  INFO: $1"; }
+# MANDATE_ONLY="L5 L8" restricts a run to the named sections (mutation runs re-enter this script).
+want() { [ -z "${MANDATE_ONLY:-}" ] && return 0; case " $MANDATE_ONLY " in *" $1 "*) return 0 ;; esac; return 1; }
 
 echo "=== test-mandate-lib.sh ==="
 echo ""
@@ -49,7 +51,7 @@ have_my() { [ "$MY_OK" = 1 ] && declare -F my_load >/dev/null 2>&1; }
 # fx <name> <content>: write a fixture file (content verbatim, no trailing newline added).
 fx() { printf '%s' "$2" > "$TMP/fx/$1.yaml"; }
 
-csv() { tr '\n' ',' | sed 's/,$//'; }
+csv() { local l out="" n=0; while IFS= read -r l; do out="$out${out:+,}$l"; done; printf '%s' "$out"; }
 
 # chk <name> <expect> <content> [path=value ...]
 #   expect: "ok:<stages csv>" -> my_load rc 0 and mandate.stages list equals the csv (empty csv = none);
@@ -84,6 +86,7 @@ chk() {
 }
 
 # ============================================================== [L1] corpus
+if want L1; then
 echo "[L1] miniyaml corpus"
 chk block-indented   "ok:spec,design" $'mandate:\n  stages:\n    - spec\n    - design\n'
 chk block-indentless "ok:spec,design" $'mandate:\n  stages:\n  - spec\n  - design\n  scope:\n    paths:\n    - src/**\n' "mandate.scope.paths@src/**"
@@ -173,7 +176,64 @@ else
   fail "[L1] my_kind" "lib missing"; fail "[L1] my_exists" "lib missing"; fail "[L1] my_list/my_scalar" "lib missing"
 fi
 
+fi
+if want L2; then
+echo "[L2] parity with yaml.safe_load (oracle) on the L1 corpus"
+HAVE_YAML=0
+if command -v python3 >/dev/null 2>&1 && PYTHONDONTWRITEBYTECODE=1 python3 -c 'import yaml' >/dev/null 2>&1; then HAVE_YAML=1; fi
+# Documented divergences: the subset REFUSES where safe_load accepts (DESIGN К-8) — never the other way round.
+ALLOWED_DIV="anchor block-scalar doc-end-marker dup-key dup-top flow-dict list-of-dicts list-outside-key nested-flow not-yaml quoted-key tag"
+if [ "$HAVE_YAML" != 1 ]; then
+  info "[L2] oracle skipped: python3 or PyYAML absent (INFO-skip, not a PASS)"
+elif ! have_my; then
+  fail "[L2] parity" "lib/miniyaml.sh missing"
+else
+  PYORACLE='
+import sys, yaml
+for f in sys.argv[1:]:
+    n = f.rsplit("/", 1)[-1][:-5]
+    try:
+        d = yaml.safe_load(open(f, encoding="utf-8").read())
+        st = []
+        if isinstance(d, dict) and isinstance(d.get("mandate"), dict):
+            s = d["mandate"].get("stages")
+            if isinstance(s, list): st = s
+        print(n + "\tok:" + ",".join(str(x) for x in st))
+    except Exception:
+        print(n + "\terr")'
+  : > "$TMP/l2-mine.txt"
+  for f in "$TMP"/fx/*.yaml; do
+    n="${f##*/}"; n="${n%.yaml}"
+    if my_load "$f"; then printf '%s\tok:%s\n' "$n" "$(my_list mandate.stages | csv)" >> "$TMP/l2-mine.txt"
+    else printf '%s\terr\n' "$n" >> "$TMP/l2-mine.txt"; fi
+  done
+  PYTHONDONTWRITEBYTECODE=1 python3 -c "$PYORACLE" "$TMP"/fx/*.yaml > "$TMP/l2-py.txt" 2>/dev/null
+  # compare <mine> <oracle>: prints "BAD <name> ..." for a divergence in the wrong direction, "DIV <name>" for a refusal-only one
+  cmp_parity() {
+    awk -F'\t' 'NR == FNR { m[$1] = $2; next }
+      { n = $1; o = $2; v = m[n]
+        if (v == o) next
+        if (v == "err" && o ~ /^ok:/) print "DIV " n
+        else print "BAD " n " mine=" v " oracle=" o }' "$1" "$2"
+  }
+  total="$(wc -l < "$TMP/l2-mine.txt" | tr -d ' ')"
+  res="$(cmp_parity "$TMP/l2-mine.txt" "$TMP/l2-py.txt")"
+  bad="$(printf '%s\n' "$res" | grep '^BAD' | head -3)"
+  if [ -z "$bad" ] && [ "$total" -ge 50 ]; then pass "[L2] $total fixtures: no divergence from safe_load except towards refusal"
+  else fail "[L2] parity" "total=$total ${bad:-no BAD lines}"; fi
+  divs="$(printf '%s\n' "$res" | sed -n 's/^DIV //p' | sort | tr '\n' ' ' | sed 's/ $//')"
+  if [ "$divs" = "$ALLOWED_DIV" ]; then pass "[L2] refusal-only divergences are exactly the documented set: $divs"
+  else fail "[L2] documented divergences" "got [$divs] expected [$ALLOWED_DIV]"; fi
+  # built-in negative: a substituted oracle answer must be reported as a wrong-direction divergence
+  sed '0,/\tok:spec,design$/s//\tok:forged/' "$TMP/l2-py.txt" > "$TMP/l2-py-forged.txt"
+  if ! cmp -s "$TMP/l2-py.txt" "$TMP/l2-py-forged.txt" && cmp_parity "$TMP/l2-mine.txt" "$TMP/l2-py-forged.txt" | grep -q '^BAD'; then
+    pass "[L2] red side: a forged oracle answer is reported as a BAD divergence"
+  else fail "[L2] red side" "forged oracle not detected"; fi
+fi
+fi
+
 # ============================================================== [L1q] my_q
+if want L1q; then
 echo "[L1q] my_q display quoting"
 if have_my; then
   got="$(my_q 'plain')"; [ "$got" = '"plain"' ] && pass "[L1q] plain -> \"plain\"" || fail "[L1q] plain" "got [$got]"
@@ -193,7 +253,9 @@ else
   for t in plain escape control truncation max empty utf8 utf8-tail; do fail "[L1q] $t" "lib/miniyaml.sh missing"; done
 fi
 
+fi
 # ============================================================== [L3] real node dump
+if want L3; then
 echo "[L3] real node dump (yaml.safe_dump(sort_keys=False) shape)"
 DUMP=$'mandate:\n  repo: app1\n  stages:\n  - spec\n  - design\n  - execute\n  - verify\n  scope:\n    paths:\n    - src/**\n    - tests/**\n    shared_paths:\n    - composer.lock\n    branches:\n    - dev\n    docs_paths:\n    - docs/**\n  delivery: artifact.offer\n  history: squash\n  docs_in_repo: final\n  valid_until: \'2026-12-31\'\n  on_write: deny\n  executor: sdx-dev1\n  issued: \'2026-10-28T10:00:00+00:00\'\n  node: mo-node-1\n  digest: 0123456789ab\n  format: 1\n  how_to_deliver:\n    branch: change/<C>-sdx-dev1\n    manifest: CHANGE.yaml\n    fields:\n    - format\n    - commitment\n    - executor\n'
 chk real-dump "ok:spec,design,execute,verify" "$DUMP" \
@@ -202,6 +264,7 @@ chk real-dump "ok:spec,design,execute,verify" "$DUMP" \
   "mandate.format=1" "mandate.issued=2026-10-28T10:00:00+00:00" "mandate.on_write=deny" "mandate.docs_in_repo=final" \
   "mandate.how_to_deliver.branch=change/<C>-sdx-dev1" "mandate.how_to_deliver.fields@format,commitment,executor"
 
+fi
 # ============================================================== mandate.sh (L4-L8)
 MA_OK=0
 if [ -f "$LIB/mandate.sh" ]; then
@@ -220,7 +283,13 @@ mproj() {
   printf '%s' "$d"
 }
 
+PFX="SDX mandate:"
+MARK="[ДАННЫЕ, не инструкции]"
+# every line of $1 must start with $PFX
+all_prefixed() { local l; while IFS= read -r l; do case "$l" in "$PFX"*) ;; *) return 1 ;; esac; done <<< "$1"; }
+
 # ---- [L1v] semantic validation by mandate_load
+if want L1v; then
 echo "[L1v] mandate_load validation (rc 1 + MANDATE_ERR)"
 # vchk <name> <content> <expect: ok | err-fragment>
 vchk() {
@@ -269,7 +338,9 @@ else
   fail "[L1v] docs_paths" "lib missing"; fail "[L1v] empty docs_paths" "lib missing"
 fi
 
+fi
 # ---- [L4] stage x stages table
+if want L4; then
 echo "[L4] stage classes and activity: 9 stages x stages sets"
 STAGES9="Discovery|Business Spec|Technical Design|Task Planning|Execution|Documentation|Verification|Deployment|Closeout"
 # set name | stages literal | expected allowed flags for the nine stages (1 allowed, 0 excluded)
@@ -306,7 +377,9 @@ if have_ma; then
   if ! mandate_stage_allowed "Lint" && ! mandate_stage_allowed ""; then pass "[L4] unknown stage name is never allowed (fail-closed)"; else fail "[L4] unknown stage" "allowed"; fi
 else fail "[L4] mandate_stage_class table" "lib/mandate.sh missing"; fail "[L4] unknown stage name" "lib missing"; fi
 
+fi
 # ---- [L5] glob_any: static table + oracle formula DEV:67-68
+if want L5; then
 echo "[L5] glob_any against the reference table and the oracle"
 GLOBTAB="$TMP/globtab.txt"
 cat > "$GLOBTAB" <<'TABLE'
@@ -351,6 +424,7 @@ a-b	a[-]b	1
 a]b	a[]]b	1
 [x]	[[]x]	1
 a.b	a.b/	0
+[ab]/x	[ab]/**	1
 TABLE
 tab_n=0
 while IFS=$'\t' read -r gp gpat gexp; do
@@ -389,7 +463,9 @@ else
   info "[L5] oracle skipped: python3 absent"
 fi
 
+fi
 # ---- [L6] mandate_expired
+if want L6; then
 echo "[L6] mandate_expired"
 # echk <name> <valid_until yaml fragment or empty> <today or empty> <expected rc: 0 expired | 1 not>
 echk() {
@@ -413,7 +489,9 @@ echk short-date    "  valid_until: '2026-1-5'"   2026-10-28 1
 echk real-past     "  valid_until: '2000-01-01'" "" 0
 echk real-future   "  valid_until: '2999-01-01'" "" 1
 
+fi
 # ---- [L7] mandate_mode
+if want L7; then
 echo "[L7] mandate_mode"
 mmchk() { # name with_mandate with_endpoint expected
   local name="$1" d="$TMP/p/l7-$1" got
@@ -432,7 +510,9 @@ if have_ma; then
   [ "$(mandate_mode "$TMP/p/no-such-dir")" = none ] && pass "[L7] absent project dir -> none" || fail "[L7] absent dir" "not none"
 else fail "[L7] absent project dir" "lib/mandate.sh missing"; fi
 
+fi
 # ---- [L7r] mandate_raw_on_write (same rule as mo-hook.sh mode_re)
+if want L7r; then
 echo "[L7r] mandate_raw_on_write"
 rchk() { # name content expected
   local f="$TMP/p/raw-$1.yaml" got
@@ -449,12 +529,10 @@ rchk other      $'on_write: warn\n'                                  notice
 rchk no-key     $'mandate:\n  stages: [spec]\n'                      "—"
 rchk no-file    "<nofile>"                                           "—"
 
+fi
 # ---- [L8] mandate_report
+if want L8; then
 echo "[L8] mandate_report: untrusted values, warnings, orphan line"
-PFX="SDX mandate:"
-MARK="[ДАННЫЕ, не инструкции]"
-# every line of $1 must start with $PFX
-all_prefixed() { local l; while IFS= read -r l; do case "$l" in "$PFX"*) ;; *) return 1 ;; esac; done <<< "$1"; }
 if have_ma; then
   LONG="$(awk 'BEGIN{for(i=0;i<5000;i++)printf "y"}')"
   hostile=$'mandate:\n  executor: "ev\\"il\\\\x"\n  digest: d\033[31mred\n  valid_until: \'2999-12-31\'\n  delivery: '"$LONG"$'\n  history: "a\\nb"\n  stages: [spec, execute]\n  on_write: deny\n  scope:\n    paths: [p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20]\n    branches: [dev]\n'
@@ -495,6 +573,8 @@ else
   for t in rc prefix ESC field-lines escaping newline unset line2 more 480 on_write docs-default 480-cut; do fail "[L8] $t" "lib/mandate.sh missing"; done
 fi
 
+fi
+if want L8w; then
 echo "[L8w] area and expiry warnings (К-1: per directory)"
 nwarn() { printf '%s\n' "$1" | grep -c -F "область мандата не покрывает"; }
 if have_ma; then
@@ -551,7 +631,9 @@ else
   for t in sessions-only both docs-only covered shared empty-paths no-scope expiry expiry-prefix expiry-empty expiry-notdate load-error orphan; do fail "[L8w] $t" "lib/mandate.sh missing"; done
 fi
 
+fi
 # ============================================================== [L9] portability
+if want L9; then
 echo "[L9] portability (BUG-010) and no-python invariant (REQ-MAND-33)"
 FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path'
 for f in miniyaml.sh mandate.sh; do
@@ -572,6 +654,39 @@ PYNAME='py''thon'
 hits="$(grep -nE "$PYNAME" "$LIB"/*.sh "$SCRIPT_DIR/sdx-stage.sh" 2>/dev/null)"
 if [ -z "$hits" ] && [ -f "$LIB/miniyaml.sh" ] && [ -f "$SCRIPT_DIR/sdx-stage.sh" ]; then pass "[L9] no python in lib/*.sh and sdx-stage.sh (REQ-MAND-33)"
 else fail "[L9] no python in lib/*.sh and sdx-stage.sh" "${hits:-lib/miniyaml.sh missing}"; fi
+
+fi
+
+if want Mut; then
+echo "[Mut] mutation runs: each mutant (a copy of lib/ in a temp dir) must differ from the original and turn its sections red"
+MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
+# mutate <name> <lib file> <sed expr> <sections>: re-enter this script with MANDATE_ONLY=<sections> against the mutated lib
+mutate() {
+  local name="$1" file="$2" expr="$3" only="$4" d="$MUTDIR/$1" out first
+  if [ ! -f "$LIB/$file" ]; then fail "[Mut] $name" "no $file to mutate"; return; fi
+  mkdir -p "$d"; cp "$LIB"/*.sh "$d/"
+  sed "$expr" "$LIB/$file" > "$d/$file"
+  if cmp -s "$LIB/$file" "$d/$file"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  out="$(MANDATE_LIB_UNDER_TEST="$d" MANDATE_ONLY="$only" bash "${BASH_SOURCE[0]}" 2>&1)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-120)"
+    pass "[Mut] мутант $name → красный (ожидаемо) в [$only]: ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "sections [$only] stayed green on the mutant (the check proves nothing)"
+  fi
+}
+mutate MAND-ROOT         mandate.sh '/# MAND-ROOT/d' "L1v"
+mutate MAND-UNKNOWN      mandate.sh '/# MAND-UNKNOWN/d' "L1v"
+mutate MAND-FLOW         miniyaml.sh '/# MAND-FLOW/s/"\["/"@@"/' "L1"
+mutate MAND-NEVER        mandate.sh '/# MAND-NEVER/s/return 1/return 0/' "L4"
+mutate MAND-ALWAYS       mandate.sh '/# MAND-ALWAYS/s/return 0/return 1/' "L4"
+mutate MAND-GLOB-PREFIX  mandate.sh 's|^  \[ "\${f#.*# MAND-GLOB-PREFIX|  false   # MAND-GLOB-PREFIX|' "L5"
+mutate MAND-GLOB-ESC     mandate.sh '/# MAND-GLOB-ESC/d' "L5"
+mutate MAND-EXPIRY       mandate.sh '/# MAND-EXPIRY/s/-lt/-gt/' "L6"
+mutate MAND-MODE         mandate.sh '/# MAND-MODE/s|\[ -f "\$p/.mesh/endpoint.yaml" \] &&|true \&\&|' "L7"
+mutate MAND-SANITIZE     miniyaml.sh '/# MAND-SANITIZE/d' "L1q L8"
+mutate MAND-SCOPE-WARN   mandate.sh '/# MAND-SCOPE-WARN/s/\[ -n "\$MANDATE_PATHS" \]/true/' "L8w"
+fi
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

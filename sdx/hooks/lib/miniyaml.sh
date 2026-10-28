@@ -175,7 +175,7 @@ my_parse() {
     if (val == "") { kind[depth] = "open"; printf "O%s%s\n", US, path; next }
     kind[depth] = "scalar"
     c = substr(val, 1, 1)
-    if (c == "[") { fl_path = path; fl_line = NR; fl_buf = ""; flow_feed(val); next }
+    if (c == "[") { fl_path = path; fl_line = NR; fl_buf = ""; flow_feed(val); next }   # MAND-FLOW
     if (c == "{") {
       v2 = val; sub(/[ \t]+#.*$/, "", v2); gsub(/[ \t]/, "", v2)
       if (v2 == "{}") { printf "E%s%s\n", US, path; next }
@@ -199,16 +199,53 @@ my_load() {
   return 0
 }
 
-my_scalar() { printf '%s\n' "$MY_NORM" | LC_ALL=C awk -F"$US" -v p="$1" '$1 == "S" && $2 == p { v = $3; f = 1 } END { if (f) print v }'; }
-my_list()   { printf '%s\n' "$MY_NORM" | LC_ALL=C awk -F"$US" -v p="$1" '$1 == "L" && $2 == p { print $3 }'; }
-my_exists() { printf '%s\n' "$MY_NORM" | LC_ALL=C awk -F"$US" -v p="$1" '$1 != "X" && $1 != "" && ($2 == p || index($2, p ".") == 1) { f = 1 } END { exit !f }'; }
-my_kind() {
-  printf '%s\n' "$MY_NORM" | LC_ALL=C awk -F"$US" -v p="$1" '
-    $1 == "X" || $1 == "" { next }
-    $2 == p { if ($1 == "L" || $1 == "E") k = "list"; else if ($1 == "S") k = "scalar"; else if ($1 == "Z") k = "null"; else if ($1 == "O" && k == "") k = "null" }
-    index($2, p ".") == 1 { d = 1 }
-    END { if (k == "" && !d) print "absent"; else if (d && (k == "" || k == "null")) print "map"; else print k }'
+# Accessors are pure bash over $MY_NORM (no process spawned). Each has a variable form (_my_*: result in
+# MY_S / MY_L / MY_K, no subshell) used by hot paths, and a printing form (my_*) for callers and tests.
+_my_scalar() {   # MY_S = last scalar value (empty if none); rc 0 iff a scalar record exists
+  local t p v f=1
+  MY_S=""
+  while IFS="$US" read -r t p v; do
+    if [ "$t" = S ] && [ "$p" = "$1" ]; then MY_S="$v"; f=0; fi
+  done <<< "$MY_NORM"
+  return "$f"
 }
+my_scalar() { if _my_scalar "$1"; then printf '%s\n' "$MY_S"; fi; return 0; }
+_my_list() {   # MY_L = list items, newline-separated
+  local t p v
+  MY_L=""
+  while IFS="$US" read -r t p v; do
+    if [ "$t" = L ] && [ "$p" = "$1" ]; then MY_L="$MY_L${MY_L:+$'\n'}$v"; fi
+  done <<< "$MY_NORM"
+  return 0
+}
+my_list() { _my_list "$1"; if [ -n "$MY_L" ]; then printf '%s\n' "$MY_L"; fi; return 0; }
+my_exists() {
+  local t p v
+  while IFS="$US" read -r t p v; do
+    case "$t" in O|S|Z|E|L) case "$p" in "$1"|"$1".*) return 0 ;; esac ;; esac
+  done <<< "$MY_NORM"
+  return 1
+}
+_my_kind() {   # MY_K = scalar | list | map | null | absent
+  local t p v k="" d=0
+  while IFS="$US" read -r t p v; do
+    case "$t" in O|S|Z|E|L) ;; *) continue ;; esac
+    if [ "$p" = "$1" ]; then
+      case "$t" in
+        L|E) k=list ;;
+        S) k=scalar ;;
+        Z) k=null ;;
+        O) [ -n "$k" ] || k=null ;;
+      esac
+    else
+      case "$p" in "$1".*) d=1 ;; esac
+    fi
+  done <<< "$MY_NORM"
+  if [ -z "$k" ] && [ "$d" = 0 ]; then MY_K=absent
+  elif [ "$d" = 1 ] && { [ -z "$k" ] || [ "$k" = null ]; }; then MY_K=map
+  else MY_K="$k"; fi
+}
+my_kind() { _my_kind "$1"; printf '%s\n' "$MY_K"; }
 
 # _my_rep <str> <needle> <replacement> -> MY_REP: literal replace-all WITHOUT ${//} (its replacement
 # quoting differs between bash 3.2 and 5.x, so backslash handling must not depend on it).
@@ -225,21 +262,21 @@ _my_rep() {
 # _my_trunc <str> <max> -> MY_TRUNC; rc 0 iff the string was cut. A byte-locale cut may leave an
 # incomplete UTF-8 sequence at the tail: it is dropped, so the output is always valid UTF-8.
 _my_trunc() {
-  local s="$1" c2 l2 l3 l4
+  local s="$1" c2=$'[\200-\277]' l2=$'[\300-\337]' l3=$'[\340-\357]' l4=$'[\360-\367]'
   MY_TRUNC="$s"
   [ "${#s}" -gt "$2" ] || return 1
   s="${s:0:$2}"
-  c2="$(printf '[\200-\277]')"; l2="$(printf '[\300-\337]')"; l3="$(printf '[\340-\357]')"; l4="$(printf '[\360-\367]')"
   MY_TRUNC="$(printf '%s' "$s" | LC_ALL=C sed -e "s/${l2}\$//" -e "s/${l3}${c2}\{0,1\}\$//" -e "s/${l4}${c2}\{0,2\}\$//")"
   return 0
 }
 
-# my_q <str> [max=160]: JSON-like quoting for DISPLAY of untrusted values (REQ-MAND-3): control
-# characters and DEL are stripped, \ and " escaped, the value cut to max chars with an ellipsis.
-my_q() {
+# _my_q <str> [max=160] -> MY_QV: JSON-like quoting for DISPLAY of untrusted values (REQ-MAND-3):
+# control characters and DEL are stripped, \ and " escaped, the value cut to max chars with an ellipsis.
+_my_q() {
   local s="$1" cut="" bs='\'
   s=${s//[[:cntrl:]]/}                                         # MAND-SANITIZE
   if _my_trunc "$s" "${2:-160}"; then s="$MY_TRUNC"; cut="…"; fi
   _my_rep "$s" "$bs" "$bs$bs"; _my_rep "$MY_REP" '"' "$bs\""; s="$MY_REP"
-  printf '"%s%s"\n' "$s" "$cut"
+  MY_QV="\"$s$cut\""
 }
+my_q() { _my_q "$@"; printf '%s\n' "$MY_QV"; }

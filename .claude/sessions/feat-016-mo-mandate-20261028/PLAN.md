@@ -64,7 +64,7 @@
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — L5, L8 зелёные; вывод `mandate_report` на реальном дампе (L3) приложен.
   - Закрывает: REQ-MAND-3, 4, 5, 6, 7; критерии 3, 4.
 
-- [ ] **T07** `[TEST]` [PROC-020] `test-mandate-lib.sh`: L2 (паритет с `yaml.safe_load`) и мутанты
+- [x] **T07** `[TEST]` [PROC-020] `test-mandate-lib.sh`: L2 (паритет с `yaml.safe_load`) и мутанты
   - Зависит от: T06
   - Файлы: `sdx/hooks/test-mandate-lib.sh`
   - Что: L2 — тот же корпус через `yaml.safe_load` одним вызовом python (INFO-skip без PyYAML); допустимые расхождения — только в сторону отказа и перечислены поимённо (дубликат, flow-словарь, якорь — К-8); встроенный негативный (подмена оракула). Мутанты по меткам: `MAND-ROOT`, `MAND-UNKNOWN`, `MAND-FLOW` (L1), `MAND-NEVER`, `MAND-ALWAYS` (L4), `MAND-GLOB-PREFIX`, `MAND-GLOB-ESC` (L5), `MAND-EXPIRY` (L6), `MAND-MODE` (L7), `MAND-SANITIZE`, `MAND-SCOPE-WARN` (L8).

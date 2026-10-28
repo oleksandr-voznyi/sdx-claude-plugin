@@ -12,7 +12,9 @@
 #  [5]  hook rc 2 -> JSON deny with the hook's stderr as reason, exit 0, no duplicate on stderr
 #  [6]  hook rc 0 (stderr passed through once) + stdin byte-for-byte (200 KB, multi-line) + argv/env
 #  [7]  mailbox guard for Write-family tools (+ controls that are NOT the guard: named boundary)
-#  [8]  real vendored hook (needs python3 + PyYAML, else INFO-skip): deny/notice/outside/Bash/lease
+#  [8]  real vendored hook (needs python3 + PyYAML, else INFO-skip): deny/notice/outside/Bash/lease;
+#       (h) sim-kit 0.9 mandate scope: DENY [MO-scope] passes through the wrapper (red side: TRANSLATE);
+#       (h3) is a sanity check only — the wrapper's MO-EARLY-EXIT precedes the hook, no mutant targets it
 #  [9]  no __pycache__ after real runs (scenarios 4 and 8), by substance
 #  [10] scenarios 3-8 repeated in a project without .claude/ (not a VCS repo) and in a repo on "main"
 #  [11] the checkout sdx/mo/ is untouched (no __pycache__)
@@ -442,7 +444,12 @@ scen8() {
   expect_silent "[8h2$LBL] mandate deny: Write inside scope.paths (and outside exec_paths) -> silent"
   new_fx; bin_set real yes; hook_file_real; mandate_yaml deny "src/"   # mandate without endpoint.yaml
   run_hook "$(jq -nc --arg p "$fx/proj/docs/x.md" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
-  expect_silent "[8h3$LBL] mandate.yaml without endpoint.yaml -> not an MO repo, silent"
+  expect_silent "[8h3$LBL] mandate.yaml without endpoint.yaml -> not an MO repo, silent (sanity: MO-EARLY-EXIT precedes the hook)"
+  # (h4) the two on_write modes are independent in the hook: endpoint notice + mandate deny still blocks on scope
+  setup_real notice; mandate_yaml deny "src/"; mkdir -p "$fx/proj/src" "$fx/proj/docs"
+  run_hook "$(jq -nc --arg p "$fx/proj/docs/x.md" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
+  if [ "$RC" = 0 ] && is_json_deny && printf '%s' "$(reason)" | grep -q 'DENY \[MO-scope\]'; then pass "[8h4$LBL] endpoint notice + mandate deny: scope write -> JSON deny (mandate.on_write is independent)"
+  else fail "[8h4$LBL] mandate.on_write independence" "rc=$RC out=[$OUT] err=[$ERR]"; fi
   setup_real notice; run_hook "$(jq -nc --arg p "$dep/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"
   expect_silent "[8b$LBL] notice: same write -> exit 0, nothing on stdout/stderr"
   setup_real deny; run_hook "$(jq -nc --arg p "$fx/other/a" '{tool_name:"Write",tool_input:{file_path:$p,content:"x"},cwd:"/",session_id:"s8"}')"

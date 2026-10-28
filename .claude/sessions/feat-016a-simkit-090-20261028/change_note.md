@@ -17,15 +17,15 @@
 - `test-mo-hook.sh`: мутант `BYTECODE-FS` снят (хук 0.9.0 не пишет байткод и без переменной — `devagent_hook.py:53`,
   мутант перестал различать); `BYTECODE-ENV` остаётся доказательством гарантии обёртки; `scen9` остаётся проверкой по
   существу. Добавлен сценарий `[8h]` (мандат 0.9 через обёртку: запись вне `scope.paths` → JSON deny с `DENY [MO-scope]`; внутри — тихо;
-  `mandate.yaml` без `endpoint.yaml` — тихо), красная сторона — мутант `TRANSLATE` (входит в `SCEN8_MIN`). 113 проверок / 12 мутантов.
-- Проза: `sdx/protocol.md` («граница (г)» переписана; политика отказа «та же в 0.9.0»), `docs/DECISIONS.md` ADR-021 п.5,
+  `mandate.yaml` без `endpoint.yaml` — тихо), красная сторона — мутант `TRANSLATE` (входит в `SCEN8_MIN`). Добавлен `[8h4]` — независимость `mandate.on_write` от `endpoint.on_write`. 115 проверок / 12 мутантов.
+- Проза: `sdx/protocol.md` («граница (г)» переписана; политика отказа «та же в 0.9.0»), `docs/DECISIONS.md` ADR-021 п.5 и датированная поправка к «Последствиям» (байткод, снятый мутант, норма Deployment подтверждена),
   `docs/specs/mo-interop.md` (поправка: REQ-MO-VEND-1, критерий 1, `DH:N`, REQ-MO-DEVOPS-2, REQ-MO-HOOK-7, норма Deployment
   согласована с 0.7.4), `docs/designs/mo-interop.md` (поправка к п.1 и к блоку о байткоде), `agents/devops.md` (абзац о флаге),
   `sdx/mo/README.md` (упоминание области мандата). Число версии в протоколе/ADR не называется (PROC-028 п.2) — только в SPEC/DESIGN
   как исторический факт поставки. README/README.en/CLAUDE.md версии не называют — без правок.
 
 ## Проверки
-- `bash .claude/sdx/verify-cmd.sh` — 15/15 сьютов; `test-mo-hook.sh` 113/113 (12 мутантов красные); `test-mo-inventory.sh` зелёный на новых хешах.
+- `bash .claude/sdx/verify-cmd.sh` — 15/15 сьютов; `test-mo-hook.sh` 115/115 (12 мутантов красные); `test-mo-inventory.sh` зелёный на новых хешах.
 - `tests/kit.sh` sim-kit на выгрузке тега `sim-kit-0.9.0` (`git archive` во временный каталог, корень передан аргументом): `ok=331 fail=0`, rc 0; ранее тот же итог на рабочем дереве HEAD `72849ff`.
 
 ## Границы

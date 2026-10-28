@@ -24,6 +24,8 @@ SNIPPET="$ROOT/sdx/templates/claude-md-snippet.md"
 DECISIONS="$ROOT/docs/DECISIONS.md"
 ARCHIVE_MD="$ROOT/commands/archive.md"
 START_MD="$ROOT/commands/start.md"
+RECONCILE_MD="$ROOT/commands/reconcile.md"
+STATUS_MD="$ROOT/commands/status.md"
 DESIGN_MO="$ROOT/docs/designs/mo-interop.md"
 README_RU="$ROOT/README.md"
 README_EN="$ROOT/README.en.md"
@@ -143,6 +145,35 @@ chk_bridge() {  # Closeout bridge under a mandate (REQ-MAND-23, 23a)
   grep -F 'Ветка `sdx/<id>`' "$f" | grep -qF 'не слива' || { echo "no line saying branch sdx/<id> stays unmerged in $f"; return 1; }
   grep -F 'archive-verify.sh' "$f" | grep -qF 'не вызывается' || { echo "no line saying archive-verify.sh 'не вызывается' in $f"; return 1; }
   return 0
+}
+chk_reconcile_wiring() {  # reconcile.md items (е)/(ж): the scripts are actually called (REQ-MAND-20, 25)
+  local f="$1"
+  grep -F '(е)' "$f" | grep -F 'suites-gen.sh' | grep -qF -- '--check' || { echo "no (е) line calling suites-gen.sh --check in $f"; return 1; }
+  grep -F '(ж)' "$f" | grep -qF 'snippet-check.sh' || { echo "no (ж) line calling snippet-check.sh in $f"; return 1; }
+}
+chk_init_suites() {  # init.md step 2в calls suites-gen.sh
+  grep -E '^2в\.' "$1" | grep -qF 'suites-gen.sh' || { echo "no step 2в calling suites-gen.sh in $1"; return 1; }
+}
+chk_status_mandate() {  # status.md step 5а: mandate-info.sh status + active-set, text matches the script output
+  local l; l="$(grep -E '^5а\.' "$1")"
+  [ -n "$l" ] || { echo "no step 5а in $1"; return 1; }
+  for t in 'mandate-info.sh' 'status' 'sdx-stage.sh' 'active-set' 'endpoint.yaml=нет; mandate.yaml=нет' 'unknown:mandate'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "step 5а lacks '$t' in $1"; return 1; }
+  done
+  # the first output word the prose promises must not be a phrase the script never prints
+  printf '%s' "$l" | grep -qF 'печатает ту же строку' || { echo "step 5а does not say that the script prints the line itself in $1"; return 1; }
+}
+chk_next_mandate() {  # next.md: mandate narrows the target; refusal wording
+  for t in 'Ограничение цели мандатом МО' 'mandate.stages' 'мандат МО исключает этап' 'не правь `.mesh/mandate.yaml`'; do
+    grep -qF -- "$t" "$1" || { echo "no '$t' in $1"; return 1; }
+  done
+}
+chk_verify_planned() {  # verify.md: the rule that computes --planned keys (REQ-MAND-14, К-3)
+  local l; l="$(grep -F 'Правило `--planned`:' "$1")"
+  [ -n "$l" ] || { echo "no 'Правило --planned' line in $1"; return 1; }
+  for t in '`docs/specs/` — если в сессии есть `SPEC.md` или `change_note.md`' '`docs/designs/` — если есть `DESIGN.md`' '`docs/history/plans/` — если есть `PLAN.md`' '`docs/backlog/` — всегда' '`docs/DECISIONS.md`'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "--planned rule lacks '$t' in $1"; return 1; }
+  done
 }
 chk_verify_scope() {
   local f="$1" t
@@ -337,6 +368,27 @@ echo "[17] .claude-plugin/plugin.json: version 2.4.0"
 expect_ok "plugin.json" chk_plugin_version "$ROOT/.claude-plugin/plugin.json"
 sed 's/"version": "2\.4\.0"/"version": "2.3.1"/' "$ROOT/.claude-plugin/plugin.json" > "$TMP/t17.json"
 expect_red "red: plugin.json with the old version" chk_plugin_version "$TMP/t17.json"
+
+echo ""
+echo "[18] wiring prose: reconcile.md (е)/(ж), init.md 2в, status.md 5а, next.md, verify.md --planned rule"
+expect_ok "reconcile.md" chk_reconcile_wiring "$RECONCILE_MD"
+sed 's/suites-gen\.sh/zz-removed/g' "$RECONCILE_MD" > "$TMP/t18a.md"; expect_red "red: reconcile.md without suites-gen.sh" chk_reconcile_wiring "$TMP/t18a.md"
+sed 's/snippet-check\.sh/zz-removed/g' "$RECONCILE_MD" > "$TMP/t18b.md"; expect_red "red: reconcile.md without snippet-check.sh" chk_reconcile_wiring "$TMP/t18b.md"
+sed 's/--check/zz-removed/g' "$RECONCILE_MD" > "$TMP/t18c.md"; expect_red "red: reconcile.md without --check" chk_reconcile_wiring "$TMP/t18c.md"
+expect_ok "init.md 2в" chk_init_suites "$INIT_MD"
+sed 's/suites-gen\.sh/zz-removed/g' "$INIT_MD" > "$TMP/t18d.md"; expect_red "red: init.md without suites-gen.sh" chk_init_suites "$TMP/t18d.md"
+expect_ok "status.md 5а" chk_status_mandate "$STATUS_MD"
+for t in 'mandate-info\.sh' 'active-set' 'unknown:mandate' 'endpoint\.yaml=нет; mandate\.yaml=нет' 'печатает ту же строку'; do
+  sed "s/$t/zz-removed/g" "$STATUS_MD" > "$TMP/t18e.md"; expect_red "red: status.md without '$t'" chk_status_mandate "$TMP/t18e.md"
+done
+expect_ok "next.md" chk_next_mandate "$NEXT_MD"
+for t in 'Ограничение цели мандатом МО' 'mandate\.stages' 'мандат МО исключает этап' 'не правь `\.mesh\/mandate\.yaml`'; do
+  sed "s/$t/zz-removed/g" "$NEXT_MD" > "$TMP/t18f.md"; expect_red "red: next.md without '$t'" chk_next_mandate "$TMP/t18f.md"
+done
+expect_ok "verify.md --planned rule" chk_verify_planned "$VERIFY_MD"
+for t in 'если в сессии есть `SPEC.md` или `change_note.md`' 'если есть `DESIGN.md`' 'если есть `PLAN.md`' '`docs\/backlog\/` — всегда' '`docs\/DECISIONS.md`'; do
+  sed "s/$t/zz-removed/g" "$VERIFY_MD" > "$TMP/t18g.md"; expect_red "red: verify.md --planned rule without '$t'" chk_verify_planned "$TMP/t18g.md"
+done
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

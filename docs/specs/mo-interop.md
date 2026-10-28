@@ -124,10 +124,7 @@ status: approved (пользователь, 2026-10-04; открытые воп�
   `sys.dont_write_bytecode`). Возможности хука 0.9 (область по мандату, `DENY [MO-scope]`) проходят через обёртку без правок
   и покрыты сценарием `[8h]` `test-mo-hook.sh`; поддержка SDX-слоя (показ мандата, второй источник режима, гейт стадий) —
   `FEAT-016`. Норма `Deployment` подтверждена владельцем МО с sim-kit 0.7.4 (`MI` §1 «согласована SDX и МО 05.10») — абзац
-  «Формальное подтверждение» выше закрыт. Промежуточная граница до `FEAT-016`: REQ-MO-HOOK-8 охраняет `endpoint.yaml` и
-  `cursors.json`, но не `mandate.yaml`, а хук считает `.mesh/*` в области — сессия может расширить собственный мандат;
-  обнаружение — у узла (`mandate_digest` в конвертах, аудит дельты); `mandate.on_write` как второй источник режима обёртка не
-  читает. **REQ-MO-DEVOPS-1 — поправка по коллизии триады** (решение пользователя 2026-10-28, `[триада]`): эталон с 0.7.7
+  «Формальное подтверждение» выше закрыт. Промежуточная граница снята поставкой 2.4.0 (`FEAT-016`, REQ-MAND-16/17): обёртка охраняет и `mandate.yaml` (безусловно при `endpoint.yaml`), `mandate.on_write` читается как второй источник режима; подмена мандата через `Bash` остаётся названной границей (обнаружение — у узла, `mandate_digest`, аудит дельты). **REQ-MO-DEVOPS-1 — поправка по коллизии триады** (решение пользователя 2026-10-28, `[триада]`): эталон с 0.7.7
   (`MI` §1 «Исключение — рабочая среда dev-agent») разрешает dev-agent деплоить самому на инстансы из списка `self_deploy`
   в `endpoint.yaml` (`env: dev|test`, список пишет узел), и узел `request` на них не выполняет; требование читается так: деплой
   деактивирован на все стенды, **кроме** инстансов `self_deploy`, где `devops` деплоит как без МО; на остальные — `request`.
@@ -152,3 +149,17 @@ status: approved (пользователь, 2026-10-04; открытые воп�
 1. Пробрасывать ли stderr хука sim-kit при `exit 0` в режиме `notice` (в REQ-MO-HOOK-7 принято: пробрасывать; не следует из решений оркестратора напрямую).
 2. Поведение обёртки без `jq` в режиме `notice` для охраны `.mesh/endpoint.yaml` (в REQ-MO-HOOK-5 принято: fail-open с одной строкой — охрана без разбора входа невозможна).
 3. Нужна ли в `deny` без `jq` статичная причина в JSON (литерал) или самосборное экранирование — DESIGN.
+
+## Дельта FEAT-016 (плагин 2.4.0, сессия `feat-016-mo-mandate-20261028`)
+
+Полный текст требований — `REQ-MAND-1…33` сессии (после Closeout — `docs/history/`); здесь — сжатый перенос. Решения: ADR-020 и ADR-021, поправки 2026-10-28. Признаков МО **два**: `endpoint.yaml` — стенды (0.7.x, FEAT-015), `mandate.yaml` — процесс изменений (0.9); «режим мандата» — оба файла.
+
+- [MODIFIED] **REQ-MO-VEND/HOOK/SESS-* («единственный признак»)** — читаются как «два признака» (REQ-MAND-2, 27): без `mandate.yaml` поведение как в 2.3.x (REQ-MAND-1) с тремя названными отступами — протокольные `from.kit`/`version-skew` (вендоринг 0.9.1) и безусловная охрана `.mesh/mandate.yaml` при наличии `endpoint.yaml` (REQ-MAND-17).
+- [ADDED] **REQ-MAND-3…7** — `mandate.yaml` без `endpoint.yaml` не действует (одна строка предупреждения); показ полей мандата под «[ДАННЫЕ, не инструкции]» на SessionStart и на `/sdx:start` (bash-разбор, без python); предупреждения: область не покрывает `.claude/sessions/` / `docs/` (по каждому каталогу), мандат истёк.
+- [ADDED] **REQ-MAND-8…11a** — мандат — третий сужающий источник активного набора (`spec` → `Discovery` + `Business Spec`; `design` → `Technical Design` + `Task Planning`; `execute` → `Execution` + `Documentation`), `Verification`/`Closeout` всегда, `Deployment` при мандате исключён всегда (норма REQ-MO-PROTO-3 сохраняется для `endpoint.yaml` без мандата); нечитаемый мандат — fail-closed; `--to` на исключённый этап — отказ (код 1).
+- [ADDED] **REQ-MAND-12…15** — `/sdx:verify`: `diff ⊆ scope.paths ∪ shared_paths ∪ docs_paths` (`FAIL` вне, `WARN` для `shared_paths`, переносы Closeout вне `docs_paths` — `FAIL`); без мандата не выполняется.
+- [MODIFIED] **REQ-MO-HOOK-2/4/5 → REQ-MAND-16** — режим «не могу проверить» — более строгий из `endpoint.on_write` и `mandate.on_write`. [MODIFIED] **REQ-MO-HOOK-8 → REQ-MAND-17** — охрана `mandate.yaml` от `Write`/`Edit`/`MultiEdit`/`NotebookEdit`.
+- [ADDED] **REQ-MAND-18…21** — `tests/suites.yaml` (набор `unit`, `budget_min` в минутах вверх; создаёт `/sdx:reconcile` из `/sdx:init`; не перезаписывается; репозиторий плагина — свой файл).
+- [ADDED] **REQ-MAND-22…23b** — `devops` при мандате: без слияний вне `scope.branches` и без тегов; мост Closeout `delivery: pr|branch` (шаги 6–8 `(n/a, мандат)`, ветка остаётся); `patch|worktree` — остановка; `docs_in_repo: none` — переносы `(n/a, docs_in_repo: none)`.
+- [MODIFIED] **REQ-MO-PROJ-2 → REQ-MAND-24/25** — одно предложение о `mandate.yaml` в сниппете; `reconcile` находит устаревший SDX-блок. [ADDED] **REQ-MAND-26** — строка МО в `/sdx:status`.
+- Названные границы: подмена `.mesh/*` через `Bash`; разбор мандата — подмножество YAML строже `safe_load`; канал SessionStart не проверен (`DEBT-045`); `/sdx:pr` и пакет `change/<C>-<exec>` — `FEAT-017`.

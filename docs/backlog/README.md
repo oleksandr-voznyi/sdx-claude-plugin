@@ -65,7 +65,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
-| FEAT-016 | feat | open | high | null | [Мандат МО и декларации (2.4.0): признак `mandate.yaml`, гейт `mandate.stages`, область на `/sdx:verify`, `tests/suites.yaml`, sim-kit 0.9.x (п.1 выполнен: вендорён 0.9.1)](FEAT-016-mo-mandate-and-declarations.md) |
+| FEAT-016 | feat | open | high | null | [Мандат МО и декларации (2.4.0): признак `mandate.yaml`, гейт `mandate.stages`, область на `/sdx:verify`, `tests/suites.yaml`, sim-kit 0.9.x (п.1 выполнен: вендорён 0.9.1; п.2–9 — сессия feat-016-mo-mandate-20261028)](FEAT-016-mo-mandate-and-declarations.md) |
 | FEAT-017 | feat | open | high | null | [Сдача пакетом изменения (2.5.0): `/sdx:pr` как второй вариант Closeout, `CHANGE.yaml`, `protocol.yaml`, `--from-order`](FEAT-017-mo-change-package-delivery.md) |
 | PROC-017 | proc | open | high | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
 | FEAT-003 | feat | open | high | 3 | [Реестр задач прогона как источник истины вместо прозаического `PLAN.md`](FEAT-003-run-task-ledger.md) |

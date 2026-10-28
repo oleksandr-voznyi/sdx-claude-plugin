@@ -56,12 +56,17 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 (норма без enforcement).
 `DEBT-043`…`DEBT-046` порождены сессией `feat-015-mo-interop-20261004`: три названные границы
 поставки (self-test, установленная копия, непроверенные К20/канал) и попутная находка `qa`.
+Записи `FEAT-016`, `FEAT-017`, `FEAT-018` порождены разбором `intake intake-mo-dev-control-20261028`
+(записка владельца МО 26.10 о мандате разработки sim-kit 0.9 и ответная записка SDX 28.10 — три выпуска
+плагина 2.4.0 / 2.5.0 / 3.0); тем же разбором дописаны «Уточнения разбора» в `FEAT-006` и `DEBT-043`.
 
 ## Открытые
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
+| FEAT-016 | feat | open | high | null | [Мандат МО и декларации (2.4.0): признак `mandate.yaml`, гейт `mandate.stages`, область на `/sdx:verify`, `tests/suites.yaml`, sim-kit 0.9.0](FEAT-016-mo-mandate-and-declarations.md) |
+| FEAT-017 | feat | open | high | null | [Сдача пакетом изменения (2.5.0): `/sdx:pr` как второй вариант Closeout, `CHANGE.yaml`, `protocol.yaml`, `--from-order`](FEAT-017-mo-change-package-delivery.md) |
 | PROC-017 | proc | open | high | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
 | FEAT-003 | feat | open | high | 3 | [Реестр задач прогона как источник истины вместо прозаического `PLAN.md`](FEAT-003-run-task-ledger.md) |
 | FEAT-004 | feat | open | high | 3 | [Журнал прогона пишет харнесс, а не модель](FEAT-004-harness-written-journal.md) |
@@ -73,6 +78,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | IDEA-005 | idea | open | high | 6 | [Процедура lean-аудита и правило «инвариант-в-прозе → хук» (REQ-LEAN-1)](IDEA-005-lean-audit-procedure.md) |
 | DEBT-028 | debt | open | high | null | [Тип сессии `audit` не подтверждён исполнением: REQ-AUDIT-9..15 держатся только на прозе](DEBT-028-audit-session-type-unexercised.md) |
 | DEBT-034 | debt | open | high | null | [Единая шкала этапов не подтверждена ни одной живой сессией](DEBT-034-stage-scale-unexercised-by-live-session.md) |
+| FEAT-018 | feat | open | normal | null | [Headless-стадии (3.0): `sdx run` для execute / verify / audit, `questions.yaml`, профиль ревьюера для аудита узла](FEAT-018-mo-headless-stages.md) |
 | FEAT-007 | feat | open | normal | 3 | [Асинхронный HITL-inbox](FEAT-007-async-hitl-inbox.md) |
 | FEAT-012 | feat | open | normal | 3 | [Карточка HITL в форме допущений, а не запроса разрешения](FEAT-012-hitl-card-as-assumptions.md) |
 | FEAT-008 | feat | open | normal | 4 | [Компенсации и бюджет прогона](FEAT-008-compensations-and-run-budget.md) |

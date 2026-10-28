@@ -941,3 +941,40 @@ SPEC/DESIGN/PLAN от решений, принятых человеком в э�
 (2.3.0), `.claude/sdx/verify-cmd.sh`. Постоянные: `docs/specs/mo-interop.md`, `docs/designs/mo-interop.md`,
 `docs/designs/mo-interop-discovery.md`, `docs/history/experiments/mo-interop-manual-test-2026-10-05.md`,
 `docs/history/plans/feat-015-mo-interop-20261004.md`. Ветка `sdx/feat-015-mo-interop-20261004`.
+
+## 2026-10-28 — intake-mo-dev-control-20261028 (intake, `no_code` снят на Verification)
+
+**Вход.** Записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` (МО как владелец процесса изменений: мандат
+разработки `.mesh/mandate.yaml`, sim-kit 0.9, одиннадцать изменений §2, четыре вопроса §4) и ответная записка SDX
+`<aibok>/agentico/reviews/SDX-MO-dev-control-reply-2026-10-28.md` (написана той же сессией до intake: ответы на §4 —
+стадии вызываемы через `claude -p`, состояние не покидает клон узла, stop-gate узлу не нужен — нужна декларация
+`tests/suites.yaml`, хостинг первым `gh` + `bare`; вердикты по §2; план трёх выпусков; семь находок по sim-kit 0.9.0;
+четыре вопроса владельцу). Записка в `aibok` не коммитилась (практика: upstream-записки пишутся файлом).
+
+**Бэклог.** Новые `FEAT-016` (2.4.0 «мандат и декларации»: перевендоринг 0.9.0 отдельной сессией, второй признак
+`mandate.yaml`, `mandate.stages` как третий сужающий источник активного набора с поправкой ADR-020, область мандата на
+`/sdx:verify`, `tests/suites.yaml`, `devops` без слияний/тегов, мост Closeout до `/sdx:pr`), `FEAT-017` (2.5.0 «сдача
+пакетом»: `/sdx:pr` как второй вариант Closeout, `CHANGE.yaml` отдельным последним коммитом, экспорт `protocol.yaml`,
+`--from-order`, `docs_in_repo`), `FEAT-018` (3.0 «headless»: `sdx run`, `questions.yaml`, профиль ревьюера по контракту
+`dev.py llm_review`). Дополнены «Уточнения разбора» `FEAT-006` (мандат — внешняя матрица полномочий; оси отзыва MOVE.IO
+§2.3) и `DEBT-043` (два признака режима МО в `/sdx:status`). Сознательно не взяты: `--work-dir`, промежуточный 0.8.3,
+замена `prod-guard`/`stop-gate` аудитом узла, GitLab/Gitea, уведомление о смене ветки/пути аренды (в 0.9.0 нет),
+`sdx run spec|design|plan`, «окружение» набора тестов.
+
+**Эскалация объёма.** На `Verification` stop-gate оказался красным: процесс `claude` экспортирует
+`PYTHONDONTWRITEBYTECODE=1`, переменная наследовалась мутантами `BYTECODE-ENV`/`BYTECODE-FS` (`test-mo-hook.sh`) и
+`no-bytecode-env` (`test-mo-session.sh`), и проверки «обёртка сама ставит переменную» проходили вхолостую. По решению
+пользователя (`[объём]`) `no_code` снят, возврат на `Execution`, правка — `unset PYTHONDONTWRITEBYTECODE` после
+`set -uo pipefail` в обоих сьютах; 15/15 сьютов зелёные с переменной в окружении и без. Версия плагина не менялась
+(тест-правка без изменения поведения хуков).
+
+**Верификация.** Fresh-eyes круг 1 — 0 FAIL / 13 WARN (критерий «неотличимо от 2.3.0» при протокольном сдвиге;
+`Verification`/`Closeout` против ADR-020; стык Closeout 2.4.0 ↔ 2.5.0; семантика `scope.branches` и пустого `scope.paths`;
+контракт ревьюера `dev.py`; §2.3 отзыва MOVE.IO; полнота «не взято»); круг 2 — 0 FAIL / 8 WARN (`verify` — стадия
+исполнителя; `Deployment` по `delivery`; шаги 6–8 моста и `archive-verify`; `MO_CHANGE` — сводка, не манифест; мутант
+`BYTECODE-FS` станет зелёным после 0.9.0 — `devagent_hook.py:53`). Все исправлены; круг 3 не проводился — гейт закрыт
+решением пользователя. Четыре записи `decisions_log.md` (`[объём]`, `[триаж]`×3).
+
+**Затронутые документы:** `docs/backlog/FEAT-016…018` (новые), `FEAT-006`, `DEBT-043`, `README.md`;
+`sdx/hooks/test-mo-hook.sh`, `sdx/hooks/test-mo-session.sh`; `docs/history/intake/intake-mo-dev-control-20261028.md`.
+Ветка `sdx/intake-mo-dev-control-20261028`. Следующий шаг — сессия перевендоринга sim-kit 0.9.0 (`FEAT-016` п.1).

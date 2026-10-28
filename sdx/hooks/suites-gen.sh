@@ -73,9 +73,11 @@ if [ -e "$file" ]; then   # SG-OVERWRITE
       if _my_scalar suites.unit.budget_min; then cur_b="$MY_S"; have_b=1; fi ;;
   esac
   if [ "$MY_K" = scalar ] || [ "$MY_K" = map ]; then
-    if [ "$cur_cmd" = "$TC_CMD" ] && { [ "$MY_K" = scalar ] || [ "$cur_b" = "$budget" ]; }; then echo "OK tests/suites.yaml: unit.cmd совпадает с резолвом"; exit 0; fi
+    b_same=0; case "$cur_b" in ''|*[!0-9]*) [ "$cur_b" = "$budget" ] && b_same=1 ;; *) [ $((10#$cur_b)) -eq "$budget" ] && b_same=1 ;; esac   # numbers compare as numbers
+    if [ "$cur_cmd" = "$TC_CMD" ] && { [ "$MY_K" = scalar ] || [ "$b_same" = 1 ]; }; then echo "OK tests/suites.yaml: unit.cmd совпадает с резолвом"; exit 0; fi
   fi
-  _my_q "$cur_cmd"; a="$MY_QV"; _my_q "$cur_b"; b="$MY_QV"; _my_q "$TC_CMD"; c="$MY_QV"
+  _my_q "$cur_cmd"; a="$MY_QV"; _my_q "$TC_CMD"; c="$MY_QV"
+  case "$cur_b" in ''|*[!0-9]*) _my_q "$cur_b"; b="$MY_QV" ;; *) b="$cur_b" ;; esac   # numeric budget printed bare, like the expected one   # SG-NUM
   echo "DIFFERS tests/suites.yaml не изменён: unit.cmd=$a vs $c; budget_min=$b vs $budget (файл не перезаписывается — правьте вручную)"
   exit 0
 fi

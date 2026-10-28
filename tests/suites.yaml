@@ -5,7 +5,7 @@
 # Файл НЕ перезаписывается генератором; правьте вручную.
 suites:
   unit:
-    cmd: bash .claude/sdx/verify-cmd.sh
+    cmd: ./.claude/sdx/verify-cmd.sh
     budget_min: 3
     selector: ""
   # module:

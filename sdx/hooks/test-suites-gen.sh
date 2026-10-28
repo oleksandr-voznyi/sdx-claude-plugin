@@ -41,6 +41,7 @@ NP=0
 newproj() { NP=$((NP + 1)); P="$TMP/p$NP"; mkdir -p "$P"; }
 # with_verify: P gets a .claude/sdx/verify-cmd.sh (presence activates it, as in stop-gate)
 with_verify() { mkdir -p "$P/.claude/sdx"; printf '#!/usr/bin/env bash\nexit 0\n' > "$P/.claude/sdx/verify-cmd.sh"; }
+with_verify_x() { with_verify; chmod +x "$P/.claude/sdx/verify-cmd.sh"; }   # runner with the execute bit (stop-gate runs it directly)
 # gen [args...]: runs the generator; OUT/ERR/RC
 gen() {
   OUT="$(bash "$GEN" "$@" 2>"$TMP/err")"; RC=$?; ERR="$(cat "$TMP/err")"
@@ -72,6 +73,22 @@ for pair in 180:3 61:2 60:1 1:1 181:4 0:3 -5:3 abc:3 12x:3; do
     if [ -n "$ERR" ]; then pass "[1] invalid '$t' -> note on stderr"; else fail "[1] invalid '$t'" "stderr empty"; fi ;;
   esac
 done
+fi
+
+if want 1x && [ -f "$GEN" ]; then
+echo "[1x] form of the call mirrors stop-gate: execute bit -> direct path, no bit -> bash"
+newproj; with_verify_x; gen "$P"
+if grep -qx '    cmd: ./.claude/sdx/verify-cmd.sh' "$P/tests/suites.yaml" 2>/dev/null; then pass "[1x] executable runner -> cmd ./.claude/sdx/verify-cmd.sh (no bash)"
+else fail "[1x] exec form" "$(grep -n 'cmd' "$P/tests/suites.yaml" 2>/dev/null | head -2)"; fi
+gen --check "$P"
+[ "$(first)" = OK ] && pass "[1x] --check on the executable form -> OK" || fail "[1x] --check exec" "out=[$OUT]"
+chmod -x "$P/.claude/sdx/verify-cmd.sh"; gen --check "$P"
+[ "$(first)" = DIFFERS ] && pass "[1x] bit removed after generation -> --check DIFFERS (form changed)" || fail "[1x] --check bit removed" "out=[$OUT]"
+case "$OUT" in *'budget_min=3 vs 3 '*) pass "[1x] DIFFERS prints equal budgets alike (budget_min=3 vs 3, no stray quotes)" ;; *) fail "[1x] DIFFERS budget text" "out=[$OUT]" ;; esac
+newproj; with_verify; gen "$P"; gen --check "$P"
+[ "$(first)" = OK ] && grep -qx '    cmd: bash .claude/sdx/verify-cmd.sh' "$P/tests/suites.yaml" && pass "[1x] non-executable runner -> bash form, --check OK" || fail "[1x] bash form" "out=[$OUT]"
+chmod +x "$P/.claude/sdx/verify-cmd.sh"; gen --check "$P"
+[ "$(first)" = DIFFERS ] && pass "[1x] bit set after generation -> --check DIFFERS" || fail "[1x] --check bit set" "out=[$OUT]"
 fi
 
 if want 2 && [ -f "$GEN" ]; then
@@ -179,6 +196,22 @@ twin() {   # twin <label> <expected kind>   (fixture prepared in $P)
 }
 twin_repo; mkdir -p "$P/.claude/sdx"
 printf '#!/usr/bin/env bash\necho verify-cmd > "$MARK"\n' > "$P/.claude/sdx/verify-cmd.sh"; twin verify-cmd verify-cmd
+# the command written to suites.yaml, run the way the node runs it (sh -c in the repo root), leaves the same trace as stop-gate
+twin_cmd() {   # twin_cmd <label> <expected form prefix>   (fixture prepared in $P)
+  local tc
+  tc="$( . "$LIB/test-cmd.sh"; test_cmd_resolve "$P"; printf '%s' "$TC_CMD" )"
+  rm -f "$MARK"; ( cd "$P" && MARK="$MARK" sh -c "$tc" >/dev/null 2>&1 )
+  ran="$(cat "$MARK" 2>/dev/null || echo none)"
+  case "$tc" in "$2"*) if [ "$ran" = verify-cmd ]; then pass "[7] $1: TC_CMD '$tc' under sh -c leaves the stop-gate trace"
+    else fail "[7] $1" "TC_CMD '$tc' left '$ran'"; fi ;; *) fail "[7] $1" "TC_CMD '$tc' lacks the form '$2'" ;; esac
+}
+twin_repo; mkdir -p "$P/.claude/sdx"; printf '#!/usr/bin/env bash\necho verify-cmd > "$MARK"\n' > "$P/.claude/sdx/verify-cmd.sh"; twin_cmd "non-executable runner" "bash "
+twin_repo; mkdir -p "$P/.claude/sdx"; printf '#!/bin/sh\necho verify-cmd > "$MARK"\n' > "$P/.claude/sdx/verify-cmd.sh"; chmod +x "$P/.claude/sdx/verify-cmd.sh"
+twin "executable runner (sh shebang)" verify-cmd; twin_cmd "executable runner (sh shebang)" "./"
+if command -v python3 >/dev/null 2>&1; then   # a non-bash shebang: only a direct call works, `bash script` would fail
+  twin_repo; mkdir -p "$P/.claude/sdx"; printf '#!/usr/bin/env python3\nimport os\nopen(os.environ["MARK"], "w").write("verify-cmd\\n")\n' > "$P/.claude/sdx/verify-cmd.sh"; chmod +x "$P/.claude/sdx/verify-cmd.sh"
+  twin "executable runner (python shebang)" verify-cmd; twin_cmd "executable runner (python shebang)" "./"
+else info "[7] no python3: python-shebang twin skipped (not a pass)"; fi
 twin_repo; printf '{"scripts":{"test":"x"}}\n' > "$P/composer.json"; twin composer composer
 twin_repo; printf '{"scripts":{"test":"x"}}\n' > "$P/package.json"; twin npm npm
 twin_repo; mkdir -p "$P/vendor/bin"; printf '#!/bin/sh\necho phpunit > "$MARK"\n' > "$P/vendor/bin/phpunit"; chmod +x "$P/vendor/bin/phpunit"; touch "$P/phpunit.xml"; twin phpunit phpunit
@@ -195,7 +228,8 @@ if [ -n "$(git -C "$ROOT" ls-files tests/suites.yaml 2>/dev/null)" ]; then pass 
 else fail "[8] tracked" "git ls-files finds nothing"; fi
 if [ -f "$DF" ] && [ -f "$LIB/miniyaml.sh" ]; then
   . "$LIB/miniyaml.sh"; my_load "$DF"
-  [ "$(my_scalar suites.unit.cmd)" = "bash .claude/sdx/verify-cmd.sh" ] && pass "[8] unit.cmd == bash .claude/sdx/verify-cmd.sh" || fail "[8] unit.cmd" "$(my_scalar suites.unit.cmd)"
+  want_cmd="bash .claude/sdx/verify-cmd.sh"; [ -x "$ROOT/.claude/sdx/verify-cmd.sh" ] && want_cmd="./.claude/sdx/verify-cmd.sh"   # same form rule as stop-gate
+  [ "$(my_scalar suites.unit.cmd)" = "$want_cmd" ] && pass "[8] unit.cmd == $want_cmd" || fail "[8] unit.cmd" "$(my_scalar suites.unit.cmd) (want $want_cmd)"
   b="$(my_scalar suites.unit.budget_min)"
   case "$b" in ''|*[!0-9]*) fail "[8] budget_min" "not an integer: [$b]" ;; *) [ "$b" -ge 3 ] && pass "[8] budget_min=$b >= 3" || fail "[8] budget_min" "$b < 3" ;; esac
   if my_exists suites.module || my_exists suites.regression; then fail "[8] samples" "module/regression active"
@@ -270,6 +304,8 @@ mutate SG-OVERWRITE suites-gen.sh '/# SG-OVERWRITE/s/if \[ -e "\$file" \]; then/
 mutate SG-NOCMD     suites-gen.sh '/# SG-NOCMD/s/if \[ "\$TC_KIND" = none \]; then/if false; then/' "4"
 mutate SG-ORDER     lib/test-cmd.sh '/# SG-ORDER/s/\]; then/] \&\& [ ! -f "$proj\/composer.json" ]; then/' "7"
 mutate SG-BASH      lib/test-cmd.sh '/# SG-BASH/s/"bash \.claude/".claude/' "1"
+mutate SG-NUM       suites-gen.sh '/# SG-NUM/s/case .*esac/_my_q "$cur_b"; b="$MY_QV"/' "1x"
+mutate SG-EXEC      lib/test-cmd.sh '/# SG-EXEC/s/if \[ -x /if [ -e \/nonexistent\/ /' "1x"
 fi
 
 echo ""

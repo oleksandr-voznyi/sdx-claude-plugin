@@ -361,7 +361,7 @@ cm() { # name mandate-body expected
     *) if [ "$RC" -eq 0 ] && [ "$OUT" = "$3" ]; then pass "[M] closeout-mode $1 -> $OUT"; else fail "[M] closeout-mode $1" "rc=$RC out=[$OUT] expected [$3]"; fi ;;
   esac
 }
-cm offer  $'mandate:\n  delivery: artifact.offer\n'  standard
+cm offer  $'mandate:\n  delivery: artifact.offer\n'  bridge:offer
 cm pr     $'mandate:\n  delivery: pr\n'              bridge
 cm branch $'mandate:\n  delivery: branch\n'          bridge
 cm patch  $'mandate:\n  delivery: patch\n'           undefined:patch
@@ -458,7 +458,7 @@ mutate MAND-SHARED       mandate-scope.sh '/# MAND-SHARED/s/if mandate_match_lis
 mutate MAND-EMPTY-PATHS  mandate-scope.sh '/# MAND-EMPTY-PATHS/s/\[ -n "\$MANDATE_PATHS" \] \&\& restricted=1/restricted=1/' "4"
 mutate MAND-PLANNED      mandate-scope.sh '/# MAND-PLANNED/s/while IFS= read -r f; do/while false; do/' "6"
 mutate MAND-REPLACE      mandate-scope.sh '/# MAND-REPLACE/s/if \[ "\$have_block" = 1 \]; then/if false; then/' "7"
-mutate MAND-BRIDGE       mandate-info.sh '/# MAND-BRIDGE/s/echo standard/echo bridge/' "Mcm"
+mutate MAND-BRIDGE       mandate-info.sh '/# MAND-BRIDGE/s/echo bridge:offer/echo standard/' "Mcm"
 mutate MAND-CHECK-TREE   mandate-info.sh '/# MAND-CHECK-TREE/s/\[ -z "\$dirty" \]/true/' "Mcc"
 mutate MAND-CHECK-SESSION mandate-info.sh '/# MAND-CHECK-SESSION/s/\[ -z "\$insess" \]/true/' "Mcc"
 fi

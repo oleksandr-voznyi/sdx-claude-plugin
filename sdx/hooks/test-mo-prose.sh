@@ -137,9 +137,10 @@ chk_snippet_mandate() {
 }
 chk_bridge() {  # Closeout bridge under a mandate (REQ-MAND-23, 23a)
   local f="$1" t
-  for t in 'bridge' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined'; do
+  for t in 'bridge' 'bridge:offer' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'docs_in_repo' '(n/a, docs_in_repo: none)'; do
     grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
   done
+  grep -F 'Ветка `sdx/<id>`' "$f" | grep -qF 'не слива' || { echo "no line saying branch sdx/<id> stays unmerged in $f"; return 1; }
   grep -F 'archive-verify.sh' "$f" | grep -qF 'не вызывается' || { echo "no line saying archive-verify.sh 'не вызывается' in $f"; return 1; }
   return 0
 }
@@ -288,7 +289,7 @@ echo ""
 echo "[12] Closeout bridge: commands/archive.md and protocol.md"
 expect_ok "archive.md" chk_bridge "$ARCHIVE_MD"
 expect_ok "protocol.md" chk_bridge "$PROTOCOL"
-for t in 'bridge' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'не вызывается'; do
+for t in 'bridge:offer' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'не вызывается' 'docs_in_repo' '(n/a, docs_in_repo: none)' 'Ветка `sdx/<id>`'; do
   for pair in "archive.md:$ARCHIVE_MD" "protocol.md:$PROTOCOL"; do
     grep -vF -- "$t" "${pair#*:}" > "$TMP/t12.md"
     expect_red "red: ${pair%%:*} without '$t'" chk_bridge "$TMP/t12.md"

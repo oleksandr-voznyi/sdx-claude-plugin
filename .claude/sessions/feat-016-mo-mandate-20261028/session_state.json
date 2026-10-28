@@ -1,0 +1,9 @@
+{
+  "session_id": "feat-016-mo-mandate-20261028",
+  "type": "feature",
+  "stage": "Discovery",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/feat-016-mo-mandate-20261028",
+  "no_code": false,
+  "no_gates": false
+}

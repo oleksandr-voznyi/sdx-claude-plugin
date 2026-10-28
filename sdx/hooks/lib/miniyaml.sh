@@ -210,9 +210,21 @@ my_kind() {
     END { if (k == "" && !d) print "absent"; else if (d && (k == "" || k == "null")) print "map"; else print k }'
 }
 
+# _my_rep <str> <needle> <replacement> -> MY_REP: literal replace-all WITHOUT ${//} (its replacement
+# quoting differs between bash 3.2 and 5.x, so backslash handling must not depend on it).
+_my_rep() {
+  local in="$1" out=""
+  while :; do
+    case "$in" in
+      *"$2"*) out="$out${in%%"$2"*}$3"; in="${in#*"$2"}" ;;
+      *) MY_REP="$out$in"; return 0 ;;
+    esac
+  done
+}
+
 # my_q <str> [max=160]: JSON-like quoting for DISPLAY of untrusted values (REQ-MAND-3).
 my_q() {
-  local s="$1" max="${2:-160}" cut="" c2 l2 l3 l4
+  local s="$1" max="${2:-160}" cut="" c2 l2 l3 l4 bs='\'
   s="$(printf '%s' "$s" | LC_ALL=C tr -d '\000-\037\177')"
   if [ "${#s}" -gt "$max" ]; then
     s="${s:0:max}"; cut="…"
@@ -220,6 +232,6 @@ my_q() {
     c2="$(printf '[\200-\277]')"; l2="$(printf '[\300-\337]')"; l3="$(printf '[\340-\357]')"; l4="$(printf '[\360-\367]')"
     s="$(printf '%s' "$s" | LC_ALL=C sed -e "s/${l2}\$//" -e "s/${l3}${c2}\{0,1\}\$//" -e "s/${l4}${c2}\{0,2\}\$//")"
   fi
-  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  _my_rep "$s" "$bs" "$bs$bs"; _my_rep "$MY_REP" '"' "$bs\""; s="$MY_REP"
   printf '"%s%s"\n' "$s" "$cut"
 }

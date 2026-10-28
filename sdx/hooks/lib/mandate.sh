@@ -73,3 +73,27 @@ mandate_expired() {
   today="${SDX_MANDATE_TODAY:-$(date +%F)}"
   [ "${v//-/}" -lt "${today//-/}" ]   # MAND-EXPIRY
 }
+
+# mandate_glob_one <path> <pattern>: rc 0 iff the reference glob_any(path, [pattern]) holds:
+#   fnmatch(path, p) or fnmatch(path, p.rstrip("/") + "/*") or path.startswith(p.rstrip("*").rstrip("/") + "/")
+# bash `case` differs from Python fnmatch in two places, both neutralised below. C locale pins [a-z] ranges.
+mandate_glob_one() {
+  local LC_ALL=C f="$1" p="$2" a b bs='\'
+  _my_rep "$p" "$bs" "$bs$bs"; _my_rep "$MY_REP" "[^" "[$bs^"; p="$MY_REP"   # MAND-GLOB-ESC: fnmatch has no escapes and no [^..] negation
+  case "$f" in $p) return 0 ;; esac                           # fnmatch(path, p)
+  a="$p"; while [ "${a%/}" != "$a" ]; do a="${a%/}"; done     # p.rstrip("/")
+  case "$f" in $a/*) return 0 ;; esac                         # fnmatch(path, a + "/*")
+  b="$p"; while [ "${b%\*}" != "$b" ]; do b="${b%\*}"; done   # p.rstrip("*")
+  while [ "${b%/}" != "$b" ]; do b="${b%/}"; done             # .rstrip("/")
+  [ "${f#"$b"/}" != "$f" ]                                    # MAND-GLOB-PREFIX: startswith(b + "/")
+}
+
+# mandate_glob_any <path> <pattern>...: rc 0 if any pattern matches (no patterns: no match)
+mandate_glob_any() {
+  local f="$1" p
+  shift
+  for p in "$@"; do
+    mandate_glob_one "$f" "$p" && return 0
+  done
+  return 1
+}

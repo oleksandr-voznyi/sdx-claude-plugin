@@ -50,7 +50,7 @@
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — L1, L3, L4, L6, L7 зелёные; L5/L8 ещё красные.
   - Закрывает: REQ-MAND-2, 7, 8, 9, 10, 11 (база); критерии 5, 7.
 
-- [ ] **T05** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_glob_one`/`mandate_glob_any` (эталон `glob_any`)
+- [x] **T05** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_glob_one`/`mandate_glob_any` (эталон `glob_any`)
   - Зависит от: T04
   - Файлы: `sdx/hooks/lib/mandate.sh`
   - Что: функция из DESIGN дословно (метки `# MAND-GLOB-ESC`, `# MAND-GLOB-PREFIX`), `mandate_glob_any <path> <pat>…`; вызывается при `LC_ALL=C`.

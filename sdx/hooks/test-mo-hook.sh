@@ -23,7 +23,7 @@
 # MO_HOOK_UNDER_TEST overrides the wrapper path (used to show the whole suite red without an implementation).
 # Environment without python3/PyYAML: scenarios 4, 8, 9 and the parity part of [2] are INFO-skipped, not PASS.
 set -uo pipefail
-# Hermetic against the caller's environment: the BYTECODE mutants prove that the WRAPPER sets
+# Hermetic against the caller's environment: the BYTECODE-ENV mutant proves that the WRAPPER sets
 # PYTHONDONTWRITEBYTECODE=1 itself; an inherited value (e.g. exported by the claude process) would
 # leak into the mutant and make those checks pass vacuously.
 unset PYTHONDONTWRITEBYTECODE
@@ -537,7 +537,10 @@ mutate RC2          's|exit 0   # MO-RC2|exit 2|' 'cell3 "no python3" deny; SCEN
 mutate TRANSLATE    's|^    deny_json .*# MO-TRANSLATE$|    printf "%s\\n" "$err" >\&2; exit 2 ;;|' 'SCEN_MIN=1 scen5; SCEN8_MIN=1 scen8'
 mutate NO-STDIN     's|<<<"\$input")"; rc=\$?|</dev/null)"; rc=$?|' 'scen6'
 mutate BYTECODE-ENV 's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'scen6'
-mutate BYTECODE-FS  's|PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR|CLAUDE_PROJECT_DIR|' 'SCEN8_MIN=1 scen8; scen9'
+# BYTECODE-FS (wrapper without the env var -> __pycache__ appears, caught by scen9) was retired with
+# sim-kit 0.9.0: since 0.7.4 the hook sets sys.dont_write_bytecode itself (devagent_hook.py:53), so
+# that mutant can no longer turn scen9 red. scen9 stays as a substance check; the wrapper's own
+# guarantee is proven by BYTECODE-ENV (scen6 reads the variable from the stub's log).
 mutate NO-GUARD     '/# MO-GUARD/d' 'GUARD_SET=min scen7'
 mutate NO-NORM      's|^  case "\$fp" in /\*) ;; \*) fp=.*# MO-NORM$|  :|' 'GUARD_SET=norm scen7'
 mutate NO-PHYS      's|for d in "\$proj_abs" "\$proj_phys"; do|for d in "$proj_abs"; do|' 'scen7f'

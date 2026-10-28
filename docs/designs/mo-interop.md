@@ -17,7 +17,7 @@
 
 Поставка — три слоя, из которых только первый содержит чужой код:
 
-1. **Вендоринг** — `sdx/mo/` (три файла sim-kit 0.7.3 байт-в-байт + `SIMKIT_VERSION` + `SIMKIT_SHA256` + короткий `README.md`). Правок вендорённого нет; политика и сторож уже действуют (PROC-028).
+1. **Вендоринг** — `sdx/mo/` (три файла sim-kit 0.7.3 байт-в-байт + `SIMKIT_VERSION` + `SIMKIT_SHA256` + короткий `README.md`; с 2026-10-28 — sim-kit 0.9.0 из тега `sim-kit-0.9.0`, сессия `feat-016a-simkit-090-20261028`: мутант `BYTECODE-FS` снят — хук с 0.7.4 сам ставит `sys.dont_write_bytecode`). Правок вендорённого нет; политика и сторож уже действуют (PROC-028).
 2. **Два bash-скрипта плагина** — `sdx/hooks/mo-hook.sh` (PreToolUse; обёртка над `DH`) и `sdx/hooks/mo-session.sh` (SessionStart; показ ящика). Оба активируются **единственным признаком** `$CLAUDE_PROJECT_DIR/.mesh/endpoint.yaml` — не веткой `sdx/<id>`, не `.claude/sdx/`. Без файла — `exit 0`, пустой вывод, python не запускается, `jq` не требуется.
 3. **Прозаический слой** — протокол, `commands/next.md`, `agents/devops.md`, сниппет CLAUDE.md, `init.md`, поверхности состава (README×2, `CLAUDE.md` §6), ADR-021.
 

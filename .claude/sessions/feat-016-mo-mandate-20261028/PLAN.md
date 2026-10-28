@@ -43,7 +43,7 @@
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — L4–L8 красные (нет `lib/mandate.sh`), L1–L3, L9 по-прежнему зелёные; перечень красных строк приложен.
   - Закрывает: REQ-MAND-2, 6, 7, 8, 9, 10, 12; критерии 4, 5, 7, 9 (тестовая часть).
 
-- [ ] **T04** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_mode`, `mandate_load`, классы этапов, `mandate_expired`
+- [x] **T04** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_mode`, `mandate_load`, классы этапов, `mandate_expired`
   - Зависит от: T03
   - Файлы: `sdx/hooks/lib/mandate.sh` (новый)
   - Что: `source` `miniyaml.sh` по `${BASH_SOURCE[0]%/*}`; `mandate_mode` (`# MAND-MODE`), `mandate_load` (`# MAND-ROOT` — нет `O mandate`; `stages` скаляр → «не список»; `# MAND-UNKNOWN`; `MANDATE_STAGES/_PATHS/_SHARED/_DOCS/_BRANCHES`; `# MAND-DOCS-DEFAULT` → `docs/**`), `mandate_stage_class` и `mandate_stage_allowed` (метки `# MAND-NEVER` для `Deployment`, `# MAND-ALWAYS` для `Verification`/`Closeout`; пустой `stages` → только `always`), `mandate_expired` (`# MAND-EXPIRY`).

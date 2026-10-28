@@ -117,7 +117,7 @@
   - DoD: `bash sdx/hooks/test-mandate-scope.sh` — блок [M] зелёный; (1)–(10) по `mandate-scope.sh` пока красные.
   - Закрывает: REQ-MAND-3, 5, 23, 23a, 23b (определение режима), 26; критерии 2, 4, 16, 18.
 
-- [ ] **T14** `[CODE]` [PROC-020] `mandate-scope.sh`: `diff ⊆ область`, `--planned`, блок в `verification_report.md`
+- [x] **T14** `[CODE]` [PROC-020] `mandate-scope.sh`: `diff ⊆ область`, `--planned`, блок в `verification_report.md`
   - Зависит от: T13
   - Файлы: `sdx/hooks/mandate-scope.sh` (новый)
   - Что: алгоритм DESIGN: стандартный вход — пути по строке; режим не `on` → ничего не печатает и не пишет (rc 0); `mandate_load` fail → блок `### [FAIL] Мандат МО не разобран` rc 1; для каждого файла `in_union`/`in_shared` (`# MAND-OUTSIDE`, `# MAND-SHARED`, `# MAND-EMPTY-PATHS`); `--planned` (`# MAND-PLANNED`); блок между `<!-- SDX-MANDATE-SCOPE:BEGIN/END -->` с заменой awk-ом при повторе (`# MAND-REPLACE`); не-заголовочная строка срока; коды 0/1/2; stdout — сводка `PASS|FAIL K|WARN L`.

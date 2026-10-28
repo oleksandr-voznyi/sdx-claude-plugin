@@ -551,9 +551,13 @@ scen8i() {
 scen7m() {
   echo "[7m$LBL] guard of .mesh/mandate.yaml: Write-family tools -> JSON deny naming mandate.yaml"
   local combo m tool form variant p cwd n=0 bad=0 pp rest
-  set -- "notice|Write|abs|scope" "notice|Write|rel|empty" "notice|Write|dots|none" "notice|Write|dslash|scope" \
-         "notice|Write|updir|scope" "notice|Edit|abs|scope" "notice|MultiEdit|abs|empty" "notice|NotebookEdit|rel|none" \
-         "deny|Write|abs|scope" "deny|Edit|dots|none" "deny|MultiEdit|dslash|empty" "deny|NotebookEdit|updir|scope"
+  if [ "${GUARD_SET:-full}" = mand-min ]; then   # mutation runs: one combination per mode
+    set -- "notice|Write|abs|scope" "deny|NotebookEdit|rel|none"
+  else
+    set -- "notice|Write|abs|scope" "notice|Write|rel|empty" "notice|Write|dots|none" "notice|Write|dslash|scope" \
+           "notice|Write|updir|scope" "notice|Edit|abs|scope" "notice|MultiEdit|abs|empty" "notice|NotebookEdit|rel|none" \
+           "deny|Write|abs|scope" "deny|Edit|dots|none" "deny|MultiEdit|dslash|empty" "deny|NotebookEdit|updir|scope"
+  fi
   new_fx; bin_set stub yes; hook_file_stub; pp="$fx/proj"
   for combo in "$@"; do
     m="${combo%%|*}"; rest="${combo#*|}"; tool="${rest%%|*}"; rest="${rest#*|}"; form="${rest%%|*}"; variant="${rest##*|}"
@@ -680,6 +684,10 @@ mutate NO-NORM      's|^  case "\$fp" in /\*) ;; \*) fp=.*# MO-NORM$|  :|' 'GUAR
 mutate NO-PHYS      's|for d in "\$proj_abs" "\$proj_phys"; do|for d in "$proj_abs"; do|' 'scen7f'
 mutate M9-MULTILINE 's|^    last="\${err##\*"\$nl"}"|    last="$err"|' 'scen3m'
 mutate NO-HOOKFILE  '/# MO-HOOKFILE/d' 'cell3 "no hook file" notice'
+# FEAT-016 (REQ-MAND-16, 17): mode from two files and the mandate.yaml guard
+mutate MAND-MODE2   '/# MAND-MODE2/d' 'SCEN2M_MIN=1 scen2m'
+mutate MAND-GUARD-MANDATE '/# MO-GUARD-MANDATE/d' 'GUARD_SET=mand-min scen7m'
+mutate MAND-NAME    's|"mandate.yaml"|"mandate.yml"|' 'GUARD_SET=mand-min scen7m'
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

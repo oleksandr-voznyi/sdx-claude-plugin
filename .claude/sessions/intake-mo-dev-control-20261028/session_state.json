@@ -1,7 +1,7 @@
 {
   "session_id": "intake-mo-dev-control-20261028",
   "type": "intake",
-  "stage": "Verification",
+  "stage": "Deployment",
   "gate_mode": "interactive",
   "git_branch": "sdx/intake-mo-dev-control-20261028",
   "no_code": false,

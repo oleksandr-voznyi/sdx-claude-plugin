@@ -80,7 +80,7 @@
   - DoD: `bash sdx/hooks/test-sdx-stage.sh` — [1]–[29] и [30] зелёные, [31]–[39] красные (перечень приложен); [40] красный/пропуск до T10.
   - Закрывает: REQ-MAND-1, 8, 9, 10, 11; критерии 1, 5, 6, 7, 8 (тестовая часть).
 
-- [ ] **T09** `[CODE]` [PROC-020] `sdx-stage.sh`: `mandate_gate_load`, `is_excluded_by_mandate`, `is_skipped`, врезки в `init`/`next`/`--to`
+- [x] **T09** `[CODE]` [PROC-020] `sdx-stage.sh`: `mandate_gate_load`, `is_excluded_by_mandate`, `is_skipped`, врезки в `init`/`next`/`--to`
   - Зависит от: T08
   - Файлы: `sdx/hooks/sdx-stage.sh`
   - Что: функции из DESIGN (меток `# MAND-MODE` в gate, `# MAND-EXCL`); врезки: `cmd_init` после шага 5 и до шага 6 (`mandate_gate_load 2`, затем отказ rc 2 с текстом DESIGN); `cmd_next` после приоритета 0 `no_gates` (`mandate_gate_load 1`); `--to` после проверки `no_code`-исключения (rc 1, `write_stage` не вызывается); цикл форварда `while is_skipped … # MAND-SKIP`. Ленивое подключение lib только в режиме мандата; нет lib при режиме мандата → fail-closed; python не используется.

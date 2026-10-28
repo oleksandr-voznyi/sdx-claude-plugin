@@ -107,6 +107,38 @@ is_excluded_by_no_code() {
   esac
 }
 
+# ---- mandate mode: the THIRD narrowing source (FEAT-016, REQ-MAND-8..11, ADR-020 amendment) ----
+# Mandate mode = BOTH .mesh/endpoint.yaml and .mesh/mandate.yaml exist in the project. Without it
+# none of the code below executes beyond the two `-f` tests: lib/mandate.sh is sourced lazily, only
+# in mandate mode, and a missing/unreadable mandate then refuses the transition (fail-closed — an
+# unknown boundary is never read as "no boundary"). The mandate is the node's data; it is read, never run.
+MANDATE_ON=0
+
+# mandate_gate_load <refusal-rc>: init -> 2, next/start-stage -> 1. Exits with <refusal-rc> on failure.
+mandate_gate_load() {
+  [ -f "$proj/.mesh/endpoint.yaml" ] && [ -f "$proj/.mesh/mandate.yaml" ] || return 0        # MAND-MODE
+  local lib="${BASH_SOURCE[0]%/*}/lib/mandate.sh"
+  [ -f "$lib" ] || { echo "SDX sdx-stage: lib/mandate.sh плагина не найдена — мандат МО не проверить, отказ (fail-closed)." >&2; exit "$1"; }
+  . "$lib"
+  if ! mandate_load "$proj"; then
+    echo "SDX sdx-stage: мандат МО (.mesh/mandate.yaml) не разобран: $MANDATE_ERR — отказ (fail-closed: неизвестная граница не трактуется как «без границ»). Мандат выдаёт и правит узел МО." >&2
+    exit "$1"
+  fi
+  MANDATE_ON=1
+}
+
+# is_excluded_by_mandate <stage> -> exit 0 if the loaded mandate excludes <stage> (never true outside mandate mode)
+is_excluded_by_mandate() { [ "$MANDATE_ON" = 1 ] && ! mandate_stage_allowed "$1"; }          # MAND-EXCL
+
+# is_skipped <stage> <no_code> -> exit 0 if <stage> is out of the active set by no_code OR by the mandate
+is_skipped() { { [ "$2" = "true" ] && is_excluded_by_no_code "$1"; } || is_excluded_by_mandate "$1"; }
+
+# mandate_refusal_text <stage> -> the shared tail "(стадия '<class>' не в mandate.stages=[...]; ...)"
+mandate_refusal_text() {
+  local list="${MANDATE_STAGES//$'\n'/, }"
+  echo "стадия '$(mandate_stage_class "$1")' не в mandate.stages=[$list]; Deployment при мандате исключён всегда"
+}
+
 # gate_ok <stage> <sdir> -> exit 0 if <stage>'s own gate is objectively satisfied on disk,
 # exit 1 otherwise. Successor of the old stage_artifact_ok: was a special case only for
 # "Change"; now generalized via the `foldable` column to any of the four planning stages
@@ -228,6 +260,13 @@ cmd_init() {
     exit 2
   fi
 
+  # Step 5a (REQ-MAND-9/11): in mandate mode the mandate narrows the starting stage too.
+  mandate_gate_load 2
+  if is_excluded_by_mandate "$stage"; then
+    echo "SDX sdx-stage: мандат МО исключает стартовый этап '$stage' ($(mandate_refusal_text "$stage")) — получите допустимый этап через 'sdx-stage.sh start-stage'." >&2
+    exit 2
+  fi
+
   # Step 6: file already exists -> exit 2 (unchanged, as before).
   if [ -f "$state" ]; then
     echo "SDX sdx-stage: session_state.json для сессии '$sid' уже существует — init не предназначен для повторной инициализации." >&2
@@ -294,6 +333,9 @@ cmd_next() {
     return 0
   fi
 
+  # ---- mandate gate (REQ-MAND-8..11): after priority 0 — a no_gates session never reads the mandate ----
+  mandate_gate_load 1
+
   # ---- --to mode (REQ-NAV-1, the sole surviving way to move to an earlier stage) ----
   if [ "$has_to" -eq 1 ]; then
     if ! stage_exists "$to_target"; then
@@ -308,6 +350,12 @@ cmd_next() {
     # no_code session even though `init`/forward `next` both refuse the same stage.
     if [ "$no_code" = "true" ] && is_excluded_by_no_code "$to_target"; then
       echo "SDX sdx-stage: no_code=true исключает этап '$to_target' из активного набора (REQ-SCALE-4) — переход --to на этот этап недоступен. Если объём сессии перерос процессную работу — сними флаг (`no_code: true -> false` в session_state.json, одноразовая эскалация) и повтори." >&2
+      exit 1
+    fi
+
+    # REQ-MAND-9: the same direction-independent rule for the mandate (Deployment is always excluded under it).
+    if is_excluded_by_mandate "$to_target"; then   # MAND-TO
+      echo "SDX sdx-stage: мандат МО исключает этап '$to_target' ($(mandate_refusal_text "$to_target")) — переход --to на этот этап недоступен; stage не изменён. Мандат выдаёт узел МО." >&2
       exit 1
     fi
 
@@ -390,7 +438,7 @@ cmd_next() {
   local idx candidate
   idx="$(stage_index "$stage")"
   candidate="$(stage_names | sed -n "$((idx + 1))p")"
-  while [ "$no_code" = "true" ] && is_excluded_by_no_code "$candidate" && [ "$candidate" != "Closeout" ]; do
+  while is_skipped "$candidate" "$no_code" && [ "$candidate" != "Closeout" ]; do   # MAND-SKIP
     idx=$((idx + 1))
     candidate="$(stage_names | sed -n "$((idx + 1))p")"
   done

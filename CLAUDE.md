@@ -81,11 +81,12 @@
 - `commands/`: Слэш-команды SDX (`/sdx:start`, `/sdx:next` и т.д. — неймспейс даёт имя плагина).
 - `agents/`: Инструкции специализированных агентов (YAML frontmatter: `name`, `description`, `tools`, `model`).
 - `hooks/hooks.json`: Проводка enforcement-хуков (пути через `${CLAUDE_PLUGIN_ROOT}`).
-- `sdx/`: Протокол сессий (`protocol.md`), hook-скрипты с тестами (`hooks/`, в т.ч. МО-хуки `mo-hook`/`mo-session`), шаблоны per-project конфигов (`templates/`), вендорённые инструменты лист-сессии мета-оркестратора (`mo/`: `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md` из sim-kit — источник истины вне репозитория, политика PROC-028 в протоколе).
+- `sdx/`: Протокол сессий (`protocol.md`), hook-скрипты с тестами (`hooks/`, в т.ч. МО-хуки `mo-hook`/`mo-session` — признаков МО два: `.mesh/endpoint.yaml` (стенды) и `.mesh/mandate.yaml` (мандат; режим мандата — оба файла); `hooks/lib/` — разбор мандата и тест-команды, `mandate-info.sh`/`mandate-scope.sh` — CLI мандата, `suites-gen.sh` — генерация `tests/suites.yaml`, `snippet-check.sh` — сверка SDX-блока `CLAUDE.md`), шаблоны per-project конфигов (`templates/`), вендорённые инструменты лист-сессии мета-оркестратора (`mo/`: `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md` из sim-kit — источник истины вне репозитория, политика PROC-028 в протоколе).
 
 В каждом целевом проекте (включая этот мета-репозиторий) живёт только **per-project слой**:
 - `.claude/sessions/<id>/`: Данные активной сессии. Сессия = ветка `sdx/<id>`, checkout'нутая в основном рабочем дереве (один CLI на весь жизненный цикл, без worktree — ADR-012); артефакты версионируются (tracked) инкрементальными коммитами на этой ветке; только эфемерные `.stopgate.*`-файлы игнорируются точечным паттерном.
 - `.claude/sdx/`: Per-project конфиги enforcement-слоя (`prod-guard.conf`, `verify-cmd.sh`) и маркер версии плагина `sdx-version` (пишет исключительно `/sdx:reconcile`, сверяет `/sdx:start`); также нетрекаемый кэш self-test в подкаталоге `.cache/` (gitignored).
+- `tests/suites.yaml`: Декларация тестов репозитория для узла МО (tracked; в целевых проектах создаётся `/sdx:reconcile`).
 - `docs/specs/`: Постоянное хранилище бизнес-спецификаций.
 - `docs/designs/`: Постоянное хранилище технических дизайнов.
 - `docs/history/plans/`: Архив выполненных планов реализации.

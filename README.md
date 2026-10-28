@@ -49,11 +49,14 @@ claude plugin install sdx@sdx --scope user
 | `agents/` | 9 субагентов: `ba`, `architect`, `lead-dev`, `developer`, `qa`, `reviewer`, `tech-writer`, `devops`, `auditor` |
 | `hooks/hooks.json` | Проводка enforcement-слоя (SessionStart / PreToolUse / Stop) |
 | `sdx/protocol.md` | Протокол сессий: состояние, единая шкала этапов и флаги, гейты, Closeout, import/export |
-| `sdx/hooks/` | Скрипты хуков (stop-gate, prod-guard, preflight, selftest, mo-hook, mo-session) и их тесты (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` — вызываемые командами CLI-скрипты, не проводка `hooks.json` |
+| `sdx/hooks/` | Скрипты хуков (stop-gate, prod-guard, preflight, selftest, mo-hook, mo-session) и их тесты (`test-*.sh`); `sdx-stage.sh`/`archive-verify.sh` — вызываемые командами CLI-скрипты, не проводка `hooks.json`; также `lib/` (разбор мандата и тест-команды), CLI мандата МО (`mandate-info.sh`, `mandate-scope.sh`), `suites-gen.sh` (генерация `tests/suites.yaml`), `snippet-check.sh` (сверка SDX-блока `CLAUDE.md`) |
+| `tests/suites.yaml` | Декларация тестов репозитория для узла МО (набор `unit` = полный прогон `.claude/sdx/verify-cmd.sh`); tracked, в проектах создаётся `/sdx:reconcile` |
 | `sdx/templates/` | Шаблоны per-project конфигов и SDX-блока для CLAUDE.md |
 | `sdx/mo/` | Вендорённые инструменты лист-сессии мета-оркестратора (sim-kit, версия в `SIMKIT_VERSION`): `mesh_endpoint.py`, `devagent_hook.py`, `MO-INTEROP.md`; из проводки `hooks.json` вызываются только обёртками `sdx/hooks/mo-hook.sh` / `mo-session.sh`; субагент `devops` вызывает `mesh_endpoint.py` напрямую с `PYTHONDONTWRITEBYTECODE=1`, активны лишь в проекте с `.mesh/endpoint.yaml` |
 
-Хуки safe-by-default: вне ветки `sdx/<id>` и без per-project конфигов они прозрачны (no-op), поэтому user-scope установка не мешает проектам, не использующим SDX. Исключение по признаку активации — МО-хуки (`mo-hook`, `mo-session`): они активны по наличию `.mesh/endpoint.yaml` в проекте, а не по ветке `sdx/<id>`; без этого файла — no-op.
+Хуки safe-by-default: вне ветки `sdx/<id>` и без per-project конфигов они прозрачны (no-op), поэтому user-scope установка не мешает проектам, не использующим SDX. Исключение по признаку активации — МО-хуки (`mo-hook`, `mo-session`): **два признака** — `.mesh/endpoint.yaml` (над стендами проекта стоит МО) и `.mesh/mandate.yaml` (мандат разработки: стадии, область, ветки, срок; режим мандата включён, только когда есть оба файла); они активны по наличию этих файлов в проекте, а не по ветке `sdx/<id>`; без `endpoint.yaml` — no-op.
+
+**Версия 2.4.0 — мандат МО и декларации.** В режиме мандата `mandate.stages` сужает активный набор этапов (`Deployment` исключён всегда), `/sdx:verify` проверяет, что изменения лежат в области мандата, Closeout при `delivery: pr|branch` оставляет ветку сессии узлу МО, `/sdx:status` показывает состояние МО; `/sdx:init`/`/sdx:reconcile` создают `tests/suites.yaml`; без `mandate.yaml` поведение прежнее.
 
 ## Единая шкала этапов и режимы-флаги
 

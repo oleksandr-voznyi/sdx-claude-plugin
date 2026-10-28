@@ -1,0 +1,9 @@
+{
+  "session_id": "intake-mo-dev-control-20261028",
+  "type": "intake",
+  "stage": "Discovery",
+  "gate_mode": "interactive",
+  "git_branch": "sdx/intake-mo-dev-control-20261028",
+  "no_code": true,
+  "no_gates": false
+}

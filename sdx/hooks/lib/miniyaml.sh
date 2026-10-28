@@ -73,7 +73,62 @@ my_parse() {
     SV = v
   }
   # flow_feed(s): accumulate one line of a flow list; when the closing bracket arrives, emit L/E records.
-  function flow_feed(s) { err("flow-список вне подмножества (разбор не реализован)") }
+  function flow_feed(s,    i, n, ch, q, prev, out, cpos, rest, inner, m, it, cur, k, t) {
+    n = length(s); q = ""; out = ""; prev = " "
+    for (i = 1; i <= n; i++) {
+      ch = substr(s, i, 1)
+      if (q != "") {
+        out = out ch
+        if (q == "\"" && ch == "\\") { out = out substr(s, i + 1, 1); i++ }
+        else if (ch == q) q = ""
+        prev = ch; continue
+      }
+      if (ch == "\"" || ch == SQ) { q = ch; out = out ch; prev = ch; continue }
+      if (ch == "#" && (prev == " " || prev == "\t")) break
+      out = out ch; prev = ch
+    }
+    if (q != "") err("кавычка не закрыта")
+    fl_buf = fl_buf (fl_buf == "" ? "" : " ") out
+    n = length(fl_buf); q = ""; cpos = 0
+    for (i = 2; i <= n; i++) {
+      ch = substr(fl_buf, i, 1)
+      if (q != "") {
+        if (q == "\"" && ch == "\\") i++
+        else if (ch == q) q = ""
+        continue
+      }
+      if (ch == "\"" || ch == SQ) q = ch
+      else if (ch == "[") err("вложенный список или flow вне подмножества")
+      else if (ch == "{" || ch == "}") err("flow-словарь вне подмножества")
+      else if (ch == "]") { cpos = i; break }
+    }
+    if (!cpos) { fl_active = 1; return }
+    fl_active = 0
+    rest = trim(substr(fl_buf, cpos + 1))
+    if (rest != "") err("лишние символы после ] flow-списка")
+    inner = trim(substr(fl_buf, 2, cpos - 2))
+    if (inner == "") { printf "E%s%s\n", US, fl_path; return }
+    m = 0; cur = ""; q = ""; n = length(inner)
+    for (i = 1; i <= n; i++) {
+      ch = substr(inner, i, 1)
+      if (q != "") {
+        cur = cur ch
+        if (q == "\"" && ch == "\\") { cur = cur substr(inner, i + 1, 1); i++ }
+        else if (ch == q) q = ""
+        continue
+      }
+      if (ch == "\"" || ch == SQ) { q = ch; cur = cur ch; continue }
+      if (ch == ",") { it[++m] = trim(cur); cur = ""; continue }
+      cur = cur ch
+    }
+    it[++m] = trim(cur)
+    if (it[m] == "" && m > 1) m--
+    for (k = 1; k <= m; k++) {
+      if (it[k] == "") err("пустой элемент flow-списка")
+      scalar(it[k])
+      printf "L%s%s%s%s\n", US, fl_path, US, SV
+    }
+  }
   BEGIN { SQ = "\047"; depth = 0; content = 0; failed = 0; fl_active = 0; rootind = -1 }
   {
     curln = NR

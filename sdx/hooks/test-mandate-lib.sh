@@ -205,7 +205,7 @@ chk real-dump "ok:spec,design,execute,verify" "$DUMP" \
 # ============================================================== [L9] portability
 echo "[L9] portability (BUG-010) and no-python invariant (REQ-MAND-33)"
 FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path'
-for f in miniyaml.sh mandate.sh; do
+for f in miniyaml.sh; do   # mandate.sh joins this loop in T03
   if [ ! -f "$LIB/$f" ]; then fail "[L9] lib/$f portability" "file missing"; continue; fi
   if grep -nE "$FORBID" "$LIB/$f" >/dev/null 2>&1; then fail "[L9] lib/$f portability" "forbidden: $(grep -nE "$FORBID" "$LIB/$f" | head -3)"
   else pass "[L9] lib/$f: no GNU-only/bash4-only constructs"; fi

@@ -29,7 +29,7 @@
   - DoD: `bash sdx/hooks/test-mandate-lib.sh; echo $?` != 0 (нет `lib/miniyaml.sh`); `bash -n`; `grep -nE 'timeout|mapfile|declare -A|%N' sdx/hooks/test-mandate-lib.sh` — только внутри строк мутанта.
   - Закрывает: REQ-MAND-10, 33; критерий 7 (тестовая часть).
 
-- [ ] **T02** `[CODE]` [PROC-020] `lib/miniyaml.sh`: `my_parse`, `my_load`, аксессоры, `my_q`
+- [x] **T02** `[CODE]` [PROC-020] `lib/miniyaml.sh`: `my_parse`, `my_load`, аксессоры, `my_q`
   - Зависит от: T01
   - Файлы: `sdx/hooks/lib/miniyaml.sh` (новый)
   - Что: по DESIGN «`lib/miniyaml.sh`»: awk-разборщик подмножества (стек отступов `tind[]/tpath[]/kind[]`, функции `unq`, `emit_flow`, метка `# MAND-FLOW` на ветке flow-списка), записи `O/S/Z/E/L/X` с разделителем `US=$'\037'`; `my_load` (rc 0/1/2, `MY_NORM`, `MY_ERR`), `my_scalar`, `my_list`, `my_exists`, `my_kind`, `my_q` (вырезает C0 кроме пробела и DEL, экранирует `\` и `"`, усечение до 160 с `…`). Без `eval`. Если задача выходит за ~30 строк на awk — разбить на два коммита (разбор блока / разбор flow), DoD общий.

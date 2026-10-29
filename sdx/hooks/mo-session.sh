@@ -33,7 +33,7 @@ if ! command -v jq >/dev/null 2>&1; then
   say "$P jq не найден — состав входящих не показан; в режиме deny хук mo-hook блокирует записи (fail-closed), в notice — пропускает проверку. Установите jq."
 fi
 
-mnote=""; [ -f "$proj/.mesh/mandate.yaml" ] && mnote=" Мандат .mesh/mandate.yaml читается без python3 — см. строки SDX mandate ниже (или сообщение о недоступной lib/mandate.sh)."
+mnote=""; [ -f "$proj/.mesh/mandate.yaml" ] && mnote=" Мандат .mesh/mandate.yaml читается без python3 — группа его полей (или сообщение о недоступной lib/mandate.sh) идёт ниже."
 if ! command -v python3 >/dev/null 2>&1 || ! PYTHONDONTWRITEBYTECODE=1 python3 -c 'import yaml' >/dev/null 2>&1; then
   say "$P над проектом есть МО (.mesh/endpoint.yaml), но python3/PyYAML недоступен — в режиме deny mo-hook будет блокировать КАЖДЫЙ вызов инструмента (включая ls) до установки зависимостей, не только записи (fail-closed), в режиме notice проверка exec_paths пропускается. pull/inbox/leases пропущены. Установите python3 и PyYAML.$mnote"
   mand_show

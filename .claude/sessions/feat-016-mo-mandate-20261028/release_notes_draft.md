@@ -19,7 +19,7 @@
 - Видимость вывода SessionStart для модели **не проверена** (DEBT-045); гарантированный канал — вывод `/sdx:start`.
 - Мандат реального узла и чтение `tests/suites.yaml` через `dev.py run_suites` **не проверены вживую** (проверена форма по эталону и фикстурам; ручной сценарий — в сессии).
 - Проза моста Closeout (`archive.md`) проверяется только ручным прогоном.
-- Запись через `Bash` вне области мандата хук останавливает best-effort — разбором текста команды (как для `exec_paths`); `Bash`-пути к `.mesh/*` обёртка не охраняет — подмену мандата обнаруживает узел по `mandate_digest` и аудитом пакета.
+- Запись через `Bash` вне области мандата хук разбирает best-effort по тексту команды (как для `exec_paths`): при `mandate.on_write: deny` останавливает, при `notice` — шлёт узлу `scope.write`; `Bash`-пути к `.mesh/*` обёртка не охраняет — подмену мандата обнаруживает узел по `mandate_digest` и аудитом пакета.
 - Разбор мандата — подмножество YAML (чистый bash); формы вне подмножества отказывают с указанием причины и сверены с `yaml.safe_load` оракулом там, где доступны python/PyYAML.
 - `/sdx:pr`, `CHANGE.yaml`, `--from-order` — FEAT-017; headless — FEAT-018.
 - Узлы со старым ядром могут видеть `mesh.version-skew` на конвертах 0.9.x — ожидаемо.
@@ -47,7 +47,7 @@ Cumulative release 2.3.1 + 2.4.0, 2026-10-28 … 2026-10-29: the MO node's devel
 - Whether the model sees SessionStart output is **not verified** (DEBT-045); the guaranteed channel is the `/sdx:start` output.
 - A real node's mandate and reading `tests/suites.yaml` via `dev.py run_suites` are **not verified live** (the format is checked against the reference and fixtures; the manual scenario is in the session).
 - The Closeout bridge prose (`archive.md`) is verified by a manual run only.
-- `Bash` writes outside the mandate scope are stopped best-effort by parsing the command text (as for `exec_paths`); `Bash` paths into `.mesh/*` are not guarded by the wrapper — a tampered mandate is detected by the node via `mandate_digest` and the package audit.
+- `Bash` writes outside the mandate scope are detected best-effort by parsing the command text (as for `exec_paths`): blocked under `mandate.on_write: deny`, reported to the node as `scope.write` under `notice`; `Bash` paths into `.mesh/*` are not guarded by the wrapper — a tampered mandate is detected by the node via `mandate_digest` and the package audit.
 - The mandate parser handles a YAML subset (pure bash); forms outside it are refused with a reason and cross-checked against `yaml.safe_load` as an oracle where python/PyYAML exist.
 - `/sdx:pr`, `CHANGE.yaml`, `--from-order` are FEAT-017; headless is FEAT-018.
 - Nodes on an older core may show `mesh.version-skew` on 0.9.x envelopes — expected.

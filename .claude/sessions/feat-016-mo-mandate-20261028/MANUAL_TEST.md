@@ -45,7 +45,7 @@ mandate:
 1. Выдать мандат в `FX`: `./mo mandate issue …` (точная команда **не проверена** проектированием) либо `python3 -I -c 'import sys; sys.path.insert(0,"<sim-kit>/core"); import dev; print(dev.mandate_yaml("<executor>"))' > FX/.mesh/mandate.yaml` (также не проверена; нужен реестр узла).
 2. `CLAUDE_PROJECT_DIR=FX bash <плагин>/sdx/hooks/mandate-info.sh show`.
 3. На сессии-фикстуре в `FX`: `CLAUDE_PROJECT_DIR=FX bash <плагин>/sdx/hooks/sdx-stage.sh start-stage "Discovery" false false`, затем для стадий вне `stages` — `start-stage`/`next` на исключённый этап.
-**Ожидаемый результат:** файл узла разбирается без `MANDATE-ERROR`; `show` печатает стадии/область/`delivery`/`valid_until`/`digest` как данные; `start-stage` на стадию вне `stages` — rc 0 и следующий допустимый этап в stdout (rc 2 даёт только `init`), этап `Deployment` исключён всегда; `Verification`/`Closeout` активны.
+**Ожидаемый результат:** файл узла разбирается без `MANDATE-ERROR`; при общей фикстуре (`scope.paths: [src/**]`) печатается предупреждение «область мандата не покрывает .claude/sessions/» — ожидаемо; `show` печатает стадии/область/`delivery`/`valid_until`/`digest` как данные; `start-stage` на стадию вне `stages` — rc 0 и следующий допустимый этап в stdout (rc 2 даёт только `init`), этап `Deployment` исключён всегда; `Verification`/`Closeout` активны.
 **Если выдать мандат нельзя:** записать «не проверено» (допущение: форма фикстуры совпадает с формой узла), приложить вывод ошибки.
 **Результат:** НЕ ПРОВЕРЕНО (решение пользователя 2026-10-29; проверить первой живой сессией под узлом)
 **Фактически:** ______
@@ -62,7 +62,7 @@ mandate:
 **Фактически:** ______
 
 ## Случай 4. Мост Closeout `delivery: pr` (проза `archive.md`, критерий 16)
-**Предусловие:** одноразовая сессия в `FX` с мандатом `delivery: pr`, `stages` включает `verify`; дерево чистое.
+**Предусловие:** одноразовая сессия в `FX` с мандатом `delivery: pr`; вариант общей фикстуры для этого случая: `stages: [spec, design, execute, verify]`, `on_write: notice` (или `on_write: deny` с `docs_paths: [docs/**, .claude/sessions/**]` — иначе хук заблокирует артефакты сессии); дерево чистое.
 **Шаги:**
 1. Довести сессию до Closeout, вызвать `/sdx:archive`.
 2. Пройти чек-лист: шаги 1–5; на шагах 6–8 отметка `(n/a, мандат)`.

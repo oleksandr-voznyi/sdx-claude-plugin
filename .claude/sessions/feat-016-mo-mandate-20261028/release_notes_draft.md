@@ -12,15 +12,14 @@
 - **Абзац сниппета** `claude-md-snippet.md`: одно предложение о мандате; `snippet-check.sh` сообщает `ABSENT|BROKEN|OK|STALE`, `/sdx:reconcile` предлагает обновление.
 - **Перевендоринг sim-kit (бывший 2.3.1).** `sdx/mo/` обновлён до sim-kit 0.9.1 (хеши в `SIMKIT_SHA256`); хук сам ставит `sys.dont_write_bytecode`, мутант `BYTECODE-FS` снят; для инстансов с `self_deploy` `devops` деплоит сам (решение коллизии в пользу эталона).
 - Тест-сьют: 15 → 19 сьютов (новые: `test-mandate-lib`, `test-mandate-scope`, `test-suites-gen`, `test-snippet-check`); полный прогон ≈ 80–125 с в зависимости от загрузки машины. `hooks/hooks.json`, `stop-gate.sh`, `archive-verify.sh`, `agents/reviewer.md` и `sdx/mo/*` относительно 2.3.0 не менялись (кроме перевендоринга `sdx/mo/`).
-
-#- Обёртка `mo-hook.sh`: при `deny`, пришедшем из мандата, проверяет PyYAML до запуска хука и при его отсутствии блокирует запись (`MAND-PYYAML`); при `deny` из `endpoint.yaml` поведение прежнее.
+- Обёртка `mo-hook.sh`: при `deny`, пришедшем из мандата, проверяет PyYAML до запуска хука и при его отсутствии блокирует запись (`MAND-PYYAML`); при `deny` из `endpoint.yaml` поведение прежнее.
 
 ## Границы
 
 - Видимость вывода SessionStart для модели **не проверена** (DEBT-045); гарантированный канал — вывод `/sdx:start`.
 - Мандат реального узла и чтение `tests/suites.yaml` через `dev.py run_suites` **не проверены вживую** (проверена форма по эталону и фикстурам; ручной сценарий — в сессии).
 - Проза моста Closeout (`archive.md`) проверяется только ручным прогоном.
-- Запись через текст `Bash` вне области мандата хуком не охраняется (мягкая граница, как в эталоне); обнаружение — аудит пакета у узла.
+- Запись через `Bash` вне области мандата хук останавливает best-effort — разбором текста команды (как для `exec_paths`); `Bash`-пути к `.mesh/*` обёртка не охраняет — подмену мандата обнаруживает узел по `mandate_digest` и аудитом пакета.
 - Разбор мандата — подмножество YAML (чистый bash); формы вне подмножества отказывают с указанием причины и сверены с `yaml.safe_load` оракулом там, где доступны python/PyYAML.
 - `/sdx:pr`, `CHANGE.yaml`, `--from-order` — FEAT-017; headless — FEAT-018.
 - Узлы со старым ядром могут видеть `mesh.version-skew` на конвертах 0.9.x — ожидаемо.
@@ -41,15 +40,14 @@ Cumulative release 2.3.1 + 2.4.0, 2026-10-28 … 2026-10-29: the MO node's devel
 - **Snippet paragraph** in `claude-md-snippet.md`: one sentence on the mandate; `snippet-check.sh` reports `ABSENT|BROKEN|OK|STALE`, `/sdx:reconcile` offers an update.
 - **sim-kit re-vendoring (formerly 2.3.1).** `sdx/mo/` is updated to sim-kit 0.9.1 (hashes in `SIMKIT_SHA256`); the hook now sets `sys.dont_write_bytecode` itself, the `BYTECODE-FS` mutant is removed; for `self_deploy` instances `devops` deploys itself (the collision resolved in favour of the reference).
 - Test suite: 15 -> 19 suites (new: `test-mandate-lib`, `test-mandate-scope`, `test-suites-gen`, `test-snippet-check`); a full run takes ~80-125 s depending on machine load. `hooks/hooks.json`, `stop-gate.sh`, `archive-verify.sh`, `agents/reviewer.md` and `sdx/mo/*` are unchanged relative to 2.3.0 (apart from the `sdx/mo/` re-vendoring).
-
-#- `mo-hook.sh`: when `deny` comes from the mandate, the wrapper probes PyYAML before running the hook and blocks the write if it is missing (`MAND-PYYAML`); `deny` from `endpoint.yaml` behaves as before.
+- `mo-hook.sh`: when `deny` comes from the mandate, the wrapper probes PyYAML before running the hook and blocks the write if it is missing (`MAND-PYYAML`); `deny` from `endpoint.yaml` behaves as before.
 
 ## Boundaries
 
 - Whether the model sees SessionStart output is **not verified** (DEBT-045); the guaranteed channel is the `/sdx:start` output.
 - A real node's mandate and reading `tests/suites.yaml` via `dev.py run_suites` are **not verified live** (the format is checked against the reference and fixtures; the manual scenario is in the session).
 - The Closeout bridge prose (`archive.md`) is verified by a manual run only.
-- Writes via `Bash` text outside the mandate scope are not guarded by the hook (a soft boundary, as in the reference); detection is the node's package audit.
+- `Bash` writes outside the mandate scope are stopped best-effort by parsing the command text (as for `exec_paths`); `Bash` paths into `.mesh/*` are not guarded by the wrapper — a tampered mandate is detected by the node via `mandate_digest` and the package audit.
 - The mandate parser handles a YAML subset (pure bash); forms outside it are refused with a reason and cross-checked against `yaml.safe_load` as an oracle where python/PyYAML exist.
 - `/sdx:pr`, `CHANGE.yaml`, `--from-order` are FEAT-017; headless is FEAT-018.
 - Nodes on an older core may show `mesh.version-skew` on 0.9.x envelopes — expected.

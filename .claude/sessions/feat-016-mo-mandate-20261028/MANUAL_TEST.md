@@ -64,7 +64,7 @@ digest: "sha256:0000"
 1. Довести сессию до Closeout, вызвать `/sdx:archive`.
 2. Пройти чек-лист: шаги 1–5; на шагах 6–8 отметка `(n/a, мандат)`.
 3. Проверить: `CLAUDE_PROJECT_DIR=FX bash <плагин>/sdx/hooks/mandate-info.sh closeout-mode` и `… closeout-check <sid>`; `git branch --list 'sdx/*'`.
-**Ожидаемый результат:** `archive-verify.sh` не вызывается; `closeout-check` зелёный; ветка `sdx/<sid>` осталась; пользователю предложено создать `change/<C>-<exec>` squash-коммитом и `CHANGE.yaml`. При `delivery: artifact.offer` чек-лист штатный.
+**Ожидаемый результат:** `archive-verify.sh` не вызывается; `closeout-check` зелёный; ветка `sdx/<sid>` осталась; пользователю предложено создать `change/<C>-<exec>` squash-коммитом и `CHANGE.yaml`. При `delivery: artifact.offer` — `bridge:offer`: тот же мост Closeout плюс шаг отправки оффера один раз (при уже отправленном — `(уже отправлен: <msg_id>)`).
 **Результат:** НЕ ПРОВЕРЕНО (решение пользователя 2026-10-29; проверить первой живой сессией под узлом)
 **Фактически:** ______
 

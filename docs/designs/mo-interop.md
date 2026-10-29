@@ -608,7 +608,7 @@ Frontmatter агента (`description`, `tools`, `model`) не меняется
 
 ## Дельта FEAT-016 (плагин 2.4.0, сессия `feat-016-mo-mandate-20261028`)
 
-Полный дизайн — `DESIGN.md` сессии (после Closeout — `docs/history/`); сжатый перенос. Решения — ADR-020 и ADR-021, поправки 2026-10-28. **Два признака:** `endpoint.yaml` — стенды (0.7.x, FEAT-015), `mandate.yaml` — процесс изменений (0.9); режим мандата включён, только когда есть оба файла. Без `mandate.yaml` ни один новый байт кода не выполняется (ленивая загрузка lib), кроме двух названных исключений (`tests/suites.yaml`, новое содержание `/sdx:status` и сниппета).
+Полный дизайн — `DESIGN.md` сессии (после Closeout — `docs/history/`); сжатый перенос. Решения — ADR-020 и ADR-021, поправки 2026-10-28. **Два признака:** `endpoint.yaml` — стенды (0.7.x, FEAT-015), `mandate.yaml` — процесс изменений (0.9); режим мандата включён, только когда есть оба файла. Без `mandate.yaml` ни один новый байт (кроме названных исключений REQ-MAND-1, включая К-4 — см. ниже) кода не выполняется (ленивая загрузка lib), кроме двух названных исключений (`tests/suites.yaml`, новое содержание `/sdx:status` и сниппета).
 
 - [ADDED] `sdx/hooks/lib/miniyaml.sh` (разбор подмножества YAML на awk, записи `O/S/Z/E/L/X`, строже `yaml.safe_load` в сторону отказа) и `lib/mandate.sh` (режим, стадии, `glob_any`-эталон, срок, показ с санитизацией и предупреждениями области по каждому каталогу).
 - [ADDED] `sdx/hooks/mandate-info.sh` (`mode|show|status|closeout-mode|closeout-check`) и `mandate-scope.sh` (`diff ⊆ область`, `--planned`, идемпотентный блок `SDX-MANDATE-SCOPE` в `verification_report.md` — существующий гейт `^### \[FAIL\]` без правок).

@@ -154,7 +154,11 @@ chk_offer_once_devops() {  # devops.md: the Closeout-bridge sentence names the s
 }
 chk_no_old_bridge_phrase() {  # negative invariant: the bridge is not tied to 'delivery: pr|branch' only (FAIL-1, round 2)
   if grep -qF 'delivery: pr|branch' "$1"; then echo "stale 'delivery: pr|branch' in $1"; return 1; fi
+  if grep -Eq 'artifact\.offer[^;.]{0,80}(штатн|standard)|Closeout (штатн|is the standard)' "$1"; then echo "stale 'artifact.offer ... standard Closeout' phrase in $1"; return 1; fi
   return 0
+}
+chk_offer_once_prose() {  # next.md / CLAUDE.md / ADR-020 amendment: a line naming the offer also names the skip of an already sent one (round 3)
+  grep -F 'offer' "$1" | grep -qF 'уже отправлен' || { echo "no 'offer' line with 'уже отправлен' in $1"; return 1; }
 }
 chk_reconcile_wiring() {  # reconcile.md items (е)/(ж): the scripts are actually called (REQ-MAND-20, 25)
   local f="$1"
@@ -346,11 +350,23 @@ expect_ok "protocol.md offer once" chk_offer_once "$PROTOCOL"
 sed 's/уже отправлен/zz-removed/g' "$ARCHIVE_MD" > "$TMP/t12b.md"; expect_red "red: archive.md without 'уже отправлен'" chk_offer_once "$TMP/t12b.md"
 sed 's/уже отправлен/zz-removed/g' "$PROTOCOL" > "$TMP/t12c.md"; expect_red "red: protocol.md without 'уже отправлен'" chk_offer_once "$TMP/t12c.md"
 expect_ok "devops.md offer once" chk_offer_once_devops "$DEVOPS_MD"
+sed 's/уже отправлен/zz-removed/g' "$DEVOPS_MD" > "$TMP/t12e.md"; expect_red "red: devops.md without 'уже отправлен'" chk_offer_once_devops "$TMP/t12e.md"
+adr_section "$DECISIONS" ADR-020 > "$TMP/adr020.md"
+CLAUDE_MD="$ROOT/CLAUDE.md"
+for pair in "next.md:$NEXT_MD" "CLAUDE.md:$CLAUDE_MD" "ADR-020:$TMP/adr020.md"; do
+  expect_ok "${pair%%:*} offer once" chk_offer_once_prose "${pair#*:}"
+  sed 's/уже отправлен/zz-removed/g' "${pair#*:}" > "$TMP/t12f.md"
+  expect_red "red: ${pair%%:*} without 'уже отправлен'" chk_offer_once_prose "$TMP/t12f.md"
+done
 adr_section "$DECISIONS" ADR-021 > "$TMP/adr021.md"
 for pair in "protocol.md:$PROTOCOL" "ADR-021:$TMP/adr021.md" "README.md:$README_RU" "README.en.md:$README_EN" "archive.md:$ARCHIVE_MD" "devops.md:$DEVOPS_MD"; do
   expect_ok "no stale phrase in ${pair%%:*}" chk_no_old_bridge_phrase "${pair#*:}"
   { cat "${pair#*:}"; echo 'Closeout при `delivery: pr|branch` — мост'; } > "$TMP/t12d.md"
   expect_red "red: ${pair%%:*} with stale 'delivery: pr|branch'" chk_no_old_bridge_phrase "$TMP/t12d.md"
+  { cat "${pair#*:}"; echo 'При `artifact.offer` Closeout штатный.'; } > "$TMP/t12g.md"
+  expect_red "red: ${pair%%:*} with stale 'artifact.offer Closeout штатный'" chk_no_old_bridge_phrase "$TMP/t12g.md"
+  { cat "${pair#*:}"; echo 'With artifact.offer Closeout is the standard one.'; } > "$TMP/t12h.md"
+  expect_red "red: ${pair%%:*} with stale 'standard one'" chk_no_old_bridge_phrase "$TMP/t12h.md"
 done
 
 echo ""

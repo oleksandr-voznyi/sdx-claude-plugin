@@ -19,7 +19,7 @@ status: draft (Technical Design, сессия `feat-016-mo-mandate-20261028`; в
 - **D-5. Область на `/sdx:verify` — скрипт `sdx/hooks/mandate-scope.sh`**, который сам дописывает блок в `verification_report.md` между маркерами (идемпотентно). Находка не зависит от ревьюера (у него нет `Bash`); гейт `gate_ok` (`^### \[FAIL\]`) её видит без правок `sdx-stage.sh`.
 - **D-6. Переносы Closeout проверяются «по плану»** (`--planned`), потому что на момент Verification их коммитов в диффе ещё нет (К-3).
 - **D-7. `tests/suites.yaml` — скрипт `sdx/hooks/suites-gen.sh` + `lib/test-cmd.sh`**; `stop-gate.sh` **не трогается** (его копируют `selftest`/`test-selftest` вместе с `lib/resolve-session.sh`; правка импорта ломает изоляцию self-test). Единственность правды обеспечивает **тест-близнец**: на фикстурах каждого класса команды сравнивается то, что запустил настоящий `stop-gate.sh`, с тем, что вернул резолвер.
-- **D-8. Мост Closeout — `mandate-info.sh closeout-mode|closeout-check`** (детерминированная часть) + проза `archive.md`/протокола. `archive-verify.sh` не меняется и при мандате `pr|branch` не вызывается.
+- **D-8. Мост Closeout — `mandate-info.sh closeout-mode|closeout-check`** (детерминированная часть) + проза `archive.md`/протокола. `archive-verify.sh` не меняется и при мандате не вызывается. *(Круг 2 верификации, 2026-10-29: мост действует для любого определённого `delivery`, включая `artifact.offer` -> `bridge:offer`.)*
 - **D-9. Показ мандата — одна функция `mandate_report`** (`lib/mandate.sh`); её тексты видят и SessionStart (`mo-session.sh`), и `/sdx:start` (`mandate-info.sh show`) — расхождений формулировок быть не может.
 
 ### Новые и изменяемые файлы (сводка)
@@ -159,7 +159,7 @@ mandate_glob_one() {   # $1 path, $2 pattern
 | `mode` | `on` \| `orphan` \| `none` |
 | `show` | при `on` — `mandate_report "$proj" "SDX mandate:"`; при `orphan` — `mandate_orphan_line`; при `none` — пусто |
 | `status` | одна строка МО (формат в «Схеме данных») |
-| `closeout-mode` | `standard` (нет режима мандата или `delivery: artifact.offer`) \| `bridge` (`on` и `delivery ∈ {pr,branch}`) \| `undefined:<delivery>` (`on`, значение иное — К-5) \| `error:<причина>` |
+| `closeout-mode` | `standard` (нет режима мандата) \| `bridge` (`on` и `delivery ∈ {pr,branch}`) \| `bridge:offer` (`on` и `delivery: artifact.offer`; поправка 2026-10-29, было `standard`) \| `undefined:<delivery>` (`on`, значение иное — К-5) \| `error:<причина>` |
 | `closeout-check <sid>` | `OK`-строки либо `FAIL <причина>`; rc 0/1. Проверки: текущая ветка `== sdx/<sid>`; `git status --porcelain` пуст; в `HEAD` нет путей под `.claude/sessions/<sid>/` (`git ls-tree -r --name-only HEAD`). Ветка не удаляется и не сливается |
 
 ### [ADDED] `sdx/hooks/mandate-scope.sh` — `diff ⊆ область` (REQ-MAND-12…15)

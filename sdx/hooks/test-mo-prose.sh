@@ -146,6 +146,16 @@ chk_bridge() {  # Closeout bridge under a mandate (REQ-MAND-23, 23a)
   grep -F 'archive-verify.sh' "$f" | grep -qF 'не вызывается' || { echo "no line saying archive-verify.sh 'не вызывается' in $f"; return 1; }
   return 0
 }
+chk_offer_once() {  # the offer is sent once: the bridge step is skipped when already sent (WARN-1, round 2)
+  grep -F 'bridge:offer' "$1" | grep -qF 'уже отправлен' || { echo "no 'bridge:offer' line with 'уже отправлен' in $1"; return 1; }
+}
+chk_offer_once_devops() {  # devops.md: the Closeout-bridge sentence names the skip of an already sent offer
+  grep -F 'bridge:offer' "$1" | grep -qF 'уже отправлен' || { echo "no 'bridge:offer' line with 'уже отправлен' in $1"; return 1; }
+}
+chk_no_old_bridge_phrase() {  # negative invariant: the bridge is not tied to 'delivery: pr|branch' only (FAIL-1, round 2)
+  if grep -qF 'delivery: pr|branch' "$1"; then echo "stale 'delivery: pr|branch' in $1"; return 1; fi
+  return 0
+}
 chk_reconcile_wiring() {  # reconcile.md items (е)/(ж): the scripts are actually called (REQ-MAND-20, 25)
   local f="$1"
   grep -F '(е)' "$f" | grep -F 'suites-gen.sh' | grep -qF -- '--check' || { echo "no (е) line calling suites-gen.sh --check in $f"; return 1; }
@@ -174,6 +184,8 @@ chk_verify_planned() {  # verify.md: the rule that computes --planned keys (REQ-
   for t in '`docs/specs/` — если в сессии есть `SPEC.md` или `change_note.md`' '`docs/designs/` — если есть `DESIGN.md`' '`docs/history/plans/` — если есть `PLAN.md`' '`docs/backlog/` — всегда' '`docs/DECISIONS.md`'; do
     printf '%s' "$l" | grep -qF -- "$t" || { echo "--planned rule lacks '$t' in $1"; return 1; }
   done
+  printf '%s' "$l" | grep -qF 'docs_in_repo: none' || { echo "--planned rule lacks 'docs_in_repo: none' in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'не передаются' || { echo "--planned rule lacks 'не передаются' in $1"; return 1; }
 }
 chk_verify_scope() {
   local f="$1" t
@@ -328,6 +340,20 @@ for t in 'bridge:offer' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec
 done
 
 echo ""
+echo "[12b] offer sent once (archive.md, protocol.md, devops.md); no stale 'delivery: pr|branch' bridge phrase"
+expect_ok "archive.md offer once" chk_offer_once "$ARCHIVE_MD"
+expect_ok "protocol.md offer once" chk_offer_once "$PROTOCOL"
+sed 's/уже отправлен/zz-removed/g' "$ARCHIVE_MD" > "$TMP/t12b.md"; expect_red "red: archive.md without 'уже отправлен'" chk_offer_once "$TMP/t12b.md"
+sed 's/уже отправлен/zz-removed/g' "$PROTOCOL" > "$TMP/t12c.md"; expect_red "red: protocol.md without 'уже отправлен'" chk_offer_once "$TMP/t12c.md"
+expect_ok "devops.md offer once" chk_offer_once_devops "$DEVOPS_MD"
+adr_section "$DECISIONS" ADR-021 > "$TMP/adr021.md"
+for pair in "protocol.md:$PROTOCOL" "ADR-021:$TMP/adr021.md" "README.md:$README_RU" "README.en.md:$README_EN" "archive.md:$ARCHIVE_MD" "devops.md:$DEVOPS_MD"; do
+  expect_ok "no stale phrase in ${pair%%:*}" chk_no_old_bridge_phrase "${pair#*:}"
+  { cat "${pair#*:}"; echo 'Closeout при `delivery: pr|branch` — мост'; } > "$TMP/t12d.md"
+  expect_red "red: ${pair%%:*} with stale 'delivery: pr|branch'" chk_no_old_bridge_phrase "$TMP/t12d.md"
+done
+
+echo ""
 echo "[13] commands/verify.md: step 6a calls mandate-scope.sh --into … --planned"
 expect_ok "verify.md" chk_verify_scope "$VERIFY_MD"
 for t in 'mandate-scope\.sh' '--into' '--planned'; do
@@ -386,7 +412,7 @@ for t in 'Ограничение цели мандатом МО' 'mandate\.stage
   sed "s/$t/zz-removed/g" "$NEXT_MD" > "$TMP/t18f.md"; expect_red "red: next.md without '$t'" chk_next_mandate "$TMP/t18f.md"
 done
 expect_ok "verify.md --planned rule" chk_verify_planned "$VERIFY_MD"
-for t in 'если в сессии есть `SPEC.md` или `change_note.md`' 'если есть `DESIGN.md`' 'если есть `PLAN.md`' '`docs\/backlog\/` — всегда' '`docs\/DECISIONS.md`'; do
+for t in 'если в сессии есть `SPEC.md` или `change_note.md`' 'если есть `DESIGN.md`' 'если есть `PLAN.md`' '`docs\/backlog\/` — всегда' '`docs\/DECISIONS.md`' 'docs_in_repo: none' 'не передаются'; do
   sed "s/$t/zz-removed/g" "$VERIFY_MD" > "$TMP/t18g.md"; expect_red "red: verify.md --planned rule without '$t'" chk_verify_planned "$TMP/t18g.md"
 done
 

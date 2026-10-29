@@ -7,7 +7,7 @@
 #   bash mandate-info.sh mode [proj]                  on | orphan | none
 #   bash mandate-info.sh show [proj]                  mandate report (on) | one warning line (orphan) | nothing
 #   bash mandate-info.sh status [proj]                one "МО: ..." line for /sdx:status
-#   bash mandate-info.sh closeout-mode [proj]         standard | bridge | undefined:<delivery> | error:<reason>
+#   bash mandate-info.sh closeout-mode [proj]         standard | bridge | bridge:offer | undefined:<delivery> | error:<reason>
 #   bash mandate-info.sh closeout-check <sid> [proj]  OK/FAIL lines; rc 0 | 1
 # proj defaults to ${CLAUDE_PROJECT_DIR:-.}. rc 0 everywhere except closeout-check (0/1) and usage errors (2).
 set -uo pipefail

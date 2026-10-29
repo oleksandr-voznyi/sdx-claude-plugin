@@ -69,7 +69,7 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
    sim-kit допускает любые подмножества, `dev.py lint`). Исключение — `Verification` и `Closeout`: активны всегда (ADR-020);
    если `verify` в мандате отсутствует, `Verification` остаётся локальным полом исполнителя (stop-gate + ревью) и не
    считается сдачей узлу. `Deployment` — **при мандате исключён всегда** (решение пользователя по эталону 0.9.1: «Deployment при мандате всегда у узла»;
-   `change.promote` — узла); `artifact.offer` при мандате отправляется на `Execution`/`Verification`, ADR-021 п.7 остаётся для
+   `change.promote` — узла); `artifact.offer` при мандате отправляется один раз — на шаге моста Closeout (`bridge:offer`; если уже отправлен на `Execution`/`Verification` — пропуск), ADR-021 п.7 остаётся для
    `endpoint.yaml` без мандата. Это датированная поправка
    ADR-020 — часть поставки. Попытка `/sdx:next --to <stage>` на исключённый мандатом этап → отказ `sdx-stage.sh` с записью
    `[ERROR]` в лог (как для любого неактивного этапа); единственный писатель `stage` остаётся `sdx-stage.sh`. Отображение — подтверждение владельца МО
@@ -89,7 +89,7 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
    `dev.py:374`; для `client-harness` `lint` узла дополнительно запрещает `dev`/`stage`/`main` — `dev.py:105`, для прочих
    исполнителей защищённые ветки задаёт `policy/dev.yaml` узла) и создание тегов — не его действие (`change.merge`/
    `change.promote` узла); `prod-guard` и stop-gate не ослабляются (ADR-021, ответная записка §2.1).
-   **Мост до `FEAT-017` (только `delivery: pr|branch`; при `artifact.offer` Closeout штатный):** чек-лист Closeout 2.4.0
+   **Мост до `FEAT-017` (любой определённый `delivery`; для `artifact.offer` — `bridge:offer`):** чек-лист Closeout 2.4.0
    выполняет шаги 1–5; шаги 6–8 отмечаются `(n/a, мандат)`, `archive-verify.sh` не вызывается (его инвариант «ветка слита»
    при мандате ложен по построению; вместо него — проверка чистого дерева и отсутствия каталога сессии в HEAD ветки);
    пользователь сам создаёт `change/<C>-<exec>` squash-коммитом из `sdx/<sid>` и кладёт `CHANGE.yaml` по

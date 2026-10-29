@@ -12,19 +12,22 @@
 Общая фикстура: одноразовый проект `FX` (`git init`, `mkdir -p FX/.mesh`), в нём `FX/.mesh/endpoint.yaml` (валидный) и `FX/.mesh/mandate.yaml` (образец ниже, если не выдан узлом):
 
 ```yaml
-executor: dev-1
-stages: [spec, design, execute]
-scope:
-  paths: [src/**]
-  shared_paths: [shared/**]
-  docs_paths: [docs/**]
-  branches: ["sdx/*"]
-delivery: pr
-history: executor
-docs_in_repo: final
-valid_until: 2099-01-01
-digest: "sha256:0000"
+mandate:
+  executor: dev-1
+  stages: [spec, design, execute]
+  on_write: deny          # случай 5 требует deny; для прочих случаев можно notice
+  scope:
+    paths: [src/**]
+    shared_paths: [shared/**]
+    docs_paths: [docs/**]
+    branches: ["sdx/*"]
+  delivery: pr
+  history: executor
+  docs_in_repo: final
+  valid_until: 2099-01-01
+  digest: 0123456789ab
 ```
+(Корневой ключ `mandate:` обязателен — так пишет узел, `dev.py mandate_yaml()`; без него `mandate_load` отвергает файл.)
 
 ## Случай 1. Канал SessionStart для модели (DEBT-045)
 **Предусловие:** проект `FX` с `.mesh/endpoint.yaml` и `.mesh/mandate.yaml`; плагин 2.4.0 установлен; запущен настоящий `claude` в `FX`.

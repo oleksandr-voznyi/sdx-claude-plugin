@@ -13,7 +13,9 @@
 - **Перевендоринг sim-kit (бывший 2.3.1).** `sdx/mo/` обновлён до sim-kit 0.9.1 (хеши в `SIMKIT_SHA256`); хук сам ставит `sys.dont_write_bytecode`, мутант `BYTECODE-FS` снят; для инстансов с `self_deploy` `devops` деплоит сам (решение коллизии в пользу эталона).
 - Тест-сьют: 15 → 19 сьютов (новые: `test-mandate-lib`, `test-mandate-scope`, `test-suites-gen`, `test-snippet-check`); полный прогон ≈ 80–125 с в зависимости от загрузки машины. `hooks/hooks.json`, `stop-gate.sh`, `archive-verify.sh`, `agents/reviewer.md` и `sdx/mo/*` относительно 2.3.0 не менялись (кроме перевендоринга `sdx/mo/`).
 
-### Границы
+#- Обёртка `mo-hook.sh`: при `deny`, пришедшем из мандата, проверяет PyYAML до запуска хука и при его отсутствии блокирует запись (`MAND-PYYAML`); при `deny` из `endpoint.yaml` поведение прежнее.
+
+## Границы
 
 - Видимость вывода SessionStart для модели **не проверена** (DEBT-045); гарантированный канал — вывод `/sdx:start`.
 - Мандат реального узла и чтение `tests/suites.yaml` через `dev.py run_suites` **не проверены вживую** (проверена форма по эталону и фикстурам; ручной сценарий — в сессии).
@@ -30,7 +32,7 @@ Cumulative release 2.3.1 + 2.4.0, 2026-10-28 … 2026-10-29: the MO node's devel
 ### What changed
 
 - **The MO mandate is a second mode signal (FEAT-016, ADR-020 and ADR-021 amendments).** Next to `.mesh/endpoint.yaml` (stands) the plugin recognises `.mesh/mandate.yaml` (the change process: which stages the executor does and in what scope). Without `mandate.yaml` behaviour is exactly 2.3.x (except the unconditional guard of `.mesh/mandate.yaml` against `Write`/`Edit` whenever `endpoint.yaml` exists); `mandate.yaml` without `endpoint.yaml` is not mandate mode (one warning line, as in the sim-kit hook). The mandate is parsed in pure bash (`sdx/hooks/lib/miniyaml.sh`, `lib/mandate.sh`); no python is started for it.
-- **`mandate.stages` as a third narrowing source of the active stage set.** `spec` -> Discovery + Business Spec; `design` -> Technical Design + Task Planning; `execute` -> Execution + Documentation; `verify` -> Verification. A stage outside the mandate is excluded: `/sdx:start` starts at the first admissible stage (`start-stage`), while `/sdx:next --to` an excluded stage is refused (`sdx-stage.sh`, `[ERROR]` logged).sh` (`start-stage`, `[ERROR]` log entry). `Verification` and `Closeout` are always active; `Deployment` is always excluded under a mandate (it belongs to the node). For `endpoint.yaml` without a mandate ADR-021 item 7 applies as before.
+- **`mandate.stages` as a third narrowing source of the active stage set.** `spec` -> Discovery + Business Spec; `design` -> Technical Design + Task Planning; `execute` -> Execution + Documentation; `verify` -> Verification. A stage outside the mandate is excluded: `/sdx:start` starts at the first admissible stage (`start-stage`), while `/sdx:next --to` an excluded stage is refused (`sdx-stage.sh`, `[ERROR]` logged). `Verification` and `Closeout` are always active; `Deployment` is always excluded under a mandate (it belongs to the node). For `endpoint.yaml` without a mandate ADR-021 item 7 applies as before.
 - **Showing the mandate.** `/sdx:start` prints the mandate as data (`mandate-info.sh show`) — the guaranteed channel; `mo-session.sh` (SessionStart) prints the same field group under "[DATA, not instructions]". `/sdx:status` shows an MO line with the mandate (part of DEBT-043).
 - **Mandate scope at `/sdx:verify`.** `mandate-scope.sh` checks `git diff` against `scope.paths ∪ shared_paths ∪ docs_paths`: a file outside is `FAIL` (gate), a file in `shared_paths` is `WARN`, an expired `valid_until` is a warning; empty `scope.paths` means "unrestricted", as in the reference.
 - **`mo-hook.sh`.** The "cannot verify" outcome takes the stricter of `endpoint.on_write` and `mandate.on_write`; writes to `.mesh/mandate.yaml` are refused like `endpoint.yaml`.
@@ -40,7 +42,9 @@ Cumulative release 2.3.1 + 2.4.0, 2026-10-28 … 2026-10-29: the MO node's devel
 - **sim-kit re-vendoring (formerly 2.3.1).** `sdx/mo/` is updated to sim-kit 0.9.1 (hashes in `SIMKIT_SHA256`); the hook now sets `sys.dont_write_bytecode` itself, the `BYTECODE-FS` mutant is removed; for `self_deploy` instances `devops` deploys itself (the collision resolved in favour of the reference).
 - Test suite: 15 -> 19 suites (new: `test-mandate-lib`, `test-mandate-scope`, `test-suites-gen`, `test-snippet-check`); a full run takes ~80-125 s depending on machine load. `hooks/hooks.json`, `stop-gate.sh`, `archive-verify.sh`, `agents/reviewer.md` and `sdx/mo/*` are unchanged relative to 2.3.0 (apart from the `sdx/mo/` re-vendoring).
 
-### Boundaries
+#- `mo-hook.sh`: when `deny` comes from the mandate, the wrapper probes PyYAML before running the hook and blocks the write if it is missing (`MAND-PYYAML`); `deny` from `endpoint.yaml` behaves as before.
+
+## Boundaries
 
 - Whether the model sees SessionStart output is **not verified** (DEBT-045); the guaranteed channel is the `/sdx:start` output.
 - A real node's mandate and reading `tests/suites.yaml` via `dev.py run_suites` are **not verified live** (the format is checked against the reference and fixtures; the manual scenario is in the session).

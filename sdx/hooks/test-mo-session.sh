@@ -332,7 +332,7 @@ write_mandate() { # <proj> <form> [hostile 0|1] [on_write line] [valid_until] [d
   mkdir -p "$d/.mesh"
   {
     printf 'mandate:\n  format: 1\n  executor: %s\n  digest: 0123456789ab\n  valid_until: '"'"'%s'"'"'\n' "$exe" "$vu"
-    printf '  delivery: pr\n  history: linear\n  docs_in_repo: true\n'
+    printf '  delivery: pr\n  history: executor\n  docs_in_repo: final\n'
     [ -n "$ow" ] && printf '  %s\n' "$ow"
     if [ "$form" = flow ]; then
       printf '  stages: [spec, execute]\n  scope:\n    paths: [src/]\n    branches: [dev]\n'

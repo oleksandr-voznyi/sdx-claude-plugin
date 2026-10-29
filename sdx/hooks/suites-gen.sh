@@ -95,6 +95,7 @@ tmp="$(mktemp "$proj/tests/.suites.XXXXXX")" || exit 2
   echo '# Имена наборов — контракт policy/tests.yaml узла: unit | module | regression.'
   echo '# cmd — строка оболочки в корне рабочей копии узла; budget_min — минуты; selector зарезервирован (пусто — набор целиком).'
   echo '# Файл НЕ перезаписывается генератором; правьте вручную.'
+  echo '# Допущение: бит исполнения берётся из рабочего дерева; `git clone` сохраняет его при core.fileMode=true.'
   echo 'suites:'
   echo '  unit:'
   echo "    cmd: $(yq "$TC_CMD")"

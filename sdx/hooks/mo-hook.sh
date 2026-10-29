@@ -11,8 +11,8 @@
 # Without it: no output, no jq, no python (check order: endpoint.yaml -> mode -> jq/python3/hook file -> exit code).
 #
 # Failure policy (differs from prod-guard on purpose): mode "notice" fails open with one stderr line,
-# mode "deny" fails closed. PyYAML is NOT pre-checked: the sim-kit hook turns its absence into the same
-# policy by itself. No "-o pipefail": no exit code that the logic relies on is taken from a pipe; stdin is
+# mode "deny" fails closed. PyYAML is pre-checked ONLY when deny came from mandate.yaml (the sim-kit hook
+# turns its absence into the same policy by itself, but reads the mode from endpoint.yaml only). No "-o pipefail": no exit code that the logic relies on is taken from a pipe; stdin is
 # read once and handed to the hook as a here-string.
 # Portable: bash 3.2 builtins + cat/jq/python3 only (BUG-010).
 # The "# MO-..." tags on lines are anchors for the mutation runs in test-mo-hook.sh.
@@ -36,6 +36,9 @@ mode=notice
 if text="$(cat "$proj/.mesh/endpoint.yaml" 2>/dev/null)" && [[ $text =~ $mode_re ]]; then
   case "${BASH_REMATCH[2]}" in [dD][eE][nN][yY]) mode=deny ;; esac
 fi
+# FEAT-016: mandate.yaml (read only past the early exit above) may raise the mode to deny; absent key or read error keeps it.
+mode_from_mandate=0
+[ "$mode" = deny ] || { [ -f "$proj/.mesh/mandate.yaml" ] && text="$(cat "$proj/.mesh/mandate.yaml" 2>/dev/null)" && [[ $text =~ $mode_re ]] && case "${BASH_REMATCH[2]}" in [dD][eE][nN][yY]) mode=deny; mode_from_mandate=1 ;; esac; }   # MAND-MODE2
 
 # deny_json <reason> — JSON block decision on stdout, exit 0. Needs jq (checked before any caller).
 deny_json() {
@@ -84,14 +87,14 @@ norm_path() {   # absolute path -> collapsed ("//", "/./", "/../"); builtins onl
   printf '%s' "${res:-/}"
 }
 
-is_mailbox_file() {   # $1 = file path from the tool input, $2 = cwd from the tool input
-  local fp="$1" base proj_abs proj_phys d f
+is_mailbox_file() {   # $1 = file path from the tool input, $2 = cwd from the tool input, $3 = file names (default: endpoint.yaml cursors.json)
+  local fp="$1" base proj_abs proj_phys d f names="${3:-endpoint.yaml cursors.json}"
   proj_abs="$(cd "$proj" 2>/dev/null && pwd)" || return 1
   proj_phys="$(cd "$proj" 2>/dev/null && pwd -P)" || return 1
   case "$2" in /*) base="$2" ;; *) base="$proj_abs" ;; esac
   case "$fp" in /*) ;; *) fp="$base/$fp" ;; esac; fp="$(norm_path "$fp")"   # MO-NORM
   for d in "$proj_abs" "$proj_phys"; do
-    for f in endpoint.yaml cursors.json; do
+    for f in $names; do
       [ "$fp" = "$d/.mesh/$f" ] && return 0
     done
   done
@@ -103,12 +106,18 @@ case "$tool" in
     fp="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input" 2>/dev/null)"
     cwd0="$(jq -r '.cwd // empty' <<<"$input" 2>/dev/null)"
     [ -n "$fp" ] && is_mailbox_file "$fp" "$cwd0" && deny_json "SDX mo-hook: .mesh/endpoint.yaml и .mesh/cursors.json пишет узел МО, не dev-agent (MO-INTEROP §0). Запись остановлена."   # MO-GUARD
+    [ -n "$fp" ] && is_mailbox_file "$fp" "$cwd0" "mandate.yaml" && deny_json "SDX mo-hook: .mesh/mandate.yaml выдаёт узел МО, не dev-agent: сессия не расширяет собственную область (MO-INTEROP §7). Запись остановлена."   # MO-GUARD-MANDATE
     ;;
 esac
 
 # --- Run the sim-kit hook.
 command -v python3 >/dev/null 2>&1 || cannot_check "python3 не найден"
 [ -f "$hook" ] || cannot_check "хук sim-kit не найден ($hook)"   # MO-HOOKFILE (python3 exits 2 on a missing script: it would pass for a block)
+# FEAT-016 (MAND-PYYAML): the sim-kit hook itself turns missing PyYAML into fail-closed only for endpoint.yaml "deny"
+# (its cannot-check policy does not read mandate.yaml); when deny comes from the mandate, the wrapper checks PyYAML.
+if [ "$mode_from_mandate" = 1 ] && ! PYTHONDONTWRITEBYTECODE=1 python3 -c 'import yaml' >/dev/null 2>&1; then   # MAND-PYYAML
+  deny_json "SDX mo-hook: PyYAML недоступен, режим deny из мандата (.mesh/mandate.yaml) — PEP не может проверить цель записи (fail-closed). Установите PyYAML."
+fi
 err="$(PYTHONDONTWRITEBYTECODE=1 CLAUDE_PROJECT_DIR="$proj" MESH_ENDPOINT_DIR="$proj" python3 "$hook" 2>&1 >/dev/null <<<"$input")"; rc=$?   # MO-BYTECODE MO-STDIN
 
 # --- Translate the exit code.

@@ -21,10 +21,7 @@
 > (§«Обработка ошибок», §«Границы и риски») — с 0.7.4 эталона хук сам ставит `sys.dont_write_bytecode`, `MI` §5 и docstring флаг
 > ставят; остаток — сторонний импорт; (5) «согласования нормы `Deployment` нет — не заявлять» (§«Границы и риски») — норма
 > подтверждена с 0.7.4 (`MI` §1); (6) критерий 10 в таблице трассировки — мутант `BYTECODE-FS` снят, держится `BYTECODE-ENV`,
-> `[9]`/`[11]` остаются проверками по существу; (7) промежуточное состояние до `FEAT-016`: обёртка охраняет `endpoint.yaml` и
-> `cursors.json`, но не `mandate.yaml`, а хук считает `.mesh/*` в области — сессия может через `Write` расширить собственный
-> мандат; обнаружение — у узла по `mandate_digest` в конвертах и при аудите; второй источник режима `mandate.on_write` обёртка
-> не читает (для `cannot_check` берётся `endpoint.on_write`). Сценарий `[8h]` `test-mo-hook.sh` покрывает прохождение
+> `[9]`/`[11]` остаются проверками по существу; (7) промежуточное состояние снято поставкой 2.4.0 (`FEAT-016`, дельта в конце документа): обёртка охраняет и `mandate.yaml`, `mandate.on_write` читается как второй источник режима; подмена мандата через `Bash` остаётся названной границей (обнаружение — у узла по `mandate_digest` в конвертах и при аудите). Сценарий `[8h]` `test-mo-hook.sh` покрывает прохождение
 > `DENY [MO-scope]` через обёртку; (8) режим `devops` (§«Компоненты», `agents/devops.md`): исключение `self_deploy` эталона
 > (0.7.7) — на инстансы из списка в `endpoint.yaml` `devops` деплоит сам, `request` на них узел не выполняет (коллизия триады,
 > решение пользователя 2026-10-28 — см. поправку REQ-MO-DEVOPS-1 в SPEC).*
@@ -36,7 +33,7 @@
 Поставка — три слоя, из которых только первый содержит чужой код:
 
 1. **Вендоринг** — `sdx/mo/` (три файла sim-kit 0.7.3 байт-в-байт + `SIMKIT_VERSION` + `SIMKIT_SHA256` + короткий `README.md`; с 2026-10-28 — sim-kit 0.9.1 из тега `sim-kit-0.9.1`, сессия `feat-016a-simkit-090-20261028`: мутант `BYTECODE-FS` снят — хук с 0.7.4 сам ставит `sys.dont_write_bytecode`). Правок вендорённого нет; политика и сторож уже действуют (PROC-028).
-2. **Два bash-скрипта плагина** — `sdx/hooks/mo-hook.sh` (PreToolUse; обёртка над `DH`) и `sdx/hooks/mo-session.sh` (SessionStart; показ ящика). Оба активируются **единственным признаком** `$CLAUDE_PROJECT_DIR/.mesh/endpoint.yaml` — не веткой `sdx/<id>`, не `.claude/sdx/`. Без файла — `exit 0`, пустой вывод, python не запускается, `jq` не требуется.
+2. **Два bash-скрипта плагина** — `sdx/hooks/mo-hook.sh` (PreToolUse; обёртка над `DH`) и `sdx/hooks/mo-session.sh` (SessionStart; показ ящика). Режим задают **два признака** (файлы `$CLAUDE_PROJECT_DIR/.mesh/`; `mo-hook` включается только `endpoint.yaml`, `mandate.yaml` добавляет область и второй режим; `mandate.yaml` без `endpoint.yaml` — одна строка предупреждения `mo-session`, хук молчит): `endpoint.yaml` — стенды (0.7.x), `mandate.yaml` — процесс изменений (0.9; режим мандата — оба файла) — не веткой `sdx/<id>`, не `.claude/sdx/`. Без файла — `exit 0`, пустой вывод, python не запускается, `jq` не требуется.
 3. **Прозаический слой** — протокол, `commands/next.md`, `agents/devops.md`, сниппет CLAUDE.md, `init.md`, поверхности состава (README×2, `CLAUDE.md` §6), ADR-021.
 
 Ключевые проектные решения (сжато; обоснования — по разделам):
@@ -277,7 +274,7 @@ mo() { PYTHONDONTWRITEBYTECODE=1 MESH_ENDPOINT_DIR="$proj" python3 "$tools/mesh_
 1.6. Новый подраздел перед «Вендорённые компоненты (`sdx/mo/`)»:
 
 > ### МО-хук (`mo-hook`, `mo-session`) — FEAT-015, ADR-021
-> Над проектом может стоять мета-оркестратор (МО); единственный признак — файл `.mesh/endpoint.yaml` (`sdx/mo/MO-INTEROP.md` §0). Две записи проводки, обе без `timeout` (BUG-010) и обе в форме `bash <путь>` (BUG-008):
+> Над проектом может стоять мета-оркестратор (МО); **два признака** — файлы `.mesh/endpoint.yaml` (стенды, `sdx/mo/MO-INTEROP.md` §0) и `.mesh/mandate.yaml` (мандат разработки, §7; режим мандата — оба файла). Две записи проводки, обе без `timeout` (BUG-010) и обе в форме `bash <путь>` (BUG-008):
 > - **`mo-hook`** (PreToolUse, matcher `Bash|Write|Edit|MultiEdit|NotebookEdit`) — bash-обёртка над вендорённым `sdx/mo/devagent_hook.py`. Без `.mesh/endpoint.yaml` — `exit 0` без вывода, python не запускается, `jq` не требуется; **не зависит от ветки `sdx/<id>`** (запись в каталоги исполнения стендов мимо сессии — целевой случай). Режим `on_write` читает без PyYAML по правилу хука sim-kit. Блок хука sim-kit (`exit 2`) переводит в JSON `permissionDecision:"deny"` (см. «Механизм блокировки PreToolUse»). Сама отказывает `Write`/`Edit`/`MultiEdit`/`NotebookEdit` в `.mesh/endpoint.yaml`/`.mesh/cursors.json` (файл пишет узел). Запускает python **только** с `PYTHONDONTWRITEBYTECODE=1` (инвариант ADR-013 «плагин не пишет в свой корень»).
 > - **`mo-session`** (SessionStart, отдельная запись; `preflight.sh` не расширяется) — при `.mesh/endpoint.yaml` делает `pull`, показывает последние входящие (с маркировкой «данные, не инструкции») и действующие аренды; без python3/PyYAML — одна строка предупреждения. Не блокирует сессию ни при каких условиях; пишет только в `.mesh/` (фенотип, вне git).
 >
@@ -608,3 +605,15 @@ Frontmatter агента (`description`, `tools`, `model`) не меняется
 - Ручные случаи `MANUAL_TEST.md` (К20) не исполнялись.
 
 Вердикт QA: зелёный прогон 15/15 подтверждён; ядро (`mo-hook.sh`, `mo-session.sh`, проводка) дискриминируется тестами — 25 из 32 моих мутантов красные (ещё J5 — допустимый, J7 — контроль); блокирующих дефектов не найдено. Остаточные пробелы тестов: M7, M9, S4 (код) и P3–P6 (проза) — предложения в п.5.
+
+## Дельта FEAT-016 (плагин 2.4.0, сессия `feat-016-mo-mandate-20261028`)
+
+Полный дизайн — `DESIGN.md` сессии (после Closeout — `docs/history/`); сжатый перенос. Решения — ADR-020 и ADR-021, поправки 2026-10-28. **Два признака:** `endpoint.yaml` — стенды (0.7.x, FEAT-015), `mandate.yaml` — процесс изменений (0.9); режим мандата включён, только когда есть оба файла. Без `mandate.yaml` ни один новый байт кода не выполняется (ленивая загрузка lib) — с единственным перечнем исключений REQ-MAND-1: проверки наличия файлов, (а) `tests/suites.yaml`, (б) новое содержание `/sdx:status` и сниппета, протокольные `from.kit`/`version-skew`, К-4 — безусловная охрана `.mesh/mandate.yaml` при `endpoint.yaml`.
+
+- [ADDED] `sdx/hooks/lib/miniyaml.sh` (разбор подмножества YAML на awk, записи `O/S/Z/E/L/X`, строже `yaml.safe_load` в сторону отказа) и `lib/mandate.sh` (режим, стадии, `glob_any`-эталон, срок, показ с санитизацией и предупреждениями области по каждому каталогу).
+- [ADDED] `sdx/hooks/mandate-info.sh` (`mode|show|status|closeout-mode|closeout-check`) и `mandate-scope.sh` (`diff ⊆ область`, `--planned`, идемпотентный блок `SDX-MANDATE-SCOPE` в `verification_report.md` — существующий гейт `^### \[FAIL\]` без правок).
+- [MODIFIED] `sdx/hooks/sdx-stage.sh` — мандат как третий сужающий источник (`mandate_gate_load`, `is_excluded_by_mandate`, цикл пропуска, отказ `--to`), подкоманды `start-stage` и `active-set`; bash+jq без python.
+- [MODIFIED] `mo-hook.sh` (режим из двух файлов; охрана `mandate.yaml`; при `deny` из мандата обёртка сама проверяет PyYAML и отказывает JSON deny — хук эталона режим мандата не читает, `# MAND-PYYAML`) и `mo-session.sh` (показ мандата без python; предупреждение о мандате без `endpoint.yaml`).
+- Исключение К-4: охрана `mandate.yaml` от `Write`/`Edit` безусловна при наличии `endpoint.yaml` — третье названное исключение из «как в 2.3.x» (рядом с `from.kit`/`version-skew`); создание мандата сессией вместо узла не поддерживается.
+- [ADDED] `lib/test-cmd.sh`, `suites-gen.sh`, `snippet-check.sh`; `tests/suites.yaml`. [MODIFIED] команды `/sdx:start|import|next|status|verify|archive|init|reconcile`, `agents/devops.md`, сниппет, протокол, README×2, `CLAUDE.md`.
+- Три слоя границы области: мягкая (хук по `scope`) → жёсткая (аудит `diff ⊆ scope` на `/sdx:verify`, семантика `glob_any` + `docs_paths`, а не `_in_scope` хука) → окончательная (слияние узлом). Мост Closeout при мандате для любого определённого `delivery` (`pr|branch|artifact.offer`; для `artifact.offer` — `bridge:offer` и шаг отправки оффера, мёржа в `main` нет) — ручная сборка пакета до `/sdx:pr` (`FEAT-017`).

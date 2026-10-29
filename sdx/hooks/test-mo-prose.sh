@@ -22,6 +22,13 @@ DEVOPS_MD="$ROOT/agents/devops.md"
 INIT_MD="$ROOT/commands/init.md"
 SNIPPET="$ROOT/sdx/templates/claude-md-snippet.md"
 DECISIONS="$ROOT/docs/DECISIONS.md"
+ARCHIVE_MD="$ROOT/commands/archive.md"
+START_MD="$ROOT/commands/start.md"
+RECONCILE_MD="$ROOT/commands/reconcile.md"
+STATUS_MD="$ROOT/commands/status.md"
+DESIGN_MO="$ROOT/docs/designs/mo-interop.md"
+README_RU="$ROOT/README.md"
+README_EN="$ROOT/README.en.md"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -43,6 +50,11 @@ expect_red() {
 }
 
 # ---- checks: print the reason to stdout and return 1 on violation -------------------------
+chk_plugin_version() {
+  local v; v="$(jq -r .version "$1" 2>/dev/null)"
+  [ "$v" = "2.4.0" ] || { echo "plugin version is '$v', expected 2.4.0"; return 1; }
+}
+
 chk_protocol_tags() {
   grep -q 'Восемь' "$1" || { echo "no 'Восемь' in $1"; return 1; }
   grep -q '\[директива\]' "$1" || { echo "no [директива] in $1"; return 1; }
@@ -90,6 +102,117 @@ chk_snippet() {
 }
 chk_adr() {
   grep -E '^## ADR-021\.' "$1" | grep -qF 'мета-оркестратор' || { echo "no heading '## ADR-021.' naming мета-оркестратор in $1"; return 1; }
+}
+
+# ---- FEAT-016 (mandate) checks -------------------------------------------------------------
+adr_section() {  # adr_section <file> <ADR-NNN> — the body of one ADR (heading up to the next '## ')
+  awk -v h="## $2." 'index($0, h) == 1 { p = 1; print; next } /^## / { p = 0 } p' "$1"
+}
+chk_two_signs() {  # the MO activation is "two signs" and mandate.yaml is named; the old "single sign" wording is gone
+  grep -qF 'mandate.yaml' "$1" || { echo "no mandate.yaml in $1"; return 1; }
+  grep -qE '(д|Д)ва признака|[Tt]wo (activation )?(signs|markers|criteria)' "$1" || { echo "no 'два признака' / 'two signs' in $1"; return 1; }
+  if grep -qE '(е|Е)динственн(ый|ым) признак|([Ss]ingle|[Oo]nly) (activation )?(sign|marker|criterion)' "$1"; then echo "stale 'single sign' wording in $1"; return 1; fi
+  return 0
+}
+chk_two_signs_adr() {  # ADR-021 only (point 3 of the decision)
+  local t="$TMP/adr21.$$.md"
+  adr_section "$1" ADR-021 > "$t"
+  [ -s "$t" ] || { echo "no ADR-021 section in $1"; return 1; }
+  chk_two_signs "$t"
+}
+chk_devops_mandate() {
+  local f="$1" t
+  chk_devops "$f" || return 1
+  for t in 'mandate.yaml' 'scope.branches' 'теги' 'prod-guard'; do
+    grep -qF "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  return 0
+}
+chk_snippet_mandate() {
+  local f="$1" block n
+  block="$(sed -n '/SDX:BEGIN/,/SDX:END/p' "$f")"
+  n="$(printf '%s\n' "$block" | grep -cF '.mesh/mandate.yaml' || true)"
+  [ "$n" = 1 ] || { echo "'.mesh/mandate.yaml' must occur on exactly one line of the SDX block, found $n"; return 1; }
+  if grep -qE '/sdx:pr([^a-z]|$)' "$f"; then echo "/sdx:pr in $f"; return 1; fi  # not /sdx:proto
+  [ "$(grep -c 'SDX:BEGIN' "$f")" = 1 ] && [ "$(grep -c 'SDX:END' "$f")" = 1 ] || { echo "SDX:BEGIN/SDX:END markers not exactly once in $f"; return 1; }
+  return 0
+}
+chk_bridge() {  # Closeout bridge under a mandate (REQ-MAND-23, 23a)
+  local f="$1" t
+  for t in 'bridge' 'bridge:offer' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'docs_in_repo' '(n/a, docs_in_repo: none)'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  grep -F 'Ветка `sdx/<id>`' "$f" | grep -qF 'не слива' || { echo "no line saying branch sdx/<id> stays unmerged in $f"; return 1; }
+  grep -F 'archive-verify.sh' "$f" | grep -qF 'не вызывается' || { echo "no line saying archive-verify.sh 'не вызывается' in $f"; return 1; }
+  return 0
+}
+chk_offer_once() {  # the offer is sent once: the bridge step is skipped when already sent (WARN-1, round 2)
+  grep -F 'bridge:offer' "$1" | grep -qF 'уже отправлен' || { echo "no 'bridge:offer' line with 'уже отправлен' in $1"; return 1; }
+}
+chk_offer_once_devops() {  # devops.md: the Closeout-bridge sentence names the skip of an already sent offer
+  grep -F 'bridge:offer' "$1" | grep -qF 'уже отправлен' || { echo "no 'bridge:offer' line with 'уже отправлен' in $1"; return 1; }
+}
+chk_no_old_bridge_phrase() {  # negative invariant: the bridge is not tied to 'delivery: pr|branch' only (FAIL-1, round 2)
+  if grep -qF 'delivery: pr|branch' "$1"; then echo "stale 'delivery: pr|branch' in $1"; return 1; fi
+  if grep -Eq 'artifact\.offer[^;.]{0,80}(штатн|standard)|Closeout (штатн|is the standard)' "$1"; then echo "stale 'artifact.offer ... standard Closeout' phrase in $1"; return 1; fi
+  return 0
+}
+chk_offer_once_prose() {  # next.md / CLAUDE.md / ADR-020 amendment: a line naming the offer also names the skip of an already sent one (round 3)
+  grep -F 'offer' "$1" | grep -qF 'уже отправлен' || { echo "no 'offer' line with 'уже отправлен' in $1"; return 1; }
+}
+chk_reconcile_wiring() {  # reconcile.md items (е)/(ж): the scripts are actually called (REQ-MAND-20, 25)
+  local f="$1"
+  grep -F '(е)' "$f" | grep -F 'suites-gen.sh' | grep -qF -- '--check' || { echo "no (е) line calling suites-gen.sh --check in $f"; return 1; }
+  grep -F '(ж)' "$f" | grep -qF 'snippet-check.sh' || { echo "no (ж) line calling snippet-check.sh in $f"; return 1; }
+}
+chk_init_suites() {  # init.md step 2в calls suites-gen.sh
+  grep -E '^2в\.' "$1" | grep -qF 'suites-gen.sh' || { echo "no step 2в calling suites-gen.sh in $1"; return 1; }
+}
+chk_status_mandate() {  # status.md step 5а: mandate-info.sh status + active-set, text matches the script output
+  local l; l="$(grep -E '^5а\.' "$1")"
+  [ -n "$l" ] || { echo "no step 5а in $1"; return 1; }
+  for t in 'mandate-info.sh' 'status' 'sdx-stage.sh' 'active-set' 'endpoint.yaml=нет; mandate.yaml=нет' 'unknown:mandate'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "step 5а lacks '$t' in $1"; return 1; }
+  done
+  # the first output word the prose promises must not be a phrase the script never prints
+  printf '%s' "$l" | grep -qF 'печатает ту же строку' || { echo "step 5а does not say that the script prints the line itself in $1"; return 1; }
+}
+chk_next_mandate() {  # next.md: mandate narrows the target; refusal wording
+  for t in 'Ограничение цели мандатом МО' 'mandate.stages' 'мандат МО исключает этап' 'не правь `.mesh/mandate.yaml`'; do
+    grep -qF -- "$t" "$1" || { echo "no '$t' in $1"; return 1; }
+  done
+}
+chk_verify_planned() {  # verify.md: the rule that computes --planned keys (REQ-MAND-14, К-3)
+  local l; l="$(grep -F 'Правило `--planned`:' "$1")"
+  [ -n "$l" ] || { echo "no 'Правило --planned' line in $1"; return 1; }
+  for t in '`docs/specs/` — если в сессии есть `SPEC.md` или `change_note.md`' '`docs/designs/` — если есть `DESIGN.md`' '`docs/history/plans/` — если есть `PLAN.md`' '`docs/backlog/` — всегда' '`docs/DECISIONS.md`'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "--planned rule lacks '$t' in $1"; return 1; }
+  done
+  printf '%s' "$l" | grep -qF 'docs_in_repo: none' || { echo "--planned rule lacks 'docs_in_repo: none' in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'не передаются' || { echo "--planned rule lacks 'не передаются' in $1"; return 1; }
+}
+chk_verify_scope() {
+  local f="$1" t
+  for t in 'mandate-scope.sh' '--into' '--planned'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+}
+chk_start_mandate() {
+  grep -qF 'mandate-info.sh" show' "$1" || grep -qF 'mandate-info.sh show' "$1" || { echo "no 'mandate-info.sh show' in $1"; return 1; }
+  grep -qF 'start-stage' "$1" || { echo "no start-stage in $1"; return 1; }
+}
+chk_protocol_activity() {  # mandate = third narrowing source; Deployment excluded under a mandate; old [5b] paragraph kept
+  grep -qF 'третий сужающий источник' "$1" || { echo "no 'третий сужающий источник' in $1"; return 1; }
+  grep -F 'Deployment' "$1" | grep -F 'мандат' | grep -qE 'исключ' || { echo "no line with Deployment + мандат + исключ in $1"; return 1; }
+  chk_protocol_deploy "$1"
+}
+chk_adr_amendments() {  # dated amendments to ADR-020 and ADR-021 by the mandate session
+  local f="$1" a
+  for a in ADR-020 ADR-021; do
+    adr_section "$f" "$a" | grep -F 'Поправка 2026-10-28' | grep -qF 'feat-016-mo-mandate-20261028' || { echo "no dated amendment of $a by feat-016-mo-mandate-20261028 in $f"; return 1; }
+  done
+  adr_section "$f" ADR-020 | grep -qF 'третий сужающий источник' || { echo "ADR-020 amendment lacks 'третий сужающий источник'"; return 1; }
+  return 0
 }
 
 echo "=== test-mo-prose.sh ==="
@@ -168,6 +291,146 @@ sed 's/^## ADR-021\..*/## ADR-021. Интероп/' "$DECISIONS" > "$TMP/a2.md"
 expect_red "red: ADR-021 heading without 'мета-оркестратор'" chk_adr "$TMP/a2.md"
 { grep -v '^## ADR-021\.' "$DECISIONS"; echo 'см. ADR-021, мета-оркестратор'; } > "$TMP/a3.md"
 expect_red "red: bare ADR-021 mention is not the heading" chk_adr "$TMP/a3.md"
+
+echo ""
+echo "[9] two signs (endpoint.yaml + mandate.yaml): protocol, design, READMEs, ADR-021"
+for pair in "protocol.md:$PROTOCOL" "designs/mo-interop.md:$DESIGN_MO" "README.md:$README_RU" "README.en.md:$README_EN"; do
+  expect_ok "${pair%%:*}" chk_two_signs "${pair#*:}"
+done
+expect_ok "DECISIONS.md ADR-021" chk_two_signs_adr "$DECISIONS"
+sed 's/mandate\.yaml/x.yaml/g' "$PROTOCOL" > "$TMP/t9a.md"
+expect_red "red: protocol without mandate.yaml" chk_two_signs "$TMP/t9a.md"
+{ cat "$README_RU"; echo 'единственный признак — endpoint.yaml'; } > "$TMP/t9b.md"
+expect_red "red: README with 'единственный признак'" chk_two_signs "$TMP/t9b.md"
+{ cat "$README_EN"; echo 'the only activation marker is endpoint.yaml'; } > "$TMP/t9c.md"
+expect_red "red: README.en with 'only activation marker'" chk_two_signs "$TMP/t9c.md"
+sed 's/два признака/один признак/g; s/Два признака/Один признак/g' "$DESIGN_MO" > "$TMP/t9d.md"
+expect_red "red: design without 'два признака'" chk_two_signs "$TMP/t9d.md"
+adr_section "$DECISIONS" ADR-021 | sed 's/два признака/один признак/g; s/Два признака/Один признак/g' > "$TMP/t9e.md"
+{ echo '## ADR-021. x'; sed 1d "$TMP/t9e.md"; } > "$TMP/t9f.md"
+expect_red "red: ADR-021 without 'два признака'" chk_two_signs_adr "$TMP/t9f.md"
+
+echo ""
+echo "[10] agents/devops.md: mandate mode (mandate.yaml, scope.branches, теги), endpoint switch kept"
+expect_ok "devops.md" chk_devops_mandate "$DEVOPS_MD"
+for t in 'mandate\.yaml' 'scope\.branches' 'теги' 'prod-guard'; do
+  sed "s/$t/zz-removed/g" "$DEVOPS_MD" > "$TMP/t10.md"
+  expect_red "red: devops without '$t'" chk_devops_mandate "$TMP/t10.md"
+done
+{ cat "$DEVOPS_MD"; echo 'python3 sdx/mo/mesh_endpoint.py pull'; } > "$TMP/t10b.md"
+expect_red "red: flagless mesh_endpoint.py call" chk_devops_mandate "$TMP/t10b.md"
+
+echo ""
+echo "[11] CLAUDE.md snippet: one sentence on .mesh/mandate.yaml, no /sdx:pr, markers once"
+expect_ok "snippet" chk_snippet_mandate "$SNIPPET"
+grep -vF '.mesh/mandate.yaml' "$SNIPPET" > "$TMP/t11a.md"
+expect_red "red: snippet without the mandate sentence" chk_snippet_mandate "$TMP/t11a.md"
+{ cat "$SNIPPET"; echo 'см. /sdx:pr'; } > "$TMP/t11b.md"
+expect_red "red: snippet with /sdx:pr" chk_snippet_mandate "$TMP/t11b.md"
+sed 's/<!-- SDX:END/<!-- SDX:END2/' "$SNIPPET" | grep -v 'SDX:END2' > "$TMP/t11c.md"
+expect_red "red: snippet without the SDX:END marker" chk_snippet_mandate "$TMP/t11c.md"
+{ cat "$SNIPPET"; } | awk '{print} /\.mesh\/mandate\.yaml/ && !d {print "второй `.mesh/mandate.yaml`"; d=1}' > "$TMP/t11d.md"
+expect_red "red: mandate sentence on two lines" chk_snippet_mandate "$TMP/t11d.md"
+
+echo ""
+echo "[12] Closeout bridge: commands/archive.md and protocol.md"
+expect_ok "archive.md" chk_bridge "$ARCHIVE_MD"
+expect_ok "protocol.md" chk_bridge "$PROTOCOL"
+for t in 'bridge:offer' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'не вызывается' 'docs_in_repo' '(n/a, docs_in_repo: none)' 'Ветка `sdx/<id>`'; do
+  for pair in "archive.md:$ARCHIVE_MD" "protocol.md:$PROTOCOL"; do
+    grep -vF -- "$t" "${pair#*:}" > "$TMP/t12.md"
+    expect_red "red: ${pair%%:*} without '$t'" chk_bridge "$TMP/t12.md"
+  done
+done
+
+echo ""
+echo "[12b] offer sent once (archive.md, protocol.md, devops.md); no stale 'delivery: pr|branch' bridge phrase"
+expect_ok "archive.md offer once" chk_offer_once "$ARCHIVE_MD"
+expect_ok "protocol.md offer once" chk_offer_once "$PROTOCOL"
+sed 's/уже отправлен/zz-removed/g' "$ARCHIVE_MD" > "$TMP/t12b.md"; expect_red "red: archive.md without 'уже отправлен'" chk_offer_once "$TMP/t12b.md"
+sed 's/уже отправлен/zz-removed/g' "$PROTOCOL" > "$TMP/t12c.md"; expect_red "red: protocol.md without 'уже отправлен'" chk_offer_once "$TMP/t12c.md"
+expect_ok "devops.md offer once" chk_offer_once_devops "$DEVOPS_MD"
+sed 's/уже отправлен/zz-removed/g' "$DEVOPS_MD" > "$TMP/t12e.md"; expect_red "red: devops.md without 'уже отправлен'" chk_offer_once_devops "$TMP/t12e.md"
+adr_section "$DECISIONS" ADR-020 > "$TMP/adr020.md"
+CLAUDE_MD="$ROOT/CLAUDE.md"
+for pair in "next.md:$NEXT_MD" "CLAUDE.md:$CLAUDE_MD" "ADR-020:$TMP/adr020.md"; do
+  expect_ok "${pair%%:*} offer once" chk_offer_once_prose "${pair#*:}"
+  sed 's/уже отправлен/zz-removed/g' "${pair#*:}" > "$TMP/t12f.md"
+  expect_red "red: ${pair%%:*} without 'уже отправлен'" chk_offer_once_prose "$TMP/t12f.md"
+done
+adr_section "$DECISIONS" ADR-021 > "$TMP/adr021.md"
+for pair in "protocol.md:$PROTOCOL" "ADR-021:$TMP/adr021.md" "README.md:$README_RU" "README.en.md:$README_EN" "archive.md:$ARCHIVE_MD" "devops.md:$DEVOPS_MD"; do
+  expect_ok "no stale phrase in ${pair%%:*}" chk_no_old_bridge_phrase "${pair#*:}"
+  { cat "${pair#*:}"; echo 'Closeout при `delivery: pr|branch` — мост'; } > "$TMP/t12d.md"
+  expect_red "red: ${pair%%:*} with stale 'delivery: pr|branch'" chk_no_old_bridge_phrase "$TMP/t12d.md"
+  { cat "${pair#*:}"; echo 'При `artifact.offer` Closeout штатный.'; } > "$TMP/t12g.md"
+  expect_red "red: ${pair%%:*} with stale 'artifact.offer Closeout штатный'" chk_no_old_bridge_phrase "$TMP/t12g.md"
+  { cat "${pair#*:}"; echo 'With artifact.offer Closeout is the standard one.'; } > "$TMP/t12h.md"
+  expect_red "red: ${pair%%:*} with stale 'standard one'" chk_no_old_bridge_phrase "$TMP/t12h.md"
+done
+
+echo ""
+echo "[13] commands/verify.md: step 6a calls mandate-scope.sh --into … --planned"
+expect_ok "verify.md" chk_verify_scope "$VERIFY_MD"
+for t in 'mandate-scope\.sh' '--into' '--planned'; do
+  sed "s/$t/zz-removed/g" "$VERIFY_MD" > "$TMP/t13.md"
+  expect_red "red: verify.md without '$t'" chk_verify_scope "$TMP/t13.md"
+done
+
+echo ""
+echo "[14] commands/start.md: mandate-info.sh show, start-stage"
+expect_ok "start.md" chk_start_mandate "$START_MD"
+sed 's/mandate-info\.sh/zz-removed/g' "$START_MD" > "$TMP/t14a.md"
+expect_red "red: start.md without mandate-info.sh" chk_start_mandate "$TMP/t14a.md"
+sed 's/start-stage/zz-removed/g' "$START_MD" > "$TMP/t14b.md"
+expect_red "red: start.md without start-stage" chk_start_mandate "$TMP/t14b.md"
+
+echo ""
+echo "[15] protocol.md: mandate is the third narrowing source; Deployment excluded under a mandate; artifact.offer paragraph kept"
+expect_ok "protocol.md" chk_protocol_activity "$PROTOCOL"
+sed 's/третий сужающий источник/источник/g' "$PROTOCOL" > "$TMP/t15a.md"
+expect_red "red: protocol without 'третий сужающий источник'" chk_protocol_activity "$TMP/t15a.md"
+sed '/Deployment/{/мандат/s/исключ/допущ/g;}' "$PROTOCOL" > "$TMP/t15b.md"
+expect_red "red: protocol without Deployment-excluded-under-mandate line" chk_protocol_activity "$TMP/t15b.md"
+sed 's/artifact\.offer/offer-x/g' "$PROTOCOL" > "$TMP/t15c.md"
+expect_red "red: protocol without artifact.offer" chk_protocol_activity "$TMP/t15c.md"
+
+echo ""
+echo "[16] docs/DECISIONS.md: dated amendments of ADR-020 and ADR-021 by the mandate session"
+expect_ok "DECISIONS.md" chk_adr_amendments "$DECISIONS"
+sed 's/feat-016-mo-mandate-20261028/zz-session/g' "$DECISIONS" > "$TMP/t16a.md"
+expect_red "red: amendments without the session id" chk_adr_amendments "$TMP/t16a.md"
+awk '/^## ADR-020\./{p=1} /^## ADR-021\./{p=0} p && /Поправка 2026-10-28/ {gsub(/feat-016-mo-mandate-20261028/,"zz")} {print}' "$DECISIONS" > "$TMP/t16b.md"
+expect_red "red: ADR-020 amendment missing" chk_adr_amendments "$TMP/t16b.md"
+sed 's/третий сужающий источник/источник/g' "$DECISIONS" > "$TMP/t16c.md"
+expect_red "red: ADR-020 amendment without 'третий сужающий источник'" chk_adr_amendments "$TMP/t16c.md"
+
+echo ""
+echo "[17] .claude-plugin/plugin.json: version 2.4.0"
+expect_ok "plugin.json" chk_plugin_version "$ROOT/.claude-plugin/plugin.json"
+sed 's/"version": "2\.4\.0"/"version": "2.3.1"/' "$ROOT/.claude-plugin/plugin.json" > "$TMP/t17.json"
+expect_red "red: plugin.json with the old version" chk_plugin_version "$TMP/t17.json"
+
+echo ""
+echo "[18] wiring prose: reconcile.md (е)/(ж), init.md 2в, status.md 5а, next.md, verify.md --planned rule"
+expect_ok "reconcile.md" chk_reconcile_wiring "$RECONCILE_MD"
+sed 's/suites-gen\.sh/zz-removed/g' "$RECONCILE_MD" > "$TMP/t18a.md"; expect_red "red: reconcile.md without suites-gen.sh" chk_reconcile_wiring "$TMP/t18a.md"
+sed 's/snippet-check\.sh/zz-removed/g' "$RECONCILE_MD" > "$TMP/t18b.md"; expect_red "red: reconcile.md without snippet-check.sh" chk_reconcile_wiring "$TMP/t18b.md"
+sed 's/--check/zz-removed/g' "$RECONCILE_MD" > "$TMP/t18c.md"; expect_red "red: reconcile.md without --check" chk_reconcile_wiring "$TMP/t18c.md"
+expect_ok "init.md 2в" chk_init_suites "$INIT_MD"
+sed 's/suites-gen\.sh/zz-removed/g' "$INIT_MD" > "$TMP/t18d.md"; expect_red "red: init.md without suites-gen.sh" chk_init_suites "$TMP/t18d.md"
+expect_ok "status.md 5а" chk_status_mandate "$STATUS_MD"
+for t in 'mandate-info\.sh' 'active-set' 'unknown:mandate' 'endpoint\.yaml=нет; mandate\.yaml=нет' 'печатает ту же строку'; do
+  sed "s/$t/zz-removed/g" "$STATUS_MD" > "$TMP/t18e.md"; expect_red "red: status.md without '$t'" chk_status_mandate "$TMP/t18e.md"
+done
+expect_ok "next.md" chk_next_mandate "$NEXT_MD"
+for t in 'Ограничение цели мандатом МО' 'mandate\.stages' 'мандат МО исключает этап' 'не правь `\.mesh\/mandate\.yaml`'; do
+  sed "s/$t/zz-removed/g" "$NEXT_MD" > "$TMP/t18f.md"; expect_red "red: next.md without '$t'" chk_next_mandate "$TMP/t18f.md"
+done
+expect_ok "verify.md --planned rule" chk_verify_planned "$VERIFY_MD"
+for t in 'если в сессии есть `SPEC.md` или `change_note.md`' 'если есть `DESIGN.md`' 'если есть `PLAN.md`' '`docs\/backlog\/` — всегда' '`docs\/DECISIONS.md`' 'docs_in_repo: none' 'не передаются'; do
+  sed "s/$t/zz-removed/g" "$VERIFY_MD" > "$TMP/t18g.md"; expect_red "red: verify.md --planned rule without '$t'" chk_verify_planned "$TMP/t18g.md"
+done
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

@@ -1,15 +1,15 @@
 ---
 id: FEAT-016
 type: feat
-status: open
+status: closed
 priority: high
 wave: null
-source: intake intake-mo-dev-control-20261028 (записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` §2.2, §2.4–2.9, §2.11; ответ SDX `SDX-MO-dev-control-reply-2026-10-28.md` §1–3; sim-kit 0.9.0 `core/MO-INTEROP.md` §6 «Мандат разработки», `core/devagent_hook.py`, `core/dev.py`, `policy/tests.yaml`)
-session: null
+source: intake intake-mo-dev-control-20261028 (записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` §2.2, §2.4–2.9, §2.11; ответ SDX `SDX-MO-dev-control-reply-2026-10-28.md` §1–3; sim-kit 0.9.x `core/MO-INTEROP.md` §7 «Мандат разработки», `core/devagent_hook.py`, `core/dev.py`, `policy/tests.yaml`)
+session: feat-016-mo-mandate-20261028
 links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DEBT-045, ADR-020, ADR-021]
 ---
 
-# FEAT-016. Мандат МО и декларации (плагин 2.4.0): признак `.mesh/mandate.yaml`, гейт `mandate.stages`, область на `/sdx:verify`, `tests/suites.yaml`, перевендоринг sim-kit 0.9.0
+# FEAT-016. Мандат МО и декларации (плагин 2.4.0): признак `.mesh/mandate.yaml`, гейт `mandate.stages`, область на `/sdx:verify`, `tests/suites.yaml`, перевендоринг sim-kit 0.9.1
 
 ## Суть
 С sim-kit 0.9 граница между SDX и мета-оркестратором (МО) проходит не по месту (репозиторий / стенды — `FEAT-015`, ADR-021),
@@ -28,6 +28,9 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
 
 Это первый из трёх выпусков по записке 26.10 (п.2 порядка владельца §5): `FEAT-016` → `FEAT-017` (сдача пакетом) →
 `FEAT-018` (headless). Ответы SDX на вопросы §4 записки — в ответной записке §1; они не меняют состав этой поставки.
+
+## Статус исполнения
+П.1 выполнен сессией `feat-016a-simkit-090-20261028` (вендорён 0.9.1). П.2–9 выполнены сессией `feat-016-mo-mandate-20261028` (плагин 2.4.0). Расхождения с исходной формулировкой, принятые решениями пользователя (`decisions_log.md` сессии): `Deployment` при мандате исключается **всегда** — он у узла, по эталону (п.3); имена наборов `tests/suites.yaml` — `unit`/`module`/`regression` (контракт `policy/tests.yaml` узла), а не `default` (п.6). Поле `status` и `session` — на Closeout.
 
 ## Рекомендация
 Две сессии: сначала **отдельная сессия перевендоринга** (п.1 — `PROC-028`, `sdx/protocol.md` «Вендорённые компоненты»:
@@ -60,13 +63,14 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
    и старые узлы увидят `mesh.version-skew` — это ожидаемо и является вопросом §5.1 владельцу, а не дефектом поставки.
 3. **`mandate.stages` как гейт** `/sdx:start`/`/sdx:next`: отображение стадий мандата на девять этапов SDX —
    `spec` → `Discovery`+`Business Spec`; `design` → `Technical Design`+`Task Planning`; `execute` → `Execution`+`Documentation`;
-   `verify` → `Verification` (стадия исполнителя — `dev.py:23` `STAGES_DELEGABLE`, `MO-INTEROP.md` §6; узел поверх неё
+   `verify` → `Verification` (стадия исполнителя — `dev.py:23` `STAGES_DELEGABLE`, `MO-INTEROP.md` §7; узел поверх неё
    проводит свой аудит пакета). Мандат — **третий сужающий источник** активного набора рядом с `no_code`/`no_gates`: стадия,
    которой нет в `mandate.stages`, исключается из активного набора так же, как при `no_code` (без отказа и без вопроса —
    sim-kit допускает любые подмножества, `dev.py lint`). Исключение — `Verification` и `Closeout`: активны всегда (ADR-020);
    если `verify` в мандате отсутствует, `Verification` остаётся локальным полом исполнителя (stop-gate + ревью) и не
-   считается сдачей узлу. `Deployment` — по `delivery`: при `artifact.offer` (П1) — норма ADR-021 п.7 (этап закрывается
-   отправкой `artifact.offer`), при `pr|branch` — у узла (`change.promote`), этап исключается. Это датированная поправка
+   считается сдачей узлу. `Deployment` — **при мандате исключён всегда** (решение пользователя по эталону 0.9.1: «Deployment при мандате всегда у узла»;
+   `change.promote` — узла); `artifact.offer` при мандате отправляется один раз — на шаге моста Closeout (`bridge:offer`; если уже отправлен на `Execution`/`Verification` — пропуск), ADR-021 п.7 остаётся для
+   `endpoint.yaml` без мандата. Это датированная поправка
    ADR-020 — часть поставки. Попытка `/sdx:next --to <stage>` на исключённый мандатом этап → отказ `sdx-stage.sh` с записью
    `[ERROR]` в лог (как для любого неактивного этапа); единственный писатель `stage` остаётся `sdx-stage.sh`. Отображение — подтверждение владельца МО
    (ответная записка §4.3/§5.2); до ответа реализуется как предложено.
@@ -78,13 +82,14 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
 5. **`mo-hook.sh`**: режим для исхода «не могу проверить» берётся как более строгий из `endpoint.on_write` и
    `mandate.on_write`; отказ `Write`/`Edit` распространяется на `.mesh/mandate.yaml` (как на `endpoint.yaml`/`cursors.json`).
 6. **`tests/suites.yaml`**: генерация на `/sdx:init` и `/sdx:reconcile` из `verify-cmd.sh`/автодетекта stop-gate
-   (один набор `default` с `cmd`, `budget_min` из `SDX_VERIFY_TIMEOUT`; `selector` — пустой, поле зарезервировано);
+   (активный набор `unit` с `cmd`, `budget_min` из `SDX_VERIFY_TIMEOUT`; `selector` — пустой, поле зарезервировано;
+   `module` и `regression` — закомментированные образцы для ручного заполнения: имена наборов — контракт `policy/tests.yaml` узла);
    файл tracked, пересоздаётся только по явному запросу. Репозиторий плагина получает свою декларацию (dogfood).
 7. **`devops` при мандате**: слияния в ветки вне `scope.branches` (ветки, куда исполнителю *разрешено* писать —
    `dev.py:374`; для `client-harness` `lint` узла дополнительно запрещает `dev`/`stage`/`main` — `dev.py:105`, для прочих
    исполнителей защищённые ветки задаёт `policy/dev.yaml` узла) и создание тегов — не его действие (`change.merge`/
    `change.promote` узла); `prod-guard` и stop-gate не ослабляются (ADR-021, ответная записка §2.1).
-   **Мост до `FEAT-017` (только `delivery: pr|branch`; при `artifact.offer` Closeout штатный):** чек-лист Closeout 2.4.0
+   **Мост до `FEAT-017` (любой определённый `delivery`; для `artifact.offer` — `bridge:offer`):** чек-лист Closeout 2.4.0
    выполняет шаги 1–5; шаги 6–8 отмечаются `(n/a, мандат)`, `archive-verify.sh` не вызывается (его инвариант «ветка слита»
    при мандате ложен по построению; вместо него — проверка чистого дерева и отсутствия каталога сессии в HEAD ветки);
    пользователь сам создаёт `change/<C>-<exec>` squash-коммитом из `sdx/<sid>` и кладёт `CHANGE.yaml` по
@@ -97,8 +102,21 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
 9. **Документы**: `docs/specs/mo-interop.md`, `docs/designs/mo-interop.md` — дельты; ADR-021 — датированная поправка
    «третий слой границы (хук → аудит узла → слияние узлом)»; `/sdx:status` — строка МО с мандатом (закрывает часть `DEBT-043`).
 
-Критерии приёмки: без `mandate.yaml` все 389 существующих проверок зелёные и поведение SessionStart/PreToolUse
+Критерии приёмки: без `mandate.yaml` все существующие проверки зелёные и поведение SessionStart/PreToolUse
 неотличимо от 2.3.0; с фикстурным мандатом — этап вне `stages` не стартует, файл вне области даёт `FAIL` на верификации,
 `suites.yaml` генерируется и читается `dev.py run_suites` без ошибок (проверка на копии sim-kit локально).
 
 Вне скоупа (следующие записи): `/sdx:pr`, `CHANGE.yaml`, `protocol.yaml`, `--from-order` — `FEAT-017`; `sdx run` — `FEAT-018`.
+
+## Резолюция
+Закрыта сессией `feat-016-mo-mandate-20261028` (2026-10-28/29; п.1 — сессией `feat-016a-simkit-090-20261028`). Поставлено 2.4.0:
+второй признак `.mesh/mandate.yaml` (показ как данных на `/sdx:start` и SessionStart, без python), `mandate.stages` как третий
+сужающий источник активного набора (поправка ADR-020; `Deployment` при мандате всегда у узла — по эталону, не по п.3 этой записи),
+проверка `diff ⊆ scope ∪ shared ∪ docs` на `/sdx:verify` (`mandate-scope.sh --into … --planned`), обёртка `mo-hook.sh` — строгий из
+двух `on_write`, охрана `mandate.yaml`, проба PyYAML при `deny` из мандата; `tests/suites.yaml` (`suites-gen.sh`: набор `unit` в
+форме stop-gate, образцы `module`/`regression`), `snippet-check.sh` для `/sdx:reconcile`, строка МО в `/sdx:status`, `devops` без
+слияний/тегов, мост Closeout для любого `delivery` (`bridge`/`bridge:offer`, оффер — шаг 0). Отклонения от записи: п.3
+(`Deployment`), п.6 (имена наборов), п.8 (сниппет — одно предложение, полный текст — `FEAT-017`). Не проверено исполнением
+(`DEBT-047`): канал SessionStart, реальный мандат узла, живой `run_suites`, проза моста, два PreToolUse при `deny`. Границы:
+парсер мандата строже `safe_load` (`DEBT-048`); инварианты прозы `[12b]` — эвристика, резервные ветки `mo-session` без теста
+(`DEBT-049`).

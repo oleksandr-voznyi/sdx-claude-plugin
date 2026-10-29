@@ -489,6 +489,154 @@ scen9() {
   elif [ "$bad" = 0 ]; then pass "[9] $seen real-hook fixtures: no __pycache__ in any hook directory"; fi
 }
 
+# ---------------------------------------------------------------- [2m] / [8i] (FEAT-016, REQ-MAND-16)
+# mandate.yaml forms: name|content (printf %b)|on_write the way yaml.safe_load sees it (lowercased; "-" = none)
+MANDATE_FORMS='notice|mandate:\n  on_write: notice|notice
+deny|mandate:\n  on_write: deny|deny
+Deny (case)|mandate:\n  on_write: Deny|deny
+block dump quoted|mandate:\n  format: 1\n  executor: x\n  on_write: '"'"'deny'"'"'\n  scope:\n    paths:\n      - src/|deny
+flow list|mandate:\n  scope: {paths: [src/]}\n  on_write: deny|deny
+no key|mandate:\n  executor: x|-'
+scen2m() {
+  echo "[2m$LBL] mode from two files: deny in endpoint.yaml OR mandate.yaml (no python3 -> cannot-check shows the mode)"
+  local e m line name content want got n=0 ewant
+  for e in "on_write: notice" "on_write: deny" "instance: x"; do
+    if [ "${SCEN2M_MIN:-0}" = 1 ] && [ "$e" != "on_write: notice" ]; then continue; fi
+    new_fx; bin_set none yes; hook_file_stub; ep "$e"   # one fixture per endpoint variant: only mandate.yaml changes
+    ewant=notice; [ "$e" = "on_write: deny" ] && ewant=deny
+    rm -f "$fx/proj/.mesh/mandate.yaml"
+    if [ "${SCEN2M_MIN:-0}" != 1 ]; then
+      run_hook "$(mk_bash 'ls')"
+      if [ "$ewant" = deny ]; then is_json_deny && [ "$RC" = 0 ] && got=deny || got=other
+      else { [ "$RC" = 0 ] && [ -z "$OUT" ] && one_line "$ERR"; } && got=notice || got=other; fi
+      [ "$got" = "$ewant" ] && pass "[2m.$e / no mandate.yaml] -> $ewant (as before)" || fail "[2m.$e / no mandate.yaml]" "want $ewant got $got rc=$RC out=[$OUT] err=[$ERR]"
+    fi
+    while IFS= read -r line; do
+      name="${line%%|*}"; rest="${line#*|}"; content="${rest%|*}"; want="${rest##*|}"
+      n=$((n + 1))
+      printf '%b\n' "$content" > "$fx/proj/.mesh/mandate.yaml"
+      run_hook "$(mk_bash 'ls')"
+      if [ "$ewant" = deny ] || [ "$want" = deny ]; then want=deny; else want=notice; fi
+      if is_json_deny && [ "$RC" = 0 ]; then got=deny; elif [ "$RC" = 0 ] && [ -z "$OUT" ] && one_line "$ERR"; then got=notice; else got="other(rc=$RC)"; fi
+      if [ "$got" = "$want" ]; then pass "[2m.$n$LBL] endpoint [$e] + mandate [$name] -> $want"
+      else fail "[2m.$n$LBL] endpoint [$e] + mandate [$name]" "want $want got $got out=[$OUT] err=[$ERR]"; fi
+    done <<<"$MANDATE_FORMS"
+  done
+  [ "${SCEN2M_MIN:-0}" = 1 ] && return 0
+  # mandate.yaml without endpoint.yaml: not an MO repo, silence (REQ-MAND-2)
+  new_fx; bin_set none yes; hook_file_stub; mkdir -p "$fx/proj/.mesh"; printf 'mandate:\n  on_write: deny\n' > "$fx/proj/.mesh/mandate.yaml"
+  run_hook "$(mk_bash 'ls')"
+  expect_silent "[2m.orphan$LBL] mandate.yaml (deny) without endpoint.yaml -> silence"
+}
+
+# [2y] (FEAT-016, MAND-PYYAML) deny from mandate.yaml + python3 without PyYAML -> the wrapper itself blocks; needs a real python3
+scen2y() {
+  echo "[2y$LBL] PyYAML absent: deny from the mandate -> JSON deny; notice everywhere -> as before"
+  if [ "$HAVE_PY" != 1 ]; then info "[2y$LBL] no python3: SKIPPED (not a pass)"; return; fi
+  local ev; ev="$(mk_write Write "src/a.txt" "/")"
+  # (a) endpoint notice + mandate deny + no PyYAML -> JSON deny naming PyYAML and the mandate
+  new_fx; bin_set real yes; hook_file_real; block_yaml; ep 'on_write: notice'
+  mandate_yaml deny 'src/'
+  EXTRA_PP="$fx/stubyaml" run_hook "$ev"
+  if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && case "$(reason)" in *PyYAML*мандат*) true ;; *) false ;; esac; then
+    pass "[2y.a$LBL] endpoint notice + mandate deny + no PyYAML -> JSON deny (PyYAML, mandate)"
+  else fail "[2y.a$LBL] mandate deny + no PyYAML" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  [ "${SCEN2Y_MIN:-0}" = 1 ] && return 0
+  # (b) endpoint notice + mandate notice + no PyYAML -> as before: one stderr line, exit 0, no stdout
+  new_fx; bin_set real yes; hook_file_real; block_yaml; ep 'on_write: notice'
+  mandate_yaml notice 'src/'
+  EXTRA_PP="$fx/stubyaml" run_hook "$ev"
+  expect_notice_line "[2y.b$LBL] endpoint notice + mandate notice + no PyYAML -> one stderr line, exit 0"
+  # (c) endpoint deny + no PyYAML -> unchanged: the hook itself refuses (JSON deny from the wrapper)
+  new_fx; bin_set real yes; hook_file_real; block_yaml; ep 'on_write: deny'
+  mandate_yaml notice 'src/'
+  EXTRA_PP="$fx/stubyaml" run_hook "$ev"
+  expect_deny_json "[2y.c$LBL] endpoint deny + no PyYAML -> JSON deny (as before)"
+  # (d) control: PyYAML present, mandate deny, path inside the scope -> the PyYAML check stays silent
+  if [ "$HAVE_YAML" = 1 ]; then
+    new_fx; bin_set real yes; hook_file_real; ep 'on_write: notice'
+    mandate_yaml deny 'src/'
+    run_hook "$(mk_write Write "$fx/proj/src/a.txt" "$fx/proj")"
+    if [ "$RC" = 0 ] && [ -z "$OUT" ]; then pass "[2y.d$LBL] control: PyYAML present, write inside scope -> no block"
+    else fail "[2y.d$LBL] control" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  fi
+}
+
+# [8i] parity of the wrapper's regex and yaml.safe_load(...)['mandate'].get('on_write') on the dump forms
+scen8i() {
+  echo "[8i$LBL] wrapper regex vs yaml.safe_load on mandate.yaml forms (needs PyYAML)"
+  if [ "$HAVE_PY" != 1 ] || [ "$HAVE_YAML" != 1 ]; then info "[8i$LBL] no python3 or no PyYAML: SKIPPED (not a pass)"; return; fi
+  local line name content want got oracle n=0
+  new_fx; bin_set none yes; hook_file_stub; ep 'on_write: notice'
+  while IFS= read -r line; do
+    name="${line%%|*}"; rest="${line#*|}"; content="${rest%|*}"; want="${rest##*|}"
+    n=$((n + 1))
+    printf '%b\n' "$content" > "$fx/proj/.mesh/mandate.yaml"
+    run_hook "$(mk_bash 'ls')"
+    if is_json_deny && [ "$RC" = 0 ]; then got=deny; else got=notice; fi
+    oracle="$(PYTHONDONTWRITEBYTECODE=1 "$REAL_PY" -c 'import sys,yaml; v=(yaml.safe_load(open(sys.argv[1])).get("mandate") or {}).get("on_write"); print(str(v).lower() if v is not None else "-")' "$fx/proj/.mesh/mandate.yaml" 2>/dev/null)"
+    if { [ "$oracle" = deny ] && [ "$got" = deny ]; } || { [ "$oracle" != deny ] && [ "$got" = notice ]; }; then pass "[8i.$n$LBL] $name: wrapper=$got, safe_load on_write=$oracle"
+    else fail "[8i.$n$LBL] $name" "wrapper=$got but safe_load on_write=$oracle"; fi
+  done <<<"$MANDATE_FORMS"
+}
+
+# [7m] mailbox guard for .mesh/mandate.yaml (REQ-MAND-17): unconditional on the file's presence, both modes
+scen7m() {
+  echo "[7m$LBL] guard of .mesh/mandate.yaml: Write-family tools -> JSON deny naming mandate.yaml"
+  local combo m tool form variant p cwd n=0 bad=0 pp rest
+  if [ "${GUARD_SET:-full}" = mand-min ]; then   # mutation runs: one combination per mode
+    set -- "notice|Write|abs|scope" "deny|NotebookEdit|rel|none"
+  else
+    set -- "notice|Write|abs|scope" "notice|Write|rel|empty" "notice|Write|dots|none" "notice|Write|dslash|scope" \
+           "notice|Write|updir|scope" "notice|Edit|abs|scope" "notice|MultiEdit|abs|empty" "notice|NotebookEdit|rel|none" \
+           "deny|Write|abs|scope" "deny|Edit|dots|none" "deny|MultiEdit|dslash|empty" "deny|NotebookEdit|updir|scope"
+  fi
+  new_fx; bin_set stub yes; hook_file_stub; pp="$fx/proj"
+  for combo in "$@"; do
+    m="${combo%%|*}"; rest="${combo#*|}"; tool="${rest%%|*}"; rest="${rest#*|}"; form="${rest%%|*}"; variant="${rest##*|}"
+    ep "on_write: $m"; cwd="$pp"
+    case "$variant" in
+      scope) mandate_yaml deny "src/" ;;
+      empty) mandate_yaml deny "" ;;
+      none)  rm -f "$pp/.mesh/mandate.yaml" ;;
+    esac
+    case "$form" in
+      abs)    p="$pp/.mesh/mandate.yaml" ;;
+      rel)    p=".mesh/mandate.yaml" ;;
+      dots)   p="$pp/./.mesh/../.mesh/mandate.yaml" ;;
+      dslash) p="$pp//.mesh/mandate.yaml" ;;
+      updir)  p="../.mesh/mandate.yaml"; cwd="$pp/src" ;;
+    esac
+    n=$((n + 1))
+    run_hook "$(mk_write "$tool" "$p" "$cwd")"
+    if [ "$RC" = 0 ] && is_json_deny && [ -z "$ERR" ] && ! stub_ran && printf '%s' "$(reason)" | grep -q 'mandate.yaml'; then :
+    else bad=$((bad + 1)); fail "[7m$LBL] $m $tool ($form, $variant)" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
+  done
+  [ "$bad" = 0 ] && pass "[7m.a$LBL] all $n combinations (tool x path form x mode x scope/empty/no file) -> JSON deny naming mandate.yaml, hook not started"
+  [ "${GUARD_SET:-full}" = mand-min ] && return 0
+  # physical path through a symlinked project
+  new_fx; bin_set stub yes; hook_file_stub; ep 'on_write: notice'; ln -s "$fx/proj" "$fx/link"
+  local phys; phys="$(cd "$fx/proj" && pwd -P)"
+  PROJ_OVERRIDE="$fx/link" run_hook "$(mk_write Write "$phys/.mesh/mandate.yaml" "$phys")"
+  if [ "$RC" = 0 ] && is_json_deny && ! stub_ran && printf '%s' "$(reason)" | grep -q 'mandate.yaml'; then pass "[7m.b$LBL] project via symlink: physical path -> JSON deny"
+  else fail "[7m.b$LBL] symlinked project" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+  # controls: other files under .mesh/ are not this guard's business
+  new_fx; bin_set stub yes; hook_file_stub; ep 'on_write: deny'; mandate_yaml deny "src/"; pp="$fx/proj"
+  local c
+  for c in "$pp/.mesh/other.yaml" "$pp/.mesh/inbox/x.json" "$pp/.mesh/mandate.yaml.bak" "$pp/src/mandate.yaml"; do
+    run_hook "$(mk_write Write "$c" "$pp")"
+    if [ "$RC" = 0 ] && [ -z "$OUT" ] && stub_ran; then pass "[7m.c$LBL] control $c: not blocked by the wrapper, hook started"
+    else fail "[7m.c$LBL] control $c" "rc=$RC out=[$OUT] err=[$ERR] stub_ran=$(stub_ran && echo yes || echo no)"; fi
+  done
+  # the text for endpoint.yaml / cursors.json is unchanged (REQ-MAND-1)
+  local old='SDX mo-hook: .mesh/endpoint.yaml и .mesh/cursors.json пишет узел МО, не dev-agent (MO-INTEROP §0). Запись остановлена.'
+  for c in endpoint.yaml cursors.json; do
+    run_hook "$(mk_write Write "$pp/.mesh/$c" "$pp")"
+    if is_json_deny && [ "$(reason)" = "$old" ]; then pass "[7m.d$LBL] $c: reason text unchanged"
+    else fail "[7m.d$LBL] $c reason" "[$(reason)]"; fi
+  done
+}
+
 # ---------------------------------------------------------------- core run (3..8), optionally per project kind
 run_core() {
   scen3; scen4; scen5; scen6; scen7; scen8
@@ -497,8 +645,12 @@ run_core() {
 # ---------------------------------------------------------------- main run
 scen1
 scen2
+scen2m
+scen2y
 PROJ_KIND=plain; LBL=""
 run_core
+scen7m
+scen8i
 scen9
 echo "[10] scenarios 3-8 in a project without .claude/ (not a VCS repo): ran above in full (fixtures have no .claude/)"
 if command -v git >/dev/null 2>&1; then
@@ -566,6 +718,11 @@ mutate NO-NORM      's|^  case "\$fp" in /\*) ;; \*) fp=.*# MO-NORM$|  :|' 'GUAR
 mutate NO-PHYS      's|for d in "\$proj_abs" "\$proj_phys"; do|for d in "$proj_abs"; do|' 'scen7f'
 mutate M9-MULTILINE 's|^    last="\${err##\*"\$nl"}"|    last="$err"|' 'scen3m'
 mutate NO-HOOKFILE  '/# MO-HOOKFILE/d' 'cell3 "no hook file" notice'
+# FEAT-016 (REQ-MAND-16, 17): mode from two files and the mandate.yaml guard
+mutate MAND-MODE2   '/# MAND-MODE2/d' 'SCEN2M_MIN=1 scen2m'
+mutate MAND-PYYAML 's|^if \[ "\$mode_from_mandate" = 1 \]\(.*# MAND-PYYAML\)$|if false; then   # MAND-PYYAML|' 'SCEN2Y_MIN=1 scen2y'
+mutate MAND-GUARD-MANDATE '/# MO-GUARD-MANDATE/d' 'GUARD_SET=mand-min scen7m'
+mutate MAND-NAME    's|"mandate.yaml"|"mandate.yml"|' 'GUARD_SET=mand-min scen7m'
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

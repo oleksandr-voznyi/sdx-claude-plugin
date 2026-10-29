@@ -1,0 +1,19 @@
+# tests/suites.yaml — декларация тестов репозитория для узла МО (sim-kit 0.9, dev.py run_suites).
+# Создан /sdx:init или /sdx:reconcile (sdx/hooks/suites-gen.sh) из той же команды, что исполняет stop-gate.
+# Имена наборов — контракт policy/tests.yaml узла: unit | module | regression.
+# cmd — строка оболочки в корне рабочей копии узла; budget_min — минуты; selector зарезервирован (пусто — набор целиком).
+# Файл НЕ перезаписывается генератором; правьте вручную.
+# Допущение: бит исполнения берётся из рабочего дерева; `git clone` сохраняет его при core.fileMode=true.
+suites:
+  unit:
+    cmd: ./.claude/sdx/verify-cmd.sh
+    budget_min: 3
+    selector: ""
+  # module:
+  #   cmd: <команда модульных/интеграционных тестов>
+  #   budget_min: 10
+  #   selector: ""
+  # regression:
+  #   cmd: <команда полной регрессии приложения>
+  #   budget_min: 60
+  #   selector: ""

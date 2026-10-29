@@ -3,8 +3,9 @@
 #
 # Runs the full hook unit-test suite (sdx/hooks/test-*.sh) so that stop-gate
 # enforces a deterministic test floor on SDX sessions of the framework itself
-# (dogfooding, DEBT-004). No --fast mode: the full suite runs in ~60 seconds
-# (15 suites, 2026-10-05; test-mo-hook.sh alone ~20s), under the stop-gate timeout (180s).
+# (dogfood, DEBT-004). No --fast mode: the full suite (19 suites, 2026-10-29) runs in
+# ~80-125 seconds depending on machine load (measured 124 s at load average ~10 on 8 cores;
+# test-mo-hook.sh alone ~20s), under the stop-gate timeout (180s).
 set -uo pipefail
 
 # Resolve the repo root relative to this script's location:

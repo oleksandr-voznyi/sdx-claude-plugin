@@ -1022,3 +1022,46 @@ SPEC/DESIGN/PLAN от решений, принятых человеком в э�
 `sdx/protocol.md`, `docs/DECISIONS.md` (ADR-021), `docs/specs/mo-interop.md`, `docs/designs/mo-interop.md`, `agents/devops.md`,
 `sdx/templates/claude-md-snippet.md`, `sdx/mo/README.md`, `docs/backlog/FEAT-016…`, `README.md` индекса,
 `.claude-plugin/plugin.json` (2.3.1). Ветка `sdx/feat-016a-simkit-090-20261028`. Следующий шаг — вторая сессия `FEAT-016` (п.2–9).
+
+## 2026-10-28/29 — feat-016-mo-mandate-20261028 (feature, полный цикл SPEC/DESIGN/PLAN) · плагин 2.4.0
+
+**Предмет.** `FEAT-016` п.2–9 — «мандат и декларации», вторая сессия 2.4.0 (п.1, перевендоринг sim-kit 0.9.1, — предыдущей).
+Граница SDX↔МО по стадиям: второй признак `.mesh/mandate.yaml` рядом с `endpoint.yaml`.
+
+**Решения (стоп-рубрика, `decisions_log.md` — 15 записей).** `[триада]` Discovery: `Deployment` при мандате всегда у узла —
+по эталону 0.9.1, не по п.3 записи; `[контракт]` имена наборов `tests/suites.yaml` — `unit` из stop-gate + образцы
+`module`/`regression`; `[триада]` DESIGN: приняты К-1…К-10 (по строке на каталог; показ мандата без python; `--planned`;
+охрана `mandate.yaml` безусловна; `patch|worktree` → остановка; `docs_in_repo: none` пропускает переносы); `[триада]`
+Verification: мост Closeout для ЛЮБОГО `delivery` (`bridge`/`bridge:offer`, оффер — шаг 0 до шага 1, один раз);
+`[ручной-шаг]` ручной сценарий — НЕ ПРОВЕРЕНО (`DEBT-047`).
+
+**Поставка.** `lib/miniyaml.sh` + `lib/mandate.sh` (bash-парсер подмножества YAML, паритет с `safe_load` на 62 фикстурах в
+сторону отказа); `sdx-stage.sh` — третий сужающий источник, `start-stage`/`active-set`; `mandate-info.sh`
+(`show|status|closeout-mode|closeout-check`); `mandate-scope.sh --into --planned`; `mo-hook.sh` — строгий из двух `on_write`,
+охрана `mandate.yaml`, проба PyYAML при `deny` из мандата (`MAND-PYYAML` — находка круга 1); `mo-session.sh` — показ мандата
+без python; `lib/test-cmd.sh` + `suites-gen.sh` (форма stop-gate, dogfood `tests/suites.yaml`); `snippet-check.sh`;
+команды `start/import/next/status/verify/archive/init/reconcile`; `devops.md`; сниппет; протокол («Мандат МО», «два
+признака», мост Closeout, «Декларация тестов»); ADR-020/021 поправки; дельты `docs/specs|designs/mo-interop.md`; README×2,
+`CLAUDE.md` §3. Тесты: 4 новых сьюта (`test-mandate-lib` 213, `test-mandate-scope` 92, `test-suites-gen` 76,
+`test-snippet-check` 22) + расширения (`test-sdx-stage` 95, `test-mo-hook` 159, `test-mo-session` 43, `test-mo-prose` 148);
+19 сьютов, ~105–125 с на загруженной машине (предел 180). Исполнение — фундамент последовательно, три дорожки `developer`
+параллельно (52 задачи PLAN).
+
+**Инциденты исполнения.** `test-mo-session.sh` писал в cwd файлы `mandate_orphan_line`/`out=…`: `${src//old/new}` в bash ≥ 5.2
+раскрывает `&` в замене (`patsub_replacement`) — исправлено `shopt -u` в `mutate()`. Коммит дорожки B переписан `--amend`
+дорожкой C (ошибка процесса, одна). Вердикт T48(в): `mandate-info.sh status` пробует python3/PyYAML — проба, не зависимость.
+
+**Верификация.** QA: 19/19, матрица 21 критерия, 17 собственных мутантов красные, 22 сквозных сценария PASS, дыры прозы G1–G4
+(закрыты), граница парсера F1 (`DEBT-048`). Fresh-eyes — семь кругов: 1 — FAIL PyYAML/deny из мандата + 8 WARN; 2 — мост не
+во всех носителях + оффер двояко; 3–6 — остатки в сессионных носителях (DESIGN/MANUAL_TEST/заметки) и фикстуры; 7 — PASS,
+4 редакционных WARN исправлены. Шаг 6а (`mandate-scope.sh --into`) — вне мандата no-op.
+
+**Бэклог.** `FEAT-016` закрыта (Резолюция с отклонениями от записи). Новые `DEBT-047` (ручной сценарий), `DEBT-048`
+(парсер строже `safe_load`), `DEBT-049` (границы покрытия). `DEBT-043` частично (строка `/sdx:status`), периметр self-test
+остаётся. Upstream — `SDX-MO-mandate-note-2026-10-29.md` в `agentico/reviews/` (`.claude/sessions/**` в дефолтный
+`docs_paths`; смысл `docs_in_repo`; fail-open битого мандата; `patch|worktree`; ADR в каждом пакете при `final`).
+
+**Перенесено.** `docs/history/plans/feat-016-mo-mandate-20261028.md`, `docs/history/specs/…`, `docs/history/designs/…`
+(полные SPEC/DESIGN с пометками кругов), `docs/history/experiments/mo-mandate-manual-test-2026-10-29.md`,
+`docs/history/releases/v2.4.0-notes.md` (черновик, не опубликован; push/релиз — по явной просьбе). Версия плагина 2.4.0.
+Ветка `sdx/feat-016-mo-mandate-20261028`. Следующий шаг — `FEAT-017` (2.5.0, `/sdx:pr`) после ответа владельца МО.

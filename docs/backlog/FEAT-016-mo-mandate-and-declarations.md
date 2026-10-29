@@ -1,11 +1,11 @@
 ---
 id: FEAT-016
 type: feat
-status: open
+status: closed
 priority: high
 wave: null
 source: intake intake-mo-dev-control-20261028 (записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` §2.2, §2.4–2.9, §2.11; ответ SDX `SDX-MO-dev-control-reply-2026-10-28.md` §1–3; sim-kit 0.9.x `core/MO-INTEROP.md` §7 «Мандат разработки», `core/devagent_hook.py`, `core/dev.py`, `policy/tests.yaml`)
-session: null
+session: feat-016-mo-mandate-20261028
 links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DEBT-045, ADR-020, ADR-021]
 ---
 
@@ -107,3 +107,16 @@ links: [FEAT-015, PROC-028, FEAT-017, FEAT-018, FEAT-006, DEBT-042, DEBT-043, DE
 `suites.yaml` генерируется и читается `dev.py run_suites` без ошибок (проверка на копии sim-kit локально).
 
 Вне скоупа (следующие записи): `/sdx:pr`, `CHANGE.yaml`, `protocol.yaml`, `--from-order` — `FEAT-017`; `sdx run` — `FEAT-018`.
+
+## Резолюция
+Закрыта сессией `feat-016-mo-mandate-20261028` (2026-10-28/29; п.1 — сессией `feat-016a-simkit-090-20261028`). Поставлено 2.4.0:
+второй признак `.mesh/mandate.yaml` (показ как данных на `/sdx:start` и SessionStart, без python), `mandate.stages` как третий
+сужающий источник активного набора (поправка ADR-020; `Deployment` при мандате всегда у узла — по эталону, не по п.3 этой записи),
+проверка `diff ⊆ scope ∪ shared ∪ docs` на `/sdx:verify` (`mandate-scope.sh --into … --planned`), обёртка `mo-hook.sh` — строгий из
+двух `on_write`, охрана `mandate.yaml`, проба PyYAML при `deny` из мандата; `tests/suites.yaml` (`suites-gen.sh`: набор `unit` в
+форме stop-gate, образцы `module`/`regression`), `snippet-check.sh` для `/sdx:reconcile`, строка МО в `/sdx:status`, `devops` без
+слияний/тегов, мост Closeout для любого `delivery` (`bridge`/`bridge:offer`, оффер — шаг 0). Отклонения от записи: п.3
+(`Deployment`), п.6 (имена наборов), п.8 (сниппет — одно предложение, полный текст — `FEAT-017`). Не проверено исполнением
+(`DEBT-047`): канал SessionStart, реальный мандат узла, живой `run_suites`, проза моста, два PreToolUse при `deny`. Границы:
+парсер мандата строже `safe_load` (`DEBT-048`); инварианты прозы `[12b]` — эвристика, резервные ветки `mo-session` без теста
+(`DEBT-049`).

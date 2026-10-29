@@ -59,13 +59,14 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 Записи `FEAT-016`, `FEAT-017`, `FEAT-018` порождены разбором `intake intake-mo-dev-control-20261028`
 (записка владельца МО 26.10 о мандате разработки sim-kit 0.9 и ответная записка SDX 28.10 — три выпуска
 плагина 2.4.0 / 2.5.0 / 3.0); тем же разбором дописаны «Уточнения разбора» в `FEAT-006` и `DEBT-043`.
+`DEBT-047`…`DEBT-049` порождены сессией `feat-016-mo-mandate-20261028` (2.4.0): ручной сценарий не выполнен (решение
+пользователя), граница bash-парсера мандата, границы покрытия семи кругов верификации.
 
 ## Открытые
 
 | ID | type | status | priority | wave | Название |
 |----|------|--------|----------|------|----------|
 | FEAT-006 | feat | open | high | 2 | [Модель полномочий: классы риска действий, `deny` → `ask`/`defer`](FEAT-006-authority-model-risk-classes.md) |
-| FEAT-016 | feat | open | high | null | [Мандат МО и декларации (2.4.0): признак `mandate.yaml`, гейт `mandate.stages`, область на `/sdx:verify`, `tests/suites.yaml`, sim-kit 0.9.x (п.1 выполнен: вендорён 0.9.1; п.2–9 — сессия feat-016-mo-mandate-20261028)](FEAT-016-mo-mandate-and-declarations.md) |
 | FEAT-017 | feat | open | high | null | [Сдача пакетом изменения (2.5.0): `/sdx:pr` как второй вариант Closeout, `CHANGE.yaml`, `protocol.yaml`, `--from-order`](FEAT-017-mo-change-package-delivery.md) |
 | PROC-017 | proc | open | high | 2 | [Delta-first: дельта — первичный артефакт, мёрж механический](PROC-017-delta-first-artifacts.md) |
 | FEAT-003 | feat | open | high | 3 | [Реестр задач прогона как источник истины вместо прозаического `PLAN.md`](FEAT-003-run-task-ledger.md) |
@@ -113,9 +114,12 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 | DEBT-041 | debt | open | low | null | [Anti-overclaim-линт направленный: ловит один порядок слов из двух](DEBT-041-overclaim-lint-directional.md) |
 | DEBT-042 | debt | open | low | null | [Норма «обновление `sdx/mo/` не в авторежиме» держится только прозой протокола](DEBT-042-mo-update-not-in-auto-unenforced.md) |
 | DEBT-043 | debt | open | normal | null | [Self-test не покрывает МО-хуки; `/sdx:status` не показывает состояние МО](DEBT-043-selftest-perimeter-excludes-mo-hooks.md) |
+| DEBT-047 | debt | open | normal | null | [Ручной сценарий мандата МО не выполнен (канал SessionStart, реальный мандат, run_suites, мост, два PreToolUse)](DEBT-047-mandate-manual-scenario-unverified.md) |
 | DEBT-045 | debt | open | normal | null | [Два утверждения FEAT-015 держатся как допущения: агрегация двух PreToolUse и канал SessionStart](DEBT-045-k20-sessionstart-channel-unverified.md) |
 | DEBT-044 | debt | open | low | null | [Идентичность вендорённой копии проверяется только в чекауте](DEBT-044-installed-copy-hash-check.md) |
 | DEBT-046 | debt | open | low | null | [Посторонний пустой tracked-файл `false` в корне](DEBT-046-stray-tracked-file-false.md) |
+| DEBT-048 | debt | open | low | null | [Bash-парсер мандата строже safe_load: многострочные скаляры и \e/\uXXXX](DEBT-048-mandate-parser-stricter-than-safe-load.md) |
+| DEBT-049 | debt | open | low | null | [Границы покрытия FEAT-016: эвристика [12b], резервные ветки mo-session, [8h] без своего мутанта](DEBT-049-mandate-test-coverage-boundaries.md) |
 | DEBT-013 | debt | open | low | null | [У раннера `.claude/sdx/verify-cmd.sh` нет собственного автотеста](DEBT-013-verify-cmd-runner-no-autotest.md) |
 | DEBT-020 | debt | open | low | null | [Каталоги разборов без индекса; формулировка ADR-017 разошлась с фактом](DEBT-020-history-review-dirs-no-index.md) |
 | DEBT-027 | debt | open | low | null | [Постоянные документы ссылаются на доплагинный путь `.claude/sdx/hooks/`](DEBT-027-legacy-hook-paths-in-permanent-docs.md) |
@@ -135,6 +139,7 @@ ADR (`docs/DECISIONS.md`) и другие записи бэклога.
 
 | ID | Название | Сессия закрытия |
 |----|----------|------------------|
+| FEAT-016 | [Мандат МО и декларации (2.4.0)](FEAT-016-mo-mandate-and-declarations.md) | `feat-016a-simkit-090-20261028` (п.1) + `feat-016-mo-mandate-20261028` (п.2–9; Deployment по эталону, наборы unit/module/regression) |
 | FEAT-015 | [Интероп с мета-оркестратором (МО) в плагинной модели](FEAT-015-mo-interop-plugin-model.md) | `feat-015-mo-interop-20261004` (К20/канал SessionStart → `DEBT-045`) |
 | PROC-028 | [Политика вендоринга sim-kit в плагин: версия, обновление, запрет локальных правок](PROC-028-simkit-vendoring-policy.md) | `proc-028-simkit-vendoring-20261004` (п.2 реализован двумя файлами) |
 | DEBT-007 | [Мёртвые поля в `session_state.json`](DEBT-007-dead-fields-session-state.md) | `proc-run-as-durable-unit-20260902` (расщеплена: `status` → `DEBT-039`) |

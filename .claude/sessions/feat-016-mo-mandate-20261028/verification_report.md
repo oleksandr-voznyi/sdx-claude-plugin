@@ -1,128 +1,87 @@
-# Verification Report: feat-016-mo-mandate-20261028 (круг 2, fresh-eyes)
+# Verification Report: feat-016-mo-mandate-20261028 (круг 3, fresh-eyes)
 
 ## Сводка
 - Объём: полный (SPEC/DESIGN/PLAN), no_code: нет, no_gates: нет
+- Вход: SPEC.md (с «Поправками по коллизиям DESIGN», круги 1–2), DESIGN.md, PLAN.md, decisions_log.md, qa_report.md, delivery.diff (против main, без каталога сессии); эталон `sdx/mo/MO-INTEROP.md` §7, `sdx/mo/devagent_hook.py`, `sim-kit/core/dev.py`; нормы — protocol.md, DECISIONS.md, docs/specs|designs/mo-interop.md, CLAUDE.md, README×2, бэклог FEAT-016.
 - Итог: **FAIL**
-- Находки: FAIL: 1, WARN: 1, INFO: 9
-- Вход: `SPEC.md` (с разделом «Поправки по коллизиям DESIGN», включая поправки круга 1), `DESIGN.md` (раздел «Компоненты» местами устарел — это известно), `PLAN.md` (в т.ч. «Круг 1 верификации»), `decisions_log.md`, `qa_report.md`, `delivery.diff` (40 файлов), эталон `sdx/mo/devagent_hook.py` и `sim-kit/core/dev.py` (`glob_any`, `run_suites`, `worktree`, `DELIVERY/HISTORY/DOCS`).
-- Тесты я не запускал (у меня нет `Bash`). Покрытие в отчёте — **видимое** (выведено из чтения diff), а не доказанное прогоном. Опираюсь на зелёный прогон QA круга 1 (19/19).
+- Находки: FAIL: 1, WARN: 4, INFO: 5
+- По осям:
+  - **Полнота** — OK. У всех REQ-MAND-1…33 (вкл. 11a, 23a, 23b) и критериев 1–21 есть реализация в diff и видимое тестовое покрытие (автотест или grep-инвариант); ручные части (критерии 3-канал, 14-Л, 16-проза, 21) честно помечены «НЕ ПРОВЕРЕНО»/процесс. Scope creep нет; мелкие расширения сверх DESIGN записаны в PLAN «Отклонения» (INFO-1).
+  - **Корректность** — OK по коду: гейт стадий, `start-stage`/`active-set`, `mandate-scope.sh`, `closeout-mode` (`bridge`/`bridge:offer`/`undefined:*`/`error:*`), `MAND-MODE2` + `MAND-PYYAML`, охрана `mandate.yaml`, `suites-gen.sh` (форма вызова как у stop-gate) соответствуют SPEC с поправками; у новых ветвлений есть красные стороны. Отрицательные инварианты `[12b]` различают, но узко (WARN-2).
+  - **Когерентность** — FAIL: нормативные поставляемые носители (протокол, ADR-020/021, README×2, CLAUDE.md, `archive.md`, `next.md`, `devops.md`, дельты `docs/specs|designs`, бэклог FEAT-016) по мосту Closeout и однократному офферу согласованы; но сессионные носители-контракт и носители, которые уйдут в постоянные документы на Closeout (DESIGN.md, MANUAL_TEST.md, release_notes_draft.md), сохраняют старые формулировки, прямо противоречащие коду (FAIL-1). Плюс дрейф «вместо пакета» для `bridge:offer` (WARN-1).
+- Проверено отдельно по постановке: (1) FAIL-1/WARN-1 круга 2 закрыты во всех нормативных носителях diff — да; в сессионных — нет (FAIL-1). (2) `[12b]` красная сторона есть для `archive.md`/`protocol.md` (offer-once) и для шести носителей (stale-фраза); для `devops.md` красной стороны нет (WARN-2). (3) Отображение стадий, Verification/Closeout всегда, Deployment исключён, два режима `on_write` + PyYAML при `deny` из мандата, охрана `mandate.yaml`, предупреждения по каталогам, `docs_in_repo`/`--planned`, форма `cmd` — согласованы в поставке (исключения — WARN-1, WARN-3). (4) Обратная совместимость: без `mandate.yaml` новые ветки за предикатом «оба файла»; названные исключения (suites.yaml, status/сниппет, К-4, usage-строка К-10) задокументированы; правки прежних сьютов — только фикстурные строки (не утверждения). (5) Номер вендорённой версии (`0.9.0`/`0.9.1`) в `sdx/protocol.md` и `docs/DECISIONS.md` отсутствует (grep пуст). (6) Полнота в обе стороны — OK.
 
-### Сводка по осям
-| Ось | Итог | Коротко |
-|---|---|---|
-| Полнота | OK, с замечаниями (INFO) | У всех REQ-MAND-1…33, 11a, 23a/23b видна реализация и автотест либо grep-инвариант. Ручная часть (критерии 3-канал, 7-реальный дамп, 14-Л, 16-живая проза) по решению пользователя отмечена «НЕ ПРОВЕРЕНО» (INFO-1). Scope creep существенного нет. |
-| Корректность | OK, с одним WARN | FAIL круга 1 (PyYAML при `deny` из мандата) закрыт по существу, тест и мутант есть. Форма `cmd` в `tests/suites.yaml` для `run_suites` корректна при допущении о бите исполнения (INFO-2). Под мандатом не определено, в какой момент отправлять `artifact.offer` (WARN-1). |
-| Когерентность | **FAIL** | Решение пользователя от 2026-10-29 «мост Closeout для любого `delivery`» дошло до кода, `archive.md`, контракта закрытия в протоколе, `devops.md` и дельт `docs/specs|designs`. В ADR-021 (поправка, п.5), в абзаце протокола «Три слоя», в README×2, в критерии 16 SPEC и в DESIGN по-прежнему стоит «мост при `pr|branch`», а в DESIGN и критерии 16 — «при `artifact.offer` Closeout штатный» (FAIL-1). |
-
-### Закрытие находок круга 1 (проверено по diff)
-| Находка круга 1 | Статус | Доказательство в diff |
-|---|---|---|
-| FAIL: `deny` из мандата при python3 без PyYAML | **закрыт** | `mo-hook.sh` `# MAND-PYYAML` (сам отдаёт JSON deny); `test-mo-hook.sh` `[2y]` a–d (a — красный без фикса, b/c — регресс, d — контроль) и мутант `MAND-PYYAML`; протокол («Политики отказа», абзац о `mo-hook`), ADR-021 поправка п.(6), дельты `docs/specs|designs` |
-| WARN-1: мост при `artifact.offer` | **закрыт частично** | Код `closeout-mode` → `bridge:offer`, тест `cm offer`, мутант `MAND-BRIDGE`; `archive.md` 2а, протокол «Контракт закрытия», `devops.md`, `[12]` с `bridge:offer`. Не исправлены ADR-021, протокол «Три слоя», README×2, критерий 16 SPEC, DESIGN → **FAIL-1** |
-| WARN-2: форма вызова раннера | **закрыт** | `lib/test-cmd.sh` (`# SG-EXEC`/`# SG-BASH`); `test-suites-gen.sh` `[1x]`; в `[7]` есть близнец с python-shebang под `sh -c` — так узел и вызывает (`shell=True`); мутанты `SG-EXEC`, `SG-NUM`; `tests/suites.yaml` = `./.claude/sdx/verify-cmd.sh` |
-| WARN-3: `status.md` 5а | **закрыт** | Текст 5а совпадает с выводом `mandate-info.sh status`; закреплён `chk_status_mandate` с красными сторонами |
-| WARN-4 / G1–G4: проза без инвариантов | **закрыт** | `test-mo-prose.sh` `[18]` (`reconcile.md` (е)/(ж), `init.md` 2в, `status.md` 5а, `next.md`, правило `--planned`); `chk_bridge` расширен `docs_in_repo`, `(n/a, docs_in_repo: none)`, строкой о ветке `sdx/<id>`; у каждого инварианта есть повреждённая копия |
-| WARN-5: дельта `docs/specs` | **закрыт** | Исключения REQ-MAND-1 перечислены верно, числа версии нет (`SIMKIT_VERSION`) |
-| WARN-6: «§6» в `FEAT-016` | **закрыт** | `source:` и п.3 ссылаются на §7; оставшиеся «`MI` §6» в `docs/*mo-interop.md` относятся к шаблону сниппета, это корректно |
-| WARN-7: `CLAUDE.md` §3 | **закрыт** | Добавлен абзац «Третий сужающий источник — мандат МО» |
-| WARN-8: ручная часть | **закрыт решением пользователя** | `MANUAL_TEST.md`: 5 случаев «НЕ ПРОВЕРЕНО» (ДЛ 2026-10-29). Фикстура `history` исправлена в L3/сиблинге, но в `test-mo-session.sh` осталась вне домена `dev.py` (INFO-6) |
-| QA F1 | названная граница | SPEC «Границы», протокол «Разбор — подмножество YAML», дельта `docs/specs`; DEBT — на Closeout |
-| QA F2 / F3 | **закрыты** | `SG-NUM` (`budget_min=3 vs 3`); `active-set` → `unknown:mandate` + `[M39]` + мутант `SDX-UNKNOWN` |
+Покрытие ниже — **видимое** (выведено из чтения diff и qa_report), а не доказательство исполнением.
 
 ## Матрица трассируемости
 | Требование / критерий | Реализация (файл) | Тест | Когерентность | Статус |
 |---|---|---|---|---|
-| REQ-MAND-1 (без мандата — как 2.3.x; исключения (а)(б), К-4, `from.kit`) / К1 | `sdx-stage.sh` `_mandate_try` (ленивая lib, только при обоих файлах); `mo-hook.sh` (`mode_from_mandate=0` без мандата); `mo-session.sh` (`mnote` пуст, `mand_show` возвращает сразу) | `[M30]`, `[2m.* / no mandate.yaml]`, `[7m.d]` (прежний текст отказа), `check_m12c` (строка «бит в бит») + мутант `mnote-always`, `test-mandate-scope (1)` | ok (дельта `docs/specs` перечисляет исключения; дельта `docs/designs` не называет К-4 — INFO-5) | OK |
-| REQ-MAND-2/3 (два файла; orphan — одна строка) / К2 | `lib/mandate.sh` `mandate_mode`, `mandate_orphan_line`; `mo-session.sh` `# MAND-ORPHAN`; `mandate-info.sh show` | `[L7]`, `check_m10` (+мутанты `no-orphan`, `orphan-two-lines`), `[2m.orphan]`, `[M] show orphan` | ok; README: «без `endpoint.yaml` — no-op» (INFO-7) | OK |
-| REQ-MAND-4/5 (показ на SessionStart и `/sdx:start`, маркер данных, К-2) / К3, К4 | `mandate_report`; `mo-session.sh` `mand_show`; `start.md` 1а | `[L8]`, `check_m11*`, `check_m12*`, мутанты `no-show`, `show-before-inbox`, `no-marker`; `[14]` | ok | OK |
-| REQ-MAND-6/7 (область по каждому каталогу, К-1; срок) / К4 | `mandate_report` `# MAND-SCOPE-WARN`, `mandate_expired`; `mandate-scope.sh` (строка `> Предупреждение:`) | `[L8w]`, `[L6]`, `check_m11b`, `(10)`; мутанты `MAND-SCOPE-WARN`, `MAND-EXPIRY` | ok | OK |
-| REQ-MAND-8/9 (третий источник, отображение, `Deployment` всегда) / К5 | `lib/mandate.sh` `_mandate_class`/`mandate_stage_allowed`; `sdx-stage.sh` `is_skipped` `# MAND-SKIP` | `[L4]`, `[M31]`, `[M33]`, `[M36]`; мутанты `MAND-NEVER/ALWAYS/EXCL/SKIP/DEPLOY` | ok (ADR-020 поправка, протокол «Активность этапа», `next.md`, `CLAUDE.md` §3); момент отправки оффера — WARN-1 | OK |
-| REQ-MAND-10 (fail-closed, пустой `stages`, паритет `safe_load`) / К7 | `lib/miniyaml.sh`, `mandate_load` | `[L1]`, `[L1v]`, `[L2]` (оракул), `[L3]`, `[M35]`, `[M36]`; мутанты `MAND-ROOT/UNKNOWN/FLOW` | граница F1 названа | OK |
-| REQ-MAND-11/11a (`--to`, `start-stage`, `no_gates`/`no_code`) / К6, К8 | `sdx-stage.sh` `# MAND-TO`, `cmd_start_stage`, шаг 5а `init`; `start.md`, `import.md` | `[M32]`, `[M34]`, `[M37]`, `[M38]`; мутант `MAND-TO` | ok (протокол «Механизм перехода»; INFO-8 про `start-stage` без мандата) | OK |
-| REQ-MAND-12/13/15 (`diff ⊆ область`, FAIL/WARN, пустой `paths`) / К9 | `mandate-scope.sh`; `verify.md` 6а | `(1)–(5)`, `(7)–(9)`, `[L5]` (42 случая + оракул `glob_any`); мутанты `MAND-OUTSIDE/SHARED/EMPTY-PATHS/REPLACE/GLOB-*` | ok (сопоставление совпадает с `dev.py:69–70` формула в формулу) | OK |
-| REQ-MAND-14 (переносы Closeout, К-3 `--planned`) / К10 | `mandate-scope.sh` `# MAND-PLANNED`; правило в `verify.md` 6а | `(6)`, мутант `MAND-PLANNED`; `chk_verify_planned` | INFO-4 (каталоги, `docs_in_repo: none`) | OK |
-| REQ-MAND-16 (режим из двух файлов + PyYAML при `deny` из мандата) / К11 | `mo-hook.sh` `# MAND-MODE2`, `# MAND-PYYAML` | `[2m]`, `[2y]`, `[8i]`; мутанты `MAND-MODE2`, `MAND-PYYAML` | ok; INFO-3 (ADR «Отвергнуто») | OK |
-| REQ-MAND-17 (охрана `mandate.yaml`, К-4) / К12 | `mo-hook.sh` `# MO-GUARD-MANDATE`, `is_mailbox_file` с 3-м аргументом | `[7m]` a–d; мутанты `MAND-GUARD-MANDATE`, `MAND-NAME` | ok | OK |
-| REQ-MAND-18/19/20 (генерация, форма вызова, идемпотентность, `NOCMD`) / К13 | `lib/test-cmd.sh`, `suites-gen.sh`; `init.md` 2в, `reconcile.md` (е), шаг 10 | `[1]`, `[1x]`, `[2]–[7]`, мутанты `SG-*`; `[18]` | ok; INFO-2 (допущение о бите) | OK |
-| REQ-MAND-21 (dogfood) / К14 | `tests/suites.yaml` (tracked, `./.claude/sdx/verify-cmd.sh`, `budget_min: 3`) | `[8]`, `[9]` (оракул `safe_load`); живой `run_suites` — «НЕ ПРОВЕРЕНО» (ДЛ, INFO-1) | ok | OK (Л — видимое) |
-| REQ-MAND-22 (`devops`) / К15 | `agents/devops.md` подпункт «Мандат», п.3 «Инструкций» | `[10]` с красными сторонами | см. WARN-1 (момент отправки оффера) | OK |
-| REQ-MAND-23/23a/23b (мост для любого `delivery`, `undefined`, `docs_in_repo`) / К16 | `mandate-info.sh` `closeout-mode`/`closeout-check`; `archive.md` 2а; протокол «Контракт закрытия» | `[M]` `cm offer/pr/branch/patch/worktree/unset/broken/hostile`, `closeout-check` ×5; мутанты `MAND-BRIDGE/CHECK-*`; `[12]` | **дрейф**: ADR-021 (5), протокол «Три слоя», README×2, критерий 16, DESIGN | **FAIL** (FAIL-1) |
-| REQ-MAND-24/25 (сниппет, `reconcile` (ж)) / К17 | `claude-md-snippet.md`; `snippet-check.sh`; `reconcile.md` (ж) | `[11]`, `test-snippet-check.sh` (+ мутант `SC-CMP`), `[18]` | ok | OK |
-| REQ-MAND-26 (`/sdx:status`) / К18 | `mandate-info.sh status`, `sdx-stage.sh active-set`; `status.md` 5а | `[M] status` (снимок дерева, без `__pycache__`), `[M39]`, `[M40]`, `[18]` | ok | OK |
-| REQ-MAND-27/28/29 (два признака, ADR, дельты, бэклог) / К19 | протокол, `docs/designs|specs/mo-interop.md`, README×2, `CLAUDE.md`, `DECISIONS.md`, `FEAT-016` | `[9]`, `[15]`, `[16]`; `test-mo-inventory.sh` (по QA) | ok (числа вендорённой версии в протоколе/ADR нет — проверено grep; `0.9.1` только в бэклоге, как требует REQ-MAND-29) | OK |
-| REQ-MAND-30 (2.4.0) / К19 | `plugin.json` 2.4.0; в `marketplace.json` версии нет | `[17]` + красная сторона | релизные заметки — на Closeout (C3) | OK |
-| REQ-MAND-31/32/33 (регресс, время, зависимости) / К20 | `verify-cmd.sh` (комментарий), lib без python, `sdx/mo/*` не тронуты (в diff нет) | `[L9]`, `[P]`, мутационные секции; прогон QA 114 с | ok; INFO-9 (запас времени) | OK |
-| К21 (не `auto`) | процесс | — (QA и T51 сверили `gate_mode: interactive`) | ok | OK (процесс) |
+| REQ-MAND-1, 15, 31 / кр.1 (без мандата как 2.3.x) | `sdx-stage.sh` `_mandate_try` (предикат «оба файла», ленивый source); `mo-hook.sh` MAND-MODE2/PYYAML за `-f`; `mo-session.sh` `mnote`/`mand_show`; `mandate-scope.sh` ранний `exit 0` | `test-sdx-stage [M30]`, прежние [1]–[32] без правок утверждений; `test-mo-session` сц.1–9; `test-mandate-scope (1)` | дрейф формулировки «как 2.3.x» в протоколе (WARN-3) | WARN |
+| REQ-MAND-2, 3 / кр.2 (два файла; orphan) | `lib/mandate.sh` `mandate_mode`, `mandate_orphan_line`; `mo-session.sh` MAND-ORPHAN; `mandate-info.sh show` | `L7`, `test-mo-session [10]` + мутанты `no-orphan`/`orphan-two-lines`, `[M30]` | ok | OK |
+| REQ-MAND-4 (+К-2) / кр.3 | `mandate_report`, `mo-session.sh` `mand_show` (вкл. вырожденную ветку) | `test-mo-session [11][12]`, `L8` + мутанты | ok (DESIGN :284/:473 устарел — FAIL-1) | OK |
+| REQ-MAND-5, 6 (К-1), 7 / кр.4 | `commands/start.md` 1а; `mandate_report` предупреждения по каждому каталогу, срок | `L8`/`L8w`, `[M] show`, `test-mo-prose [14]` | ok | OK |
+| REQ-MAND-8, 9 / кр.5 | `mandate_stage_allowed` (always/never), `is_skipped` MAND-SKIP | `L4`, `[M31][M32][M33][M36]`, мутанты `MAND-NEVER/ALWAYS/SKIP/EXCL` | ok | OK |
+| REQ-MAND-9 (оффер один раз, ДЛ-1) | проза: протокол «Deployment под МО», «Мост Closeout»; `archive.md` 2а; `next.md`; `devops.md`; CLAUDE.md §3; ADR-020 | `test-mo-prose [12b]` (archive/protocol/devops) | поставка ok; DESIGN :290/:545, release notes — старое (FAIL-1) | FAIL (через FAIL-1) |
+| REQ-MAND-10 / кр.7 | `lib/miniyaml.sh`, `mandate_load` | `L1`–`L3`, `L2` паритет `safe_load`, `[M35]` | граница F1 названа в SPEC/протоколе/дельте | OK |
+| REQ-MAND-11 / кр.6, 8 | `sdx-stage.sh` MAND-TO, init-проверка, `cmd_start_stage` | `[M32][M34][M37][M38]`, мутант `MAND-TO` | ok | OK |
+| REQ-MAND-11a, 28 | ADR-020/021 поправки 2026-10-28; протокол «Активность этапа» | `test-mo-prose [15][16]` | ok | OK |
+| REQ-MAND-12, 13, 14 / кр.9, 10 | `mandate-scope.sh`, `mandate_glob_one` (формула `dev.py:69`), `--planned`; `verify.md` 6а | `test-mandate-scope (1)–(10)`, `L5` (42 случая + оракул), мутанты; `[18]` правило `--planned` | ok | OK |
+| REQ-MAND-16 (+PyYAML при deny из мандата) / кр.11 | `mo-hook.sh` MAND-MODE2, MAND-PYYAML | `[2m]`, `[2y]`, `[8i]`, мутанты `MAND-MODE2`, `MAND-PYYAML` | ok (протокол, ADR-021 п.6, дельты) | OK |
+| REQ-MAND-17 (+К-4) / кр.12 | `is_mailbox_file` 3-й параметр, MO-GUARD-MANDATE | `[7m]`, мутанты `MAND-GUARD-MANDATE`, `MAND-NAME` | ok | OK |
+| REQ-MAND-18–21 (+поправка формы cmd) / кр.13, 14 | `lib/test-cmd.sh` (SG-EXEC/SG-BASH), `suites-gen.sh`, `tests/suites.yaml` (`./.claude/sdx/verify-cmd.sh`), `init.md` 2в, `reconcile.md` (е) | `test-suites-gen` (1)–(10), близнец stop-gate, мутанты `SG-*`; `[18]`; live `run_suites` — НЕ ПРОВЕРЕНО | формат совпадает с `dev.py run_suites` (стр. 292–308); DESIGN :198/:347/:363/:416 устарел (FAIL-1) | OK |
+| REQ-MAND-22 / кр.15 | `agents/devops.md` подпункт «Мандат», п.3 | `test-mo-prose [10]` | ok | OK |
+| REQ-MAND-23, 23a, 23b (+поправки кругов 1–2) / кр.16 | `mandate-info.sh closeout-mode/closeout-check`; `archive.md` 2а; протокол «Мост Closeout» | `[M]` (`cm offer → bridge:offer`, мутант `MAND-BRIDGE`), `test-mo-prose [12][12b]` | поставка ok, кроме «вместо пакета» (WARN-1); DESIGN/MANUAL_TEST/release notes — старое (FAIL-1) | FAIL (через FAIL-1) |
+| REQ-MAND-24, 25 / кр.17 | сниппет; `snippet-check.sh`; `reconcile.md` (ж) | `test-snippet-check`, `test-mo-prose [11][18]` | ok | OK |
+| REQ-MAND-26 / кр.18 | `mandate-info.sh status`, `active-set` (`unknown:mandate`), `status.md` 5а | `[M39][M40]`, `[M] status`, `[18]` | ok | OK |
+| REQ-MAND-27, 29 / кр.19 | протокол, README×2, CLAUDE.md, ADR-021 п.3, дельты, бэклог FEAT-016 | `test-mo-prose [9]`, `test-mo-inventory` | ok | OK |
+| REQ-MAND-30 | `plugin.json` 2.4.0 (в `marketplace.json` версии нет) | `[17]` | релизные заметки — черновик устарел (FAIL-1) | OK (код) |
+| REQ-MAND-32, 33 / кр.20 | комментарий `verify-cmd.sh`; без python в `sdx-stage.sh`/lib; `sdx/mo/*` не в diff | `L9`, полный прогон 114–124 с < 180 с (qa) | ok | OK |
+| Кр.21 (не auto) | процесс | `gate_mode: interactive` (qa) | ok | OK |
 
 ## Находки
 
-### [FAIL] [Когерентность] Решение «мост Closeout для любого `delivery`» дошло не до всех нормативных носителей: в ADR-021, протоколе и README по-прежнему «мост при `pr|branch`», в DESIGN и критерии 16 — «при `artifact.offer` Closeout штатный»
-- Где:
-  - `docs/DECISIONS.md`, ADR-021, поправка 2026-10-28, п.(5): «Мост Closeout при `delivery: pr|branch` — ручная сборка пакета…» (diff стр. 320);
-  - `sdx/protocol.md`, «Три слоя границы области»: «Мост Closeout (`delivery: pr|branch`) — см. „Контракт закрытия сессии“» (diff стр. 4504). Абзац «Мост Closeout при мандате» в том же файле (diff стр. 4514) говорит «любой определённый `delivery` (`pr|branch|artifact.offer`)», то есть **протокол противоречит сам себе**;
-  - `README.md` / `README.en.md`, абзац «Версия 2.4.0»: «Closeout при `delivery: pr|branch` оставляет ветку сессии узлу МО» / «Closeout with `delivery: pr|branch` leaves the session branch…» (diff стр. 95 / 74);
-  - `SPEC.md`, критерий 16: «Closeout при мандате с `delivery: pr|branch` … при `artifact.offer` и без мандата Closeout штатный». Поправка REQ-MAND-23 круга 1 критерий не поправила;
-  - `DESIGN.md` D-8 («при мандате `pr|branch` не вызывается») и таблица CLI `closeout-mode` (стр. 162: «`standard` (нет режима мандата или `delivery: artifact.offer`)») — прямо противоречат коду;
-  - мелочь в коде: шапка `sdx/hooks/mandate-info.sh` (diff стр. 1038) перечисляет исходы `standard | bridge | undefined | error` без `bridge:offer`.
-- Суть: по решению пользователя (`decisions_log.md` 2026-10-29) и по поправке REQ-MAND-23 мост действует при любом определённом `delivery`, а слияния в `main` под мандатом нет никогда. Код (`closeout-mode` → `bridge:offer`), `archive.md` 2а, контракт закрытия в протоколе, `devops.md` и дельты `docs/specs|designs` с этим согласны. Постоянные носители — ADR-021 (после Closeout это запись решения), абзац «Три слоя» протокола и README×2 (пользовательская документация) — описывают прежнюю, более узкую область моста, а носители сессии (критерий 16, DESIGN) прямо утверждают прежнее поведение. Читатель ADR или README по-прежнему вправе думать, что при `artifact.offer` идёт штатный Closeout со слиянием в `main`. Это та самая коллизия, ради которой был WARN-1 круга 1: по существу она закрыта в коде и прозе команд, но не в триаде. `test-mo-prose.sh [12]` проверяет только `archive.md` и протокол на наличие токенов, поэтому устаревшую формулировку «(`delivery: pr|branch`)» рядом с правильной он не ловит.
-- Ожидалось: во всех носителях одна формулировка — «мост при любом определённом `delivery` (`pr|branch|artifact.offer`; для `artifact.offer` — `bridge:offer` и отправка оффера), слияния в `main` под мандатом нет; `standard` — только без режима мандата». Для этого:
-  - ADR-021 п.(5) поправить датированной строкой (или дописать «поправка 2026-10-29»);
-  - в протоколе «Три слоя» убрать «(`delivery: pr|branch`)»;
-  - README×2 согласованно поправить;
-  - в SPEC переписать критерий 16 (или пометить его как заменённый поправкой REQ-MAND-23);
-  - в DESIGN пометить D-8 и строку таблицы `closeout-mode` как заменённые поправкой (DESIGN уходит в `docs/history/`);
-  - в шапке `mandate-info.sh` добавить `bridge:offer`;
-  - желательно добавить в `test-mo-prose.sh` отрицательный инвариант: в протоколе, README×2 и ADR-021 нет «мост…`pr|branch`» без `artifact.offer`.
-- Фактически: шесть носителей описывают прежнюю область моста, два из них (DESIGN, критерий 16) — прямо противоположное поведение.
+### [FAIL] [Когерентность] Сессионные носители не синхронизированы с поправками кругов 1–2: мост Closeout для `artifact.offer`, однократный оффер, форма `cmd`
+- Где (старые формулировки, противоречащие коду и поправкам SPEC):
+  - `DESIGN.md:418` — тест-спецификация `[M]`: «`closeout-mode` (`standard` без мандата **и при `artifact.offer`**…)», «Мутанты: `MAND-BRIDGE` (`bridge` и при `artifact.offer`)». Код (`mandate-info.sh:1126`) возвращает `bridge:offer`, тест (`test-mandate-scope.sh:364`) утверждает `bridge:offer`, мутант заменяет `bridge:offer` на `standard` — смысл инвертирован. Пометка круга 2 стоит только у D-8 (:22) и таблицы (:162).
+  - `DESIGN.md:290` — «при мандате `artifact.offer` отправляется на `Execution`/`Verification` (ДЛ-1)» (описание `next.md`); `DESIGN.md:545` — перечень правок протокола: «`artifact.offer` — на `Execution`/`Verification`»; `DESIGN.md:292` — ветки `archive.md` только `standard`/`bridge`/`undefined`, без `bridge:offer`; `DESIGN.md:476` К-5 — «`artifact.offer` — штатный Closeout по SPEC».
+  - `DESIGN.md:198, :347, :363, :416` — `TC_CMD`/dogfood/сценарий (1)(8) и мутант `SG-BASH` «`cmd: bash .claude/sdx/verify-cmd.sh`» безусловно; поправка SPEC REQ-MAND-18/19 и код (`lib/test-cmd.sh:1022`, `tests/suites.yaml:9` — `./.claude/sdx/verify-cmd.sh`) другие. Аналогично `DESIGN.md:284` (суффикс `mnote` «не прочитан») и `:473` (К-2 «следовать SPEC») против принятой К-2 и кода (`mo-session.sh`: «читается без python3 и показан ниже»).
+  - `MANUAL_TEST.md:67` (случай 4) — «При `delivery: artifact.offer` чек-лист штатный». По `decisions_log` (2026-10-29 `[ручной-шаг]`) сценарий сохраняется в `docs/history/experiments/` — уйдёт в постоянные документы с неверным ожидаемым результатом.
+  - `release_notes_draft.md:11` / `:38` (RU/EN) — «до `/sdx:pr` при `delivery: pr|branch` … При `artifact.offer` Closeout штатный» / «With `artifact.offer` Closeout is the standard one». Черновик публикуется на Closeout (C3) — неверное пользовательское утверждение о поведении 2.4.0.
+- Суть: круг 2 (FAIL-1/WARN-1) закрыт в нормативных поставляемых файлах, но DESIGN (контракт триады; по дельте `docs/designs/mo-interop.md` — «полный дизайн» после Closeout) и два носителя, которые на Closeout станут постоянными/публичными, утверждают обратное коду. Прямое противоречие DESIGN ↔ Codebase.
+- Ожидалось: в каждом месте — датированная пометка «(верификация круг 1/2, 2026-10-29: …)» или правка текста по поправкам SPEC (REQ-MAND-9/ДЛ-1, REQ-MAND-23, критерий 16, REQ-MAND-18/19, К-2); `MANUAL_TEST.md` случай 4 — ожидание `bridge:offer`/мост для любого `delivery`; релизные заметки RU/EN — «мост при любом определённом `delivery`, для `artifact.offer` — шаг отправки оффера один раз».
+- Фактически: старые формулировки без пометок.
 
-### [WARN] [Корректность/Когерентность] WARN-1. Момент отправки `artifact.offer` под мандатом определён двояко: на `Execution`/`Verification` или на шаге моста Closeout (риск двойной отправки)
-- Где: SPEC REQ-MAND-9 / ДЛ-1, ADR-020 (поправка), протокол «`Deployment` под МО», `commands/next.md`, `CLAUDE.md` §3 — «`artifact.offer` при мандате отправляется на `Execution`/`Verification`». При этом поправка REQ-MAND-23, `commands/archive.md` 2а («При `bridge:offer` … добавь шаг отправки оффера: упакуй артефакт и отправь `artifact.offer` узлу»), протокол «Мост Closeout» и `agents/devops.md` («оффер отправляется на шаге Closeout-моста (`/sdx:archive`, `bridge:offer`)»).
-- Суть: ни один носитель не говорит, что Closeout-шаг выполняется «если оффер ещё не отправлен на `Execution`/`Verification`», и не говорит обратного. Оркестратор, который следует `next.md`, отправит оффер на `Verification`, а затем `archive.md` велит отправить его ещё раз. Неясно, какой `msg_id` считать окончательным. Детерминированной стороны у этого нет (это проза), поэтому WARN, а не FAIL.
-- Ожидалось: одна норма. Например: «на Closeout-мосту оффер отправляется, только если он не был отправлен на `Execution`/`Verification` (`msg_id` уже есть в `change_note.md`/`DESIGN.md`)». Либо закрепить единственную точку отправки. Затем синхронизировать `archive.md`, `devops.md`, протокол и SPEC.
-- Фактически: две точки отправки без связки между ними.
+### [WARN] [Когерентность] `bridge:offer`: «вместо ручной сборки пакета» в `archive.md` против «шаг добавляется» / «ручная сборка пакета при любом `delivery`» в остальных носителях
+- Где: `commands/archive.md` 2а («При `bridge:offer` … **вместо** ручной сборки пакета добавь шаг отправки оффера»); против SPEC поправка REQ-MAND-23 («`archive.md` **добавляет** шаг отправки»), протокол «Мост Closeout» (шаг отправки «добавляется к шагам 1–5», следующее предложение о пакете `change/<C>-<exec>` без оговорки), ADR-021 поправка п.5 и дельта `docs/designs/mo-interop.md` («Мост Closeout при любом определённом `delivery` … — ручная сборка пакета до `/sdx:pr`»).
+- Суть: исполняемая инструкция и нормы расходятся в том, собирается ли пакет `change/<C>-<exec>` при `artifact.offer`.
+- Ожидалось: одна формулировка во всех носителях (по смыслу `archive.md` — при `bridge:offer` пакет не собирается, отправляется оффер — нормы уточнить; либо наоборот).
 
-### [INFO] [Полнота] INFO-1. Ручная часть приёмки не исполнялась (решение пользователя)
-- Где: `MANUAL_TEST.md` (5 случаев «НЕ ПРОВЕРЕНО»), `decisions_log.md` 2026-10-29.
-- Суть: для критериев 3 (канал SessionStart), 7 (дамп, порождённый `dev.py mandate_yaml()`; L3 написан вручную), 14 (Л: живой `run_suites`) и 16 (живая проза моста) покрытие только видимое. Пользователь принял это решение, DEBT — на Closeout. Повторного квитирования не требуется. Фиксирую, чтобы покрытие не выдавалось за доказанное.
+### [WARN] [Корректность] Инварианты `[12b]` различают, но узко
+- Где: `sdx/hooks/test-mo-prose.sh:3242–3251, 3366–3377` (diff).
+- Суть: (а) `chk_offer_once_devops` вызывается только `expect_ok`, красной стороны для `devops.md` нет (у `archive.md`/`protocol.md` есть — sed `уже отправлен`→`zz-removed`); (б) однократность оффера не закреплена для `CLAUDE.md` §3, `commands/next.md`, ADR-020, бэклога FEAT-016 — носителей, где формулировка тоже менялась; (в) отрицательный инвариант ловит только литерал `delivery: pr|branch` — фразы вида «при `artifact.offer` Closeout штатный» / «`artifact.offer` — штатный» (ровно те, что остались в FAIL-1) им не ловятся; его красная сторона — дописывание того же литерала (по построению красная, проверяет функцию, а не охват).
+- Ожидалось: красная сторона для `devops.md`; `chk_offer_once` для `next.md`/`CLAUDE.md`/ADR-020; второй отрицательный шаблон (`artifact\.offer[^|]*штатн`, `standard one`) по нормативным носителям.
 
-### [INFO] [Корректность] INFO-2. Форма `cmd` в `tests/suites.yaml` для `dev.py run_suites` — корректна при названном допущении
-- Где: `lib/test-cmd.sh:12` (`[ -x … ] && TC_CMD="./.claude/sdx/verify-cmd.sh"`); `tests/suites.yaml`; эталон `dev.py:153–162` (`worktree`: `git clone` зеркала → `checkout`), `dev.py:307,318` (`subprocess.run(cmd, shell=True, cwd=wt)`), `dev.py:662` (CI-workflow: `subprocess.call(..., shell=True)` из корня чекаута).
-- Суть: узел исполняет `cmd` через `/bin/sh -c` в корне клона. `./.claude/sdx/verify-cmd.sh` сработает, если в клоне у файла стоит бит исполнения. `git clone`/`checkout` восстанавливает бит из **режима в индексе** (`100755`), когда на узле `core.fileMode=true` (по умолчанию в Linux). В этом репозитории `verify-cmd.sh` хранится как `100755` (заголовок diff), значит dogfood-файл корректен. **Допущение:** генератор смотрит бит в **рабочем дереве** (`-x`), а не режим в индексе. У проекта с `core.fileMode=false` (Windows/WSL, некоторые ФС) локальный бит может не совпадать с закоммиченным режимом. Тогда `suites.yaml` получит `./…`, а у узла скрипт окажется неисполняемым (rc 126), или наоборот. `--check` такой дрейф не видит. `[7]` проверяет форму под `sh -c`, но не сохранение бита через `git clone`.
-- Рекомендация (не блокирует): брать режим из `git ls-files -s .claude/sdx/verify-cmd.sh`, если файл tracked; либо назвать допущение в протоколе / `init.md` 2в.
+### [WARN] [Когерентность] «Без `mandate.yaml` — как 2.3.x» в протоколе и README без оговорки К-4
+- Где: `sdx/protocol.md` «МО-хук» (абзац признаков: «без `mandate.yaml` всё, что описано в этом подразделе, — как в 2.3.x»), тот же подраздел ниже: охрана `mandate.yaml` «безусловна при наличии `endpoint.yaml`»; `README.md`/`README.en.md` «без `mandate.yaml` поведение прежнее» / «behavior is unchanged».
+- Суть: при `endpoint.yaml` без мандата `Write` в `.mesh/mandate.yaml` теперь блокируется (К-4, третье названное исключение REQ-MAND-1) — протокол в одном абзаце утверждает и «как 2.3.x», и новое поведение; README исключения не называют (дельта `docs/specs` называет все).
+- Ожидалось: «как в 2.3.x, кроме безусловной охраны `mandate.yaml` (К-4)» в протоколе; в README — «кроме названных исключений».
 
-### [INFO] [Когерентность] INFO-3. ADR-021 «Отвергнуто: предпроверка PyYAML на каждый вызов» и новая проверка `# MAND-PYYAML`
-- Где: `docs/DECISIONS.md` ADR-021 «Отвергнуто» и поправка п.(6); `mo-hook.sh` `# MAND-PYYAML`.
-- Суть: при `deny` из мандата обёртка теперь на **каждом** вызове инструмента запускает дополнительный `python3 -c 'import yaml'` — это ровно отвергнутая альтернатива, только в узком режиме. Поправка (6) решение описывает, но с пунктом «Отвергнуто» его не согласует (не сказано: «сужение: только при `deny` из мандата, цена принята»). Стоит дописать одну фразу.
+### [WARN] [Когерентность] Тела REQ-MAND-23 и критерия 16 в SPEC не помечены как заменённые
+- Где: `SPEC.md:70` (заголовок «только `delivery: pr|branch`», «При `delivery: artifact.offer` … Closeout — штатный»), `SPEC.md:110` (критерий 16 «при `artifact.offer` … Closeout штатный»).
+- Суть: замена есть только в разделе «Поправки» (:171, :173); REQ-MAND-9 при этом исправлен в теле с пометкой. Читатель тела (и перенос SPEC в `docs/history/` на Closeout) видит противоречие без отсылки. Дельта `docs/specs/mo-interop.md` уже корректна.
+- Ожидалось: в теле REQ-MAND-23 и критерия 16 — отсылка «см. Поправки (круг 1 WARN-1 / круг 2 FAIL-1)».
 
-### [INFO] [Корректность] INFO-4. Правило `--planned` передаёт каталоги и не учитывает `docs_in_repo: none` (перенос с круга 1, не исправлялось)
-- Где: `commands/verify.md` 6а; `mandate-scope.sh` (`mandate_in_union "docs/specs/"`).
-- Суть: при узком `docs_paths` вида `docs/specs/*.md` каталог `docs/specs/` не совпадёт с шаблоном, и будет ложный `FAIL`. При `docs_in_repo: none` переносы помечаются `(n/a)`, но всё равно передаются в `--planned`. С дефолтом `docs/**` не проявляется.
+### [INFO] [Полнота] Решения сверх DESIGN, записанные только в PLAN «Отклонения»
+- `closeout-check` исключает `.mesh/` из проверки чистоты дерева (`mandate-info.sh:1146`; PLAN откл. 9) — в протоколе/`archive.md` сказано «дерево чистое» без оговорки; `mand_show` и при отказе `pull`; `active-set` → `unknown:mandate` (в `status.md` описано). Не противоречие, но нормативные тексты не называют `.mesh`-исключение.
 
-### [INFO] [Когерентность] INFO-5. Дельта `docs/designs/mo-interop.md` называет «два исключения» и не называет К-4
-- Где: diff стр. 444 («кроме двух названных исключений (`tests/suites.yaml`, новое содержание `/sdx:status` и сниппета)»).
-- Суть: безусловная охрана `mandate.yaml` при `endpoint.yaml` (К-4) — тоже исполняемое отличие от 2.3.x без мандата. Дельта `docs/specs` его называет, дельта дизайна — нет.
+### [INFO] [Когерентность] DESIGN «Обратная совместимость», строка «команды»
+- `DESIGN.md:456`: «`start-stage` без мандата возвращает входной этап (если он не исключён `no_code`/`no_gates`, иначе — прежний отказ делает `init`)»; фактически `cmd_start_stage` идёт вперёд мимо `no_code`-исключённого этапа (и протокол так и описывает). На путях `start.md`/`import.md` не проявляется (`no_code`-типы стартуют с `Discovery`).
 
-### [INFO] [Полнота] INFO-6. Фикстура `test-mo-session.sh` вне домена значений `dev.py`
-- Где: `test-mo-session.sh` `write_mandate` (diff стр. 3456: `history: linear`, `docs_in_repo: true`); `dev.py:25–26` (`HISTORY = {executor, mo, both}`, `DOCS = {final, full, none}`).
-- Суть: WARN-8 (1) исправлен в L3 и сиблинг-фикстуре, но не здесь. На показ это не влияет, но фикстура не соответствует форме, которую выдаёт узел.
+### [INFO] [Когерентность] Протокол «Область на `/sdx:verify`» не упоминает исключение `docs_in_repo: none` из `--planned`
+- Правило есть в `commands/verify.md` 6а и закреплено `[18]`; протокол перечисляет переносы без этой оговорки. Отсылки достаточно.
 
-### [INFO] [Когерентность] INFO-7. README×2: «без `endpoint.yaml` — no-op»
-- Где: README/README.en, абзац «Хуки safe-by-default».
-- Суть: при `mandate.yaml` без `endpoint.yaml` `mo-session` печатает одну строку (REQ-MAND-3). Перенос с круга 1.
+### [INFO] [Корректность] Дефолт `docs_paths`
+- `dev.py:384` берёт `sc.docs_paths or policy().docs_paths or ["docs/**"]`; SDX при пустом/отсутствующем — сразу `docs/**`. Узел при выдаче всегда проставляет `docs_paths` (`dev.py:529`), практическое расхождение — только на рукописном мандате.
 
-### [INFO] [Когерентность] INFO-8. `start-stage` без мандата при `no_code=true` продвигает этап, а прежний `init` отказывал (перенос с круга 1)
-- Где: `sdx-stage.sh` `cmd_start_stage`; `[M38]` («no mandate, no_code: start-stage Execution -> Verification»); `start.md` («без мандата это тот же `stage`»).
-- Суть: через `start.md` путь недостижим (`no_code`-типы стартуют с `Discovery`), наблюдаемого изменения нет. Но фраза в `start.md` неточна.
-
-### [INFO] [Корректность] INFO-9. Прочие мелочи, перенесённые с круга 1
-- `closeout-check` исключает `.mesh/` из проверки чистоты дерева (`mandate-info.sh` `git status -- . ':!.mesh'`), а `archive.md` и протокол говорят просто «дерево чистое».
-- Суффикс `mnote` в `mo-session.sh` пишет «показан ниже» и тогда, когда мандат не разобран (следующая строка это поясняет).
-- `mandate_expired` распознаёт только `YYYY-MM-DD`.
-- Время полного прогона 114–124 с под нагрузкой при пределе 180 с; `budget_min: 3` в dogfood-файле — та же граница для узла.
-- Переносимость на bash 3.2 подтверждена эмуляцией (`BASH_COMPAT`), а не настоящим 3.2.
-- Сьюты, судя по diff, пишут только в `mktemp -d` (мутанты — в копиях; `[8]` dogfood только читает; `[M] status` сверяет снимок `$ROOT/sdx`). Это видимое, а не доказанное отсутствие записи в чекаут.
-
-## Оси — итог
-- **Полнота:** OK. Каждое REQ-MAND имеет видимую реализацию и тест или grep-инвариант с красной стороной; новые проверки круга 1 (`[2y]`, `[1x]`, `[18]`, `[M39]` unknown, `cm offer`) имеют мутанты или повреждённые копии. Ручные критерии — «НЕ ПРОВЕРЕНО» по решению пользователя (INFO-1).
-- **Корректность:** OK, кроме WARN-1. Сопоставление путей совпадает с `dev.py glob_any`; форма `cmd` пригодна для `run_suites` при допущении INFO-2; обратная совместимость (REQ-MAND-1 с исключениями (а), (б), К-4, `from.kit`) видна в коде и закреплена тестами `[M30]`, `[7m.d]`, `check_m12c`, `(1)`.
-- **Когерентность:** **FAIL** (FAIL-1). Мост Closeout описан по-разному в ADR-021, протоколе (внутреннее противоречие), README×2, критерии 16 и DESIGN. ADR-021 п.7 для `endpoint.yaml` без мандата не противоречит: поправка к п.7 и абзац «`Deployment` под МО» прямо ограничивают норму случаем без мандата. Числа вендорённой версии в протоколе и `DECISIONS.md` нет.
+### [INFO] [Процесс] PLAN и decisions_log хранят старые формулировки как историю
+- `PLAN.md:109, :262, :459` (T12, T33, строка критерия 16), `decisions_log.md:3` — исторические записи, заменены последующими записями/«Отклонениями»; находкой не считаются.

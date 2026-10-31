@@ -648,14 +648,6 @@ if [ "$ec" -eq 1 ] && [ "$before_sum" = "$after_sum" ] \
 else
   fail "Expected --to rejection of excluded target under no_code" "ec=$ec out='$out'"
 fi
-# Regression (DEBT-046, found 2026-10-31): the refusal text used to carry backticks inside double quotes —
-# a command substitution with a redirect that silently created an empty file named 'false' in the cwd.
-if [ ! -e "$PWD/false" ] && ! printf '%s' "$out" | grep -q '[`]'; then
-  pass "the no_code refusal writes no stray file in the cwd and carries no backticks (DEBT-046)"
-else
-  fail "no_code refusal side effect" "stray file: $([ -e "$PWD/false" ] && echo yes || echo no); backtick in text: $(printf '%s' "$out" | grep -c '[`]')"
-fi
-rm -f "$PWD/false"
 cleanup
 
 # ---- Scenario 31 (T02, REQ-STATE-1/2, DEBT-038): cmd_init no longer writes artifacts/history ----
@@ -1092,6 +1084,22 @@ fi
 if [ -z "${SDX_STAGE_MUT:-}" ]; then
 echo "[M41] mutation runs: each mutant must differ from the original and turn its scenarios red"
 MUTROOT="$(mktemp -d)"
+# ---- [43] (DEBT-046, found 2026-10-31): the no_code refusal of `next --to` must not leave a stray file ----
+# The refusal text used to carry backticks inside double quotes — a command substitution whose
+# `-> false` part is a redirect, silently creating an empty file named 'false' in the cwd.
+if mwant 43; then
+echo "[43] next --to refused under no_code: no stray file in the cwd, no backticks in the message"
+setup_sdx_repo "m43" "Verification" "true" "false"
+rm -f "$PWD/false"
+out="$(run_stage next "m43" --to "Execution" 2>&1 1>/dev/null)"; ec=$?
+if [ "$ec" -eq 1 ] && [ ! -e "$PWD/false" ] && ! printf '%s' "$out" | grep -q '[`]'; then
+  pass "[43] refusal (rc 1) leaves no '\$PWD/false' and carries no backticks (DEBT-046)"
+else
+  fail "[43] no_code refusal side effect" "ec=$ec stray=$([ -e "$PWD/false" ] && echo yes || echo no) backticks=$(printf '%s' "$out" | grep -c '[`]')"
+fi
+rm -f "$PWD/false"
+fi
+
 # smut <name> <file> <sed-expr> <scenarios>: <file> is sdx-stage.sh or lib/mandate.sh
 smut() {
   local name="$1" file="$2" expr="$3" only="$4" d="$MUTROOT/$1" out first
@@ -1115,7 +1123,7 @@ smut SDX-UNKNOWN sdx-stage.sh '/# SDX-UNKNOWN/s|\[ "\$rc" -ne 0 \]|false|' "39"
 smut MAND-TO     sdx-stage.sh '/# MAND-TO/s|if is_excluded_by_mandate "\$to_target"; then|if false; then|' "34"
 # FEAT-017: a write_stage that keeps only `.stage` loses the optional `commitment` field -> [42] (no anchor in sdx-stage.sh: matched by text)
 smut WRITE-STAGE-COMMITMENT sdx-stage.sh "s|jq --arg s \"\$new\" '\.stage = \$s' \"\$state\"|jq --arg s \"\$new\" '{stage: \$s}' \"\$state\"|" "42"
-smut STRAY-FALSE sdx-stage.sh 's|(no_code: true -> false в|(`no_code: true -> false` в|' "30"
+smut STRAY-FALSE sdx-stage.sh 's|(no_code: true -> false в|(`no_code: true -> false` в|' "43"
 rm -rf "$MUTROOT"
 fi
 

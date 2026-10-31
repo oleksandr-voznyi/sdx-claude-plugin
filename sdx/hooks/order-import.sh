@@ -14,7 +14,7 @@
 # set -e is deliberately not used: every failure is handled where it happens.
 set -uo pipefail
 
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+here="${BASH_SOURCE[0]%/*}"; [ "$here" != "${BASH_SOURCE[0]}" ] || here=.
 command -v jq >/dev/null 2>&1 || { echo "order-import: jq не найден — приём заказа невозможен (fail-closed)." >&2; exit 2; }
 # shellcheck disable=SC1091
 . "$here/lib/pr-lib.sh"
@@ -32,7 +32,7 @@ command -v jq >/dev/null 2>&1 || { echo "order-import: jq не найден — 
 OI_UNFOLD_AWK='
 function ind_of(s) { match(s, /^ */); return RLENGTH }
 function flush() { if (have) print cur; have = 0; open = 0 }
-function die(msg) { print "#UNFOLD-ERR: " msg " (строка " NR ")"; err = 1; exit }
+function die(msg) { print "#UNFOLD-ERR: " msg " (строка " NR ")"; err = 1; exit 3 }
 # dq_closed(v): the double-quoted scalar v (first char is the quote) is closed on this line
 function dq_closed(v,   i, n, ch) {
   n = length(v); i = 2
@@ -83,10 +83,20 @@ oi_tmpdir() { [ -n "$OI_TMP" ] && return 0; OI_TMP="$(mktemp -d "${TMPDIR:-/tmp}
 
 refuse() { echo "order-import: $1" >&2; exit 1; }
 
+# oi_clean <s> [max=200] -> PR_CLEAN: pr_clean, with a fast path (no process spawned) for a value that is already plain:
+# no control character, no outer space, no byte sequence of U+2028 / U+2029 / U+0085, not longer than max.
+oi_clean() {
+  case "$1" in
+    *[[:cntrl:]]*|" "*|*" "|*$'\342\200'*|*$'\302\205'*) pr_clean "$@"; return 0 ;;
+  esac
+  [ "${#1}" -le "${2:-200}" ] || { pr_clean "$@"; return 0; }
+  PR_CLEAN="$1"
+}
+
 # oi_size_ok <file>: refuse a file over the limit
 oi_size_ok() {
   local n
-  n="$(wc -c < "$1" 2>/dev/null | tr -d ' ')"
+  n="$(wc -c < "$1" 2>/dev/null)"; n="${n// /}"
   [ -n "$n" ] && [ "$n" -le "$OI_MAX" ] || refuse "заказ больше 64 КиБ — отказ"
 }
 
@@ -103,29 +113,36 @@ oi_load_yaml() {
     0) ;;
     *) pr_clean "$MY_ERR" 160; refuse "order: не разобран ($PR_CLEAN)" ;;
   esac
-  OI_MODE=yaml
+}
+
+# oi_json_norm <file>: a JSON document -> MY_NORM, the record format of miniyaml (S/L/E/Z records), in ONE jq call;
+# after that JSON and YAML orders are read by the same accessors. Values lose line breaks (a field is one line anyway),
+# a key outside [A-Za-z0-9_-] (and a nested list) is refused like miniyaml refuses them.
+oi_json_norm() {
+  MY_NORM="$(jq -r '
+    def j: join(".");
+    def rec($p):
+      if type == "object" then to_entries[] | .key as $k | .value
+        | (if ($k | test("^[A-Za-z0-9_-]+$")) then rec($p + [$k]) else "X\u001fключ вне подмножества: " + ($k | .[0:40] | gsub("[\u0001-\u001f]"; "?")) end)
+      elif type == "array" then
+        (if length == 0 then "E\u001f" + ($p | j)
+         else .[] | (if (type == "string" or type == "number" or type == "boolean") then "L\u001f" + ($p | j) + "\u001f" + (tostring | gsub("[\u0001-\u001f]"; " "))
+                     else "X\u001fвложенная структура в списке вне подмножества" end) end)
+      elif . == null then "Z\u001f" + ($p | j)
+      else "S\u001f" + ($p | j) + "\u001f" + (tostring | gsub("[\u0001-\u001f]"; " ")) end;
+    rec([])' "$1" 2>/dev/null)" || refuse "order: JSON не разобран"
+  case $'\n'"$MY_NORM" in *$'\n'X"$US"*) refuse "order: ${MY_NORM##*X"$US"}" ;; esac
 }
 
 # oi_get <path>: OI_V (a scalar's text; a list is joined by "; ") and OI_K (scalar|list|map|absent)
 oi_get() {
-  local out
   OI_V=""; OI_K=absent
-  if [ "$OI_MODE" = json ]; then
-    out="$(jq -r --arg p "$1" '(try getpath($p | split(".")) catch null) as $v
-      | if $v == null then "absent\n"
-        elif ($v | type) == "string" or ($v | type) == "number" or ($v | type) == "boolean" then "scalar\n" + ($v | tostring)
-        elif ($v | type) == "array" then (if ([$v[] | type] | all(. == "string" or . == "number")) then "list\n" + ($v | map(tostring) | join("; ")) else "map\n" end)
-        else "map\n" end' "$OI_DOC" 2>/dev/null)"
-    OI_K="${out%%$'\n'*}"; OI_V="${out#*$'\n'}"
-    [ "$OI_V" = "$out" ] && OI_V=""
-  else
-    _my_kind "$1"; OI_K="$MY_K"
-    case "$OI_K" in
-      scalar) _my_scalar "$1"; OI_V="$MY_S" ;;
-      list) _my_list "$1"; OI_V="${MY_L//$'\n'/; }" ;;
-      null) OI_K=absent ;;
-    esac
-  fi
+  _my_kind "$1"; OI_K="$MY_K"
+  case "$OI_K" in
+    scalar) _my_scalar "$1"; OI_V="$MY_S" ;;
+    list) _my_list "$1"; OI_V="${MY_L//$'\n'/; }" ;;
+    null) OI_K=absent ;;
+  esac
   return 0
 }
 
@@ -141,14 +158,13 @@ oi_need_scalar() {
 # oi_read_doc <file>: JSON ({ first) or YAML
 oi_read_doc() {
   local first
-  [ -f "$1" ] && [ -r "$1" ] || refuse "файл заказа не читается: $(pr_clean "$1" 120; printf '%s' "$PR_CLEAN")"
+  [ -f "$1" ] && [ -r "$1" ] || { oi_clean "$1" 120; refuse "файл заказа не читается: $PR_CLEAN"; }
   oi_size_ok "$1"
-  first="$(LC_ALL=C tr -d ' \t\r\n' < "$1" | head -c1)"
+  first="$(LC_ALL=C grep -m1 -o '[^[:space:]]' "$1" 2>/dev/null)"; first="${first%%$'\n'*}"
   if [ "$first" = "{" ]; then
-    jq -e 'type == "object"' "$1" >/dev/null 2>&1 || refuse "order: JSON не разобран"
     oi_tmpdir
-    jq 'if (.action == null and ((.body | type) == "object")) then .body else . end' "$1" > "$OI_TMP/doc.json" 2>/dev/null || refuse "order: JSON не разобран"
-    OI_DOC="$OI_TMP/doc.json"; OI_MODE=json
+    jq 'if type != "object" then error("not an object") elif (.action == null and ((.body | type) == "object")) then .body else . end' "$1" > "$OI_TMP/doc.json" 2>/dev/null || refuse "order: JSON не разобран"
+    oi_json_norm "$OI_TMP/doc.json"
   else
     oi_load_yaml "$1"
   fi
@@ -161,10 +177,11 @@ oi_warn() { OI_WARN="$OI_WARN${OI_WARN:+$'\n'}$1"; }
 oi_clean_field() {
   local full
   oi_need_scalar "$2" "${4:-}"
-  pr_clean "$OI_V" 100000; full="$PR_CLEAN"
-  pr_clean "$OI_V" "$3"; O_V="$PR_CLEAN"
-  [ "$full" = "$O_V" ] || oi_warn "$1: усечено до $3 знаков"
-  O_FULL="$full"
+  oi_clean "$OI_V" 100000; full="$PR_CLEAN"; O_FULL="$full"; O_V="$full"
+  if _my_trunc "$full" "$3"; then
+    O_V="$MY_TRUNC"; while [ "${O_V% }" != "$O_V" ]; do O_V="${O_V% }"; done
+    oi_warn "$1: усечено до $3 знаков"
+  fi
 }
 
 # oi_validate: the checks of the DESIGN order, on the loaded document -> O_* variables (rc: exit 1 with the field named)
@@ -213,13 +230,13 @@ oi_validate() {
     *) pr_clean "$OI_V" 24; oi_warn "repo.hosting: значение '$PR_CLEAN' не распознано, игнорируется" ;;
   esac
   # delivery
-  oi_need_scalar deliver.branch; pr_clean "$OI_V" 120; O_BRANCH="$PR_CLEAN"
+  oi_need_scalar deliver.branch; oi_clean "$OI_V" 120; O_BRANCH="$PR_CLEAN"
   oi_need_scalar deliver.delivery; O_DELIV="$OI_V"
   case "$O_DELIV" in
     ""|[a-z]*) case "$O_DELIV" in *[!a-z._-]*) pr_clean "$O_DELIV" 24; refuse "deliver.delivery: недопустимое значение '$PR_CLEAN'" ;; esac ;;
     *) pr_clean "$O_DELIV" 24; refuse "deliver.delivery: недопустимое значение '$PR_CLEAN'" ;;
   esac
-  oi_need_scalar mandate_digest; pr_clean "$OI_V" 64; O_DIGEST="$PR_CLEAN"
+  oi_need_scalar mandate_digest; oi_clean "$OI_V" 64; O_DIGEST="$PR_CLEAN"
   O_INFIX="${O_C:0:40}"
 }
 
@@ -236,7 +253,7 @@ oi_flat() {
 OI_MM=""
 oi_mm() {
   local a b
-  pr_clean "$2" 64; a="${PR_CLEAN:--}"; pr_clean "$3" 120; b="${PR_CLEAN:--}"
+  oi_clean "$2" 64; a="${PR_CLEAN:--}"; oi_clean "$3" 120; b="${PR_CLEAN:--}"
   OI_MM="$OI_MM${OI_MM:+$'\n'}MISMATCH $1 order=$a local=$b"
 }
 
@@ -341,7 +358,7 @@ oi_from_msg() {   # <msg_id>
   [ "$n" -eq 1 ] || refuse "msg_id: в ящике несколько конвертов с msg_id $1 — выбор неоднозначен"
   head -n1 "$OI_TMP/sel.jsonl" > "$OI_TMP/doc.json"
   oi_size_ok "$OI_TMP/doc.json"
-  OI_DOC="$OI_TMP/doc.json"; OI_MODE=json
+  oi_json_norm "$OI_TMP/doc.json"
   oi_validate
   oi_conclude msg "$1"
 }
@@ -352,7 +369,7 @@ oi_list() {
   jq -rR "$OI_ENV_SEL | [(.msg_id | tostring), (.body.commitment.id? // \"\" | tostring), (.body.commitment.title? // \"\" | tostring)] | @tsv" "$OI_INBOX_FILE" 2>/dev/null \
   | while IFS=$'\t' read -r m c t; do
       oi_msg_ok "$m" || { echo "order-import: конверт с недопустимым msg_id пропущен" >&2; continue; }
-      pr_clean "$c" 64; c="$PR_CLEAN"; pr_clean "$t" 100; t="$PR_CLEAN"
+      oi_clean "$c" 64; c="$PR_CLEAN"; oi_clean "$t" 100; t="$PR_CLEAN"
       printf '%s\t%s\t%s\n' "$m" "$c" "$t"
     done
 }
@@ -396,6 +413,32 @@ oi_from_issue() {   # <N>
   oi_conclude issue "#$1"
 }
 
+# ------------------------------------------------------------------------------------------------------------
+# stamp-state (REQ-PKG-25): the optional field `commitment` of session_state.json. sdx-stage.sh init keeps its seven
+# keys (its signature does not change); the field is added here with a separate jq, written next to the file and moved
+# (as write_stage does). Idempotent for the same value; another value, an invalid C or a missing state are refused.
+# ------------------------------------------------------------------------------------------------------------
+oi_stamp() {
+  local state cur tmp
+  [ -n "$SID" ] && [ -n "$CARG" ] || usage
+  _pr_sid_ok "$SID" || refuse "sid: недопустимый идентификатор сессии"
+  pr_valid_id "$CARG" || { _pr_id_err commitment "$CARG"; refuse "$PR_ERR"; }
+  state="$PROJ/.claude/sessions/$SID/session_state.json"
+  [ -f "$state" ] || refuse "session_state.json сессии не найден (сначала sdx-stage.sh init)"
+  jq -e 'type == "object"' "$state" >/dev/null 2>&1 || refuse "session_state.json не разобран"
+  cur="$(jq -r '.commitment // empty' "$state" 2>/dev/null)"
+  if [ -n "$cur" ]; then
+    if [ "$cur" = "$CARG" ]; then echo "OK commitment $CARG (уже записан)"; return 0; fi
+    pr_clean "$cur" 64; refuse "commitment: в состоянии сессии уже записан другой '$PR_CLEAN'"                   # PKG-O-STAMP
+  fi
+  tmp="$(mktemp "$state.XXXXXX")" || { echo "order-import: не удалось создать временный файл рядом с $state." >&2; exit 2; }
+  if ! jq --arg c "$CARG" '. + {commitment: $c}' "$state" > "$tmp"; then
+    rm -f "$tmp"; echo "order-import: jq не смог обновить $state — файл не изменён." >&2; exit 2
+  fi
+  mv "$tmp" "$state" || { rm -f "$tmp"; exit 2; }
+  echo "OK commitment $CARG"
+}
+
 usage() {
   echo "использование: order-import.sh from-file <path> | from-msg <msg_id> | from-issue <N> | list | stamp-state --sid <sid> --commitment <C> | unfold <path>  [--proj DIR] [--out FILE] [--inbox-json FILE] [--repo owner/repo]" >&2
   exit 2
@@ -417,7 +460,7 @@ done
 case "$sub" in
   from-file)
     [ -n "$POS" ] || usage
-    pr_clean "${POS##*/}" 80
+    oi_clean "${POS##*/}" 80
     oi_accept "$POS" file "$PR_CLEAN" ;;
   from-msg)
     [ -n "$POS" ] || usage
@@ -426,12 +469,11 @@ case "$sub" in
     [ -n "$POS" ] || usage
     oi_from_issue "$POS" ;;
   list) oi_list ;;
+  stamp-state) oi_stamp ;;
   unfold)
     [ -n "$POS" ] || usage
     [ -f "$POS" ] || refuse "файл не читается"
-    oi_tmpdir
-    LC_ALL=C tr -d '\r' < "$POS" | oi_unfold > "$OI_TMP/unfold.out" || exit 2
-    if grep -q '^#UNFOLD-ERR' "$OI_TMP/unfold.out"; then refuse "order: ошибка склейки строк"; fi
-    cat "$OI_TMP/unfold.out" ;;
+    LC_ALL=C tr -d '\r' < "$POS" | oi_unfold
+    case $? in 0) ;; 3) refuse "order: ошибка склейки строк" ;; *) exit 2 ;; esac ;;
   *) usage ;;
 esac

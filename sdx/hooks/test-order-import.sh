@@ -181,19 +181,29 @@ for n in range(26):
     walk(got, "")
     open("%s/%02d.exp" % (out, n), "w", encoding="utf-8").write("\n".join(lines) + "\n")
 PY
-  okn=0; badn=0; badlist=""; foldedn=0
   for y in "$TMP"/gen/*.yaml; do
     b="${y%.yaml}"
     bash "$SCRIPT" unfold "$y" > "$b.unf" 2>/dev/null
-    [ "$(wc -l < "$b.unf")" -lt "$(wc -l < "$y")" ] && foldedn=$((foldedn + 1))
-    if my_load "$b.unf"; then
-      printf '%s\n' "$MY_NORM" | tr '\037' '\t' | grep -E '^[SZLE]'$'\t' | LC_ALL=C sort > "$b.got"
-      LC_ALL=C sort "$b.exp" | grep . > "$b.expsorted"
-      if cmp -s "$b.got" "$b.expsorted"; then okn=$((okn + 1)); else badn=$((badn + 1)); badlist="$badlist ${b##*/}"; fi
-    else badn=$((badn + 1)); badlist="$badlist ${b##*/}(parse: $MY_ERR)"; fi
+    if my_load "$b.unf"; then printf '%s\n' "$MY_NORM" | tr '\037' '\t' > "$b.got"; else printf 'PARSE-ERROR %s\n' "$MY_ERR" > "$b.got"; fi
   done
+  # one python call compares every pair (sorted records) and counts the dumps that were actually folded
+  res="$(python3 -I -B - "$TMP/gen" <<'PY'
+import glob, sys
+ok = bad = folded = 0
+badl = []
+for y in sorted(glob.glob(sys.argv[1] + "/*.yaml")):
+    b = y[:-5]
+    got = sorted(l for l in open(b + ".got", encoding="utf-8").read().split("\n") if l[:1] in "SZLE" and l[1:2] == "\t")
+    exp = sorted(l for l in open(b + ".exp", encoding="utf-8").read().split("\n") if l)
+    if open(b + ".unf", encoding="utf-8").read().count("\n") < open(y, encoding="utf-8").read().count("\n"): folded += 1
+    if got == exp: ok += 1
+    else: bad += 1; badl.append(b.rsplit("/", 1)[1])
+print(ok, bad, folded, " ".join(badl))
+PY
+)"
+  okn="${res%% *}"; rest="${res#* }"; badn="${rest%% *}"; rest="${rest#* }"; foldedn="${rest%% *}"; badlist="${rest#* }"
   if [ "$okn" -ge 25 ] && [ "$badn" -eq 0 ] && [ "$foldedn" -ge 15 ]; then pass "[O2] parity with yaml.safe_load on $okn generated dumps ($foldedn of them folded; 0 divergences)"
-  else fail "[O2] parity with yaml.safe_load" "$okn equal, $badn diverge, $foldedn folded:$badlist"; fi
+  else fail "[O2] parity with yaml.safe_load" "$okn equal, $badn diverge, $foldedn folded: $badlist"; fi
 else
   info "[O2] python3/PyYAML absent: the parity with yaml.safe_load is skipped (not a PASS)"
 fi
@@ -384,7 +394,7 @@ MISMATCH deliver.branch order=change/x local=change/C-ACME-001-ex1"
   mism "order without a branch" 'del(.deliver.branch)' "MISMATCH deliver.branch order=- local=change/C-ACME-001-ex1"
   printf '%s' "$BASE_JSON" | jq -c '.mandate_digest = "12\u001b[31mEVIL"' > "$TMP/m.json"
   run_oi from-file "$TMP/m.json" --proj "$P5"
-  if [ "$RC" -eq 3 ] && ! printf '%s' "$OUT" | LC_ALL=C grep -q '[[:cntrl:]]' && printf '%s' "$OUT" | grep -q 'order=12\[31mEVIL'; then pass "[O5] a hostile digest is shown cleaned (no control characters)"
+  if [ "$RC" -eq 3 ] && ! printf '%s' "$OUT" | LC_ALL=C grep -q '[[:cntrl:]]' && printf '%s' "$OUT" | grep -q 'order=12 \[31mEVIL'; then pass "[O5] a hostile digest is shown cleaned (no control characters)"
   else fail "[O5] hostile digest" "rc=$RC out=[$OUT]"; fi
   # an unreadable local mandate cannot be compared: stop, never "no boundary"
   pkg_fixture_copy "$TMP/fx5b" && printf 'mandate:\n  stages: [bogus\n' > "$PKG_WC/.mesh/mandate.yaml"
@@ -402,6 +412,7 @@ fi
 if want O7; then
 echo "[O7] the snapshot (--out) and stamp-state"
 if ensure_fixture; then
+  printf '%s' "$BASE_JSON" > "$TMP/m.json"
   RT="$TMP/rt"; rm -rf "$RT"; mkdir -p "$RT"
   git -C "$RT" init -q && git -C "$RT" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init && git -C "$RT" checkout -q -b sdx/rt
   mkdir -p "$RT/.claude/sessions/rt"; printf '{"stage":"Closeout"}\n' > "$RT/.claude/sessions/rt/session_state.json"

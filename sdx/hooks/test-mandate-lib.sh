@@ -657,6 +657,71 @@ else fail "[L9] no python in lib/*.sh and sdx-stage.sh" "${hits:-lib/miniyaml.sh
 
 fi
 
+# ============================================================== [P] mandate_fnmatch (FEAT-017, REQ-PKG-11 (e))
+if want P; then
+echo "[P] mandate_fnmatch: pure fnmatch (scope.branches is checked by the node with fnmatch only, DEV:374-375)"
+FNTAB="$TMP/fntab.txt"
+cat > "$FNTAB" <<'TABLE'
+change/C-ex1	change/*	1
+feat/x	change/*	0
+change/x	change	0
+change/a/b	change/*	1
+change/	change/*	1
+changeX	change/*	0
+change-x	change*	1
+Change/x	change/*	0
+change/x	CHANGE/*	0
+a	[!x]	1
+x	[!x]	0
+a	[^x]	0
+^	[^x]	1
+x	[^x]	1
+a\b	a\b	1
+a\x	a\\x	0
+abc	a?c	1
+x/y	x?y	1
+x	<empty>	0
+<empty>	<empty>	1
+<empty>	*	1
+a.txt	*.txt	1
+TABLE
+fn_n=0
+while IFS=$'\t' read -r fs fpat fexp; do
+  [ -z "$fexp" ] && continue
+  fn_n=$((fn_n + 1))
+  [ "$fs" = "<empty>" ] && fs=""; [ "$fpat" = "<empty>" ] && fpat=""
+  if ! have_ma || ! declare -F mandate_fnmatch >/dev/null 2>&1; then fail "[P] fnmatch($fs, $fpat)" "mandate_fnmatch undefined"; continue; fi
+  if LC_ALL=C mandate_fnmatch "$fs" "$fpat"; then r=1; else r=0; fi
+  if [ "$r" = "$fexp" ]; then pass "[P] fnmatch('$fs', '$fpat') = $fexp"; else fail "[P] fnmatch('$fs', '$fpat')" "got $r expected $fexp"; fi
+done < "$FNTAB"
+[ "$fn_n" -ge 15 ] && pass "[P] table has $fn_n >= 15 cases" || fail "[P] table size" "$fn_n"
+# the discriminator: the prefix rule of glob_any (DEV:67-68) makes 'change' cover 'change/x'; branch masks must not
+if have_ma && declare -F mandate_fnmatch >/dev/null 2>&1; then
+  if mandate_glob_one "change/x" "change" && ! mandate_fnmatch "change/x" "change"; then pass "[P] discriminator: glob_one('change/x','change') holds, fnmatch does not"
+  else fail "[P] discriminator" "glob_one and fnmatch must differ on ('change/x','change')"; fi
+  mf_lc="$(LC_ALL=en_US.UTF-8 bash -c '. "$1/mandate.sh"; mandate_fnmatch "[" "[[]" && echo y' _ "$LIB" 2>/dev/null)"
+  [ "$mf_lc" = y ] && pass "[P] result does not depend on the caller locale" || info "[P] locale probe: en_US.UTF-8 unavailable or differing ('$mf_lc')"
+else fail "[P] discriminator" "mandate_fnmatch undefined"; fi
+# oracle: python's fnmatch over the same table (INFO-skip without python3)
+if command -v python3 >/dev/null 2>&1; then
+  FNORACLE='
+import sys, os, fnmatch
+bad = 0
+for l in sys.stdin.read().split("\n"):
+    if not l: continue
+    f, p, e = l.split("\t")
+    f = "" if f == "<empty>" else f
+    p = "" if p == "<empty>" else p
+    r = fnmatch.fnmatchcase(f, p) if not os.environ.get("WRONG") else fnmatch.fnmatch(f, p) or f.startswith(p.rstrip("*").rstrip("/") + "/")
+    if int(r) != int(e): bad += 1; print("DIVERGE", f, p, e, int(r))
+print("BAD", bad)'
+  o1="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c "$FNORACLE" < "$FNTAB" 2>&1 | tail -1)"
+  [ "$o1" = "BAD 0" ] && pass "[P] oracle: the table agrees with python fnmatch" || fail "[P] oracle" "$o1"
+  o2="$(WRONG=1 PYTHONDONTWRITEBYTECODE=1 python3 -I -c "$FNORACLE" < "$FNTAB" 2>&1 | tail -1)"
+  [ "$o2" != "BAD 0" ] && pass "[P] oracle red side: the prefix-rule formula diverges ($o2)" || fail "[P] oracle red side" "wrong formula not detected"
+else info "[P] oracle skipped: python3 absent"; fi
+fi
+
 if want Mut; then
 echo "[Mut] mutation runs: each mutant (a copy of lib/ in a temp dir) must differ from the original and turn its sections red"
 MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"

@@ -247,7 +247,7 @@ echo "[B2] plumbing invariants"
 newfx && {
   snap() { { gw symbolic-ref HEAD; gw status --porcelain; gw ls-files -s; gw rev-parse refs/heads/sdx/s1 refs/heads/dev; gw for-each-ref --format='%(refname)' refs/heads refs/tags; } 2>&1; }
   before="$(snap)"
-  run_build "$WC"
+  mkdir -p "$TMP/tmpd"; TMPDIR="$TMP/tmpd" run_build "$WC"
   after="$(snap)"
   eq "B2 rc 0" "$BRC" "0"
   # the only change in refs/heads is the new package branch
@@ -256,7 +256,7 @@ newfx && {
   eq "B2 the working tree is clean" "$(gw status --porcelain)" ""
   eq "B2 tip tree = head tree + exactly one blob (CHANGE.yaml)" "$(gw diff-tree -r --name-status "$(jv .head)" "$(jv .tip)" | tr '\t' ' ')" "A CHANGE.yaml"
   eq "B2 the new ref is the only addition" "$(gw for-each-ref --format='%(refname)' refs/heads | grep -c "^refs/heads/change/")" "1"
-  eq "B2 no stray temporary index left in TMPDIR by the run" "$(ls "${TMPDIR:-/tmp}"/sdx-pr-idx.* 2>/dev/null | wc -l | tr -d ' ')" "0"
+  eq "B2 no stray temporary file left in TMPDIR by the run" "$(ls "$TMP/tmpd" 2>/dev/null | wc -l | tr -d ' ')" "0"
 }
 }
 

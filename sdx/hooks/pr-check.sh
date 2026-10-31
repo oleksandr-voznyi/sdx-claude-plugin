@@ -74,7 +74,7 @@ set --
 [ -z "$a_t" ] || set -- "$@" --title "$a_t"
 [ -z "$a_b" ] || set -- "$@" --base-name "$a_b"
 res_err=""; res_url_err=0
-case "$phase" in pre|all) closeout_state ;; esac
+closeout_state
 if ! pr_resolve "$proj" "$sid" "$@"; then
   res_err="$PR_ERR"
   case "$res_err" in
@@ -244,7 +244,58 @@ pre_tests() {
   fi
 }
 
+# the built package (post): reads refs/heads/<branch>, its CHANGE.yaml, and judges the package by the same formal checks
+# as audit() of the node
+phase_post() {
+  local tip mtmp man_text parents changed asha mb mb2 f
+  tip="$(git -C "$proj" rev-parse --verify -q "refs/heads/$PR_BRANCH^{commit}" 2>/dev/null)"
+  if [ -z "$tip" ]; then fail pkg.ref "ветка $PR_BRANCH не собрана (сначала pr-build)"; return 0; fi
+  [ "$phase" != post ] || check_mandate   # `post` alone repeats these: the branch and the term may have changed since the confirmations
+  mtmp="$(mktemp "${TMPDIR:-/tmp}/sdx-pr-man.XXXXXX")" || { echo "pr-check: не удалось создать временный файл" >&2; exit 2; }
+  if ! git -C "$proj" show "$tip:CHANGE.yaml" > "$mtmp" 2>/dev/null; then rm -f "$mtmp"; fail manifest.parse "в корне вершины $PR_BRANCH нет CHANGE.yaml"; return 0; fi
+  man_text="$(cat "$mtmp")"
+  if ! my_load "$mtmp"; then rm -f "$mtmp"; fail manifest.parse "CHANGE.yaml не разобран: $MY_ERR"; mandate_load "$proj"; return 0; fi
+  rm -f "$mtmp"
+  if ! my_exists change; then fail manifest.parse "в CHANGE.yaml нет корневого ключа change"; mandate_load "$proj"; return 0; fi
+  _my_scalar change.format; M_FORMAT="$MY_S"
+  _my_scalar change.commitment; M_C="$MY_S"
+  _my_scalar change.executor; M_EXEC="$MY_S"
+  _my_scalar change.mandate_digest; M_DIGEST="$MY_S"
+  _my_scalar change.head; M_HEAD="$MY_S"
+  _my_scalar change.archive_sha256; M_ASHA="$MY_S"
+  _my_scalar change.touches_shared; M_SHARED="$MY_S"
+  _my_list change.scope_touched; M_SCOPE="$MY_L"
+  _my_list change.adr; M_ADR="$MY_L"
+  mandate_load "$proj"   # my_load replaced the loaded document: restore the mandate (MANDATE_* stayed, MY_NORM did not)
+  ok manifest.parse "CHANGE.yaml в корне вершины разобран"
+
+  if [ "$M_FORMAT" = 1 ]; then ok manifest.format "format: 1"; else fail manifest.format "change.format должен быть 1, а не '$M_FORMAT'"; fi
+  if [ -z "$M_HEAD" ]; then
+    fail manifest.head "в манифесте нет head (голова кода, над которой стоит коммит манифеста)"
+    M_HEAD="$tip"
+  elif ! printf '%s' "$M_HEAD" | grep -Eq '^[0-9a-f]{40}$' || ! git -C "$proj" cat-file -e "$M_HEAD^{commit}" 2>/dev/null; then
+    fail manifest.head "head '$M_HEAD' не является коммитом репозитория"; return 0
+  fi
+  parents="$(git -C "$proj" rev-list --parents -n1 "$tip" 2>/dev/null | cut -d' ' -f2-)"
+  changed="$(git -C "$proj" diff --name-only "$M_HEAD" "$tip" 2>/dev/null)"
+  if [ "$parents" = "$M_HEAD" ] && [ "$changed" = CHANGE.yaml ]; then   # PKG-C-TIPCOMMIT
+    ok manifest.commit "вершина — один коммит поверх head, меняет только CHANGE.yaml"
+  else
+    fail manifest.commit "поверх head должен стоять ровно один коммит с единственным файлом CHANGE.yaml (родитель вершины: ${parents:-—}; изменено: ${changed:-ничего})"
+  fi
+  if git -C "$proj" cat-file -e "$M_HEAD:CHANGE.yaml" 2>/dev/null; then fail manifest.headtree "в дереве head есть корневой CHANGE.yaml (манифест внутри кода)"
+  else ok manifest.headtree "в дереве head нет CHANGE.yaml"; fi
+  if [ "$M_C" = "$PR_C" ] && [ "$M_EXEC" = "$PR_EXEC" ] && [ "$M_DIGEST" = "$PR_DIGEST" ]; then
+    ok manifest.identity "commitment, executor, mandate_digest совпадают с заказом и мандатом"
+  else
+    fail manifest.identity "commitment/executor/mandate_digest манифеста ('$M_C'/'$M_EXEC'/'$M_DIGEST') не совпадают с заказом и мандатом ('$PR_C'/'$PR_EXEC'/'$PR_DIGEST')"
+  fi
+  # @@POST-CONTENT@@
+}
+
 case "$phase" in
-  pre|all) phase_pre; pre_diff; pre_tests ;;
+  pre) phase_pre; pre_diff; pre_tests ;;
+  post) phase_post ;;
+  all) phase_pre; pre_diff; pre_tests; if [ "$nfail" -eq 0 ]; then phase_post; fi ;;
 esac
 finish

@@ -1,7 +1,7 @@
 # Implementation Plan: FEAT-017 — сдача пакетом изменения (плагин 2.5.0 «/sdx:pr»)
 
 ## Статус реализации
-0/82 задач Execution (T01–T82), 0/3 задач Closeout (C1–C3). Этап: Task Planning (план составлен; исполнение не начато).
+21/82 задач Execution (T01–T82; дорожка Ф T01–T21 выполнена, gate Ф зелёный), 0/3 задач Closeout (C1–C3). Этап: Execution (дорожки A/B/C — не начаты).
 
 Условные обозначения. `SPEC`/`DESIGN` — одноимённые файлы этой сессии (SPEC включает раздел «Поправки по коллизиям DESIGN» К-1…К-12 и REQ-PKG-36, обязательный). `ДЛ` — `decisions_log.md`. `К-N` — коллизии DESIGN. `A1…A16` — критерии приёмки SPEC в порядке их записи (см. таблицу покрытия внизу). `SK` = `/home/archi/Code/aibok/agentico/meta-orchestrator/sim-kit`. Якоря `# PKG-*` — метки мутационных прогонов (определены в DESIGN). Дорожки: **Ф** — фундамент (последовательно, один исполнитель), **A**, **B**, **C** — параллельные `developer` после Ф, **З** — замыкание (последовательно, после A/B/C).
 
@@ -36,28 +36,28 @@
 
 #### Ф-0. Вендоринг и «как сдать изменение» (DESIGN T0; К-1)
 
-- [ ] **T01** `[TEST]` [PROC-020] `test-mo-inventory.sh`: четвёртый вендорённый файл и красная сторона `CONTRIBUTING-MO.md`
+- [x] **T01** `[TEST]` [PROC-020] `test-mo-inventory.sh`: четвёртый вендорённый файл и красная сторона `CONTRIBUTING-MO.md`
   - Зависит от: —
   - Файлы: `sdx/hooks/test-mo-inventory.sh` (только добавление; правила (c)/(d)/(e) не меняются)
   - Что: прочитать текущие правила (c)/(d)/(e) сьюта и добавить проверки: на реальном `sdx/mo/` присутствуют четыре файла, `CHANGE.template.yaml` имеет строку в `SIMKIT_SHA256`, проходит (c)/(d)/(e) и упомянут на пяти поверхностях (`README.md`, `README.en.md`, `CLAUDE.md`, `sdx/protocol.md`, `docs/DECISIONS.md`); красная сторона на фикстуре: `CONTRIBUTING-MO.md` внутри копии `sdx/mo/` — находка (d).
   - DoD: `bash sdx/hooks/test-mo-inventory.sh; echo $?` != 0 (нет файла/строки хеша/упоминаний); прежние проверки зелёные; перечень красных строк приложен.
   - Закрывает: REQ-PKG-28, 29; A14 (тестовая часть).
 
-- [ ] **T02** `[INFRA]` [PROC-020] Вендоринг `CHANGE.template.yaml` sim-kit 0.9.1 (датированное отступление от PROC-028, К-1)
+- [x] **T02** `[INFRA]` [PROC-020] Вендоринг `CHANGE.template.yaml` sim-kit 0.9.1 (датированное отступление от PROC-028, К-1)
   - Зависит от: T01
   - Файлы: `sdx/mo/CHANGE.template.yaml` (новый), `sdx/mo/SIMKIT_SHA256` (строка добавляется в порядке существующих), `sdx/mo/README.md` (упоминание)
   - Что: из каталога `SK` (`cd SK && git show sim-kit-0.9.1:./CHANGE.template.yaml > <tmp>`), сверить `sha256` с `346d2e6e52477faf69811411dfa11a96526daa28639a05ff523b9e90d86fd5cd` **в момент копирования** и с рабочей копией `SK/CHANGE.template.yaml`; копия побайтовая (без правок, перевод строки как в теге); `SIMKIT_VERSION` остаётся `0.9.1`; три прежних файла не трогаются.
   - DoD: `(cd sdx/mo && sha256sum -c SIMKIT_SHA256)` — `OK`×4; `git diff --stat main -- sdx/mo/mesh_endpoint.py sdx/mo/devagent_hook.py sdx/mo/MO-INTEROP.md sdx/mo/SIMKIT_VERSION` пуст; `git -C SK status --porcelain` не добавил изменений; в сообщении коммита — оба хеша.
   - Закрывает: REQ-PKG-28; A14.
 
-- [ ] **T03** `[DOC]` Упоминание `CHANGE.template.yaml` на пяти поверхностях сторожа и оговорка К-1
+- [x] **T03** `[DOC]` Упоминание `CHANGE.template.yaml` на пяти поверхностях сторожа и оговорка К-1
   - Зависит от: T02
   - Файлы: `README.md`, `README.en.md`, `CLAUDE.md`, `sdx/protocol.md`, `docs/DECISIONS.md` (минимальные правки: имя файла в перечне вендорённых; в `protocol.md` «Вендорённые компоненты» — оговорка «добавление файла того же выпуска допустимо в сессии поставки, обновление версии — по-прежнему отдельная сессия»)
   - Что: полный текст документов — T70–T74; здесь только то, что нужно сторожу инвентаря. Правка README пары симметрична (RU/EN, те же факты).
   - DoD: `bash sdx/hooks/test-mo-inventory.sh` зелёный (T01 → зелёный); `grep -c 'CHANGE.template.yaml'` ≥ 1 в каждом из пяти файлов; `bash sdx/hooks/test-mo-prose.sh` не краснее, чем до задачи.
   - Закрывает: REQ-PKG-28; A14.
 
-- [ ] **T04** `[DOC]` `sdx/templates/CONTRIBUTING-MO.md` — «как сдать изменение» (нейтрально к инструменту)
+- [x] **T04** `[DOC]` `sdx/templates/CONTRIBUTING-MO.md` — «как сдать изменение» (нейтрально к инструменту)
   - Зависит от: T02
   - Файлы: `sdx/templates/CONTRIBUTING-MO.md` (новый; собственный текст SDX, не вендорённый)
   - Что: по DESIGN «Вендоринг, шаблон «как сдать»»: что такое пакет и кому отдавать; имя ветки `change/<C>-<executor>`; порядок «код → один squash-коммит → `CHANGE.yaml` отдельным последним коммитом»; таблица полей манифеста с командами вычисления (`git rev-parse`, `git archive --format=tar <head> | sha256sum`, `git diff --name-only`); `touches_shared`, `adr`, `docs`; область и срок мандата; схема `protocol.yaml` (пять списков, `decisions[] {id, what, why}`) и куда положить; что делает узел сам, чего исполнитель не делает (слияние, теги, push в защищённые ветки); чек-лист самопроверки; ссылка на `sdx/mo/CHANGE.template.yaml`; упоминаются только `git`, `sha256sum`, текстовый редактор.
@@ -66,77 +66,77 @@
 
 #### Ф-1. `mandate_fnmatch` и `lib/pr-lib.sh` (DESIGN T1)
 
-- [ ] **T05** `[TEST]` [PROC-020] `test-mandate-lib.sh`: секция `[P]` — таблица `mandate_fnmatch` (красная)
+- [x] **T05** `[TEST]` [PROC-020] `test-mandate-lib.sh`: секция `[P]` — таблица `mandate_fnmatch` (красная)
   - Зависит от: T04
   - Файлы: `sdx/hooks/test-mandate-lib.sh` (только добавление; L1–L9 не правятся)
   - Что: таблица ≥ 15 случаев: `change/*` ↔ `change/C-ex1` да; `change/*` ↔ `feat/x` нет; `change` ↔ `change/x` **нет** (у `mandate_glob_one` — да; отдельная строка-«различитель»); `[^x]`, `[!x]`, `\`, пустой шаблон, регистр, `*` без разделителя; вызов при `LC_ALL=C`.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — старые L1–L9 зелёные, секция `[P]` красная (функции нет); перечень приложен.
   - Закрывает: REQ-PKG-11 (е); A2 (тестовая часть).
 
-- [ ] **T06** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_fnmatch` (`# PKG-FNMATCH`)
+- [x] **T06** `[CODE]` [PROC-020] `lib/mandate.sh`: `mandate_fnmatch` (`# PKG-FNMATCH`)
   - Зависит от: T05
   - Файлы: `sdx/hooks/lib/mandate.sh` (добавление одной функции; остальные не тронуты)
   - Что: функция из DESIGN дословно (`_my_rep` для удвоения `\` и экранирования `[^`; `case "$f" in $p`); `local LC_ALL=C`.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — `[P]` и L1–L9 зелёные; `git diff sdx/hooks/lib/mandate.sh` — только добавление.
   - Закрывает: REQ-PKG-11 (е); A2.
 
-- [ ] **T07** `[TEST]` `test-mandate-lib.sh`: секция `[L10]` — чистые функции `pr-lib` и портируемость (красная)
+- [x] **T07** `[TEST]` `test-mandate-lib.sh`: секция `[L10]` — чистые функции `pr-lib` и портируемость (красная)
   - Зависит от: T06
   - Файлы: `sdx/hooks/test-mandate-lib.sh`
   - Что: таблицы: `pr_valid_id` (валидные: `C-ACME-001`, `ex1`, 64 знака; невалидные: пусто, `client-harness:kitgroup`, `..`, `a..b`, ведущий `-`/`.`, пробел, `/`, 65 знаков, окончание `.`/`.lock`, юникод); `pr_clean` (перевод строки/табуляция → пробел, ESC/C0/DEL/U+2028/2029/0085 вырезаны, trim, усечение); `pr_has_secret` (`password: x`, `"token"=`, `api_key:`, `client-secret :` да; обычный текст, слово `tokenizer` без `:`/`=` нет); `pr_sha256` (известный вектор `abc`); `pr_url_ok` (`ssh://`, `https://`, `http://`, `file://`, `git@host:o/r.git`, абсолютный путь — да; `ext::sh -c x`, `fd::1`, `transport::x`, `-oProxyCommand=x`, пробел, пусто, `ftp://` — нет); `pr_url_show` (`https://u:p@h/x.git` → без `u:p@`; ssh-вид `git@h:o/r` не искажается); `pr_hosting` (`github.com` в URL → `github`; локальный путь → `bare`; подсказка `bare` приоритетнее). `FORBID`-портируемость по `lib/pr-lib.sh` + красная сторона на копии с `mapfile`; `grep -nE 'python|eval' sdx/hooks/lib/pr-lib.sh` пусто.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — `[L10]` красный (нет `lib/pr-lib.sh`), прежнее зелёное; перечень приложен.
   - Закрывает: REQ-PKG-5, 10, 14; A8 (тестовая часть).
 
-- [ ] **T08** `[CODE]` `lib/pr-lib.sh`: `pr_valid_id`, `pr_clean`, `pr_has_secret`, `pr_sha256` (`# PKG-ID`, `# PKG-SECRET`)
+- [x] **T08** `[CODE]` `lib/pr-lib.sh`: `pr_valid_id`, `pr_clean`, `pr_has_secret`, `pr_sha256` (`# PKG-ID`, `# PKG-SECRET`)
   - Зависит от: T07
   - Файлы: `sdx/hooks/lib/pr-lib.sh` (новый; шапка-комментарий; `source` `miniyaml.sh`, `mandate.sh`, `test-cmd.sh` по `${BASH_SOURCE[0]%/*}`; bash 3.2, без массивов)
   - Что: по DESIGN «`lib/pr-lib.sh`»: `pr_valid_id` (`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, без `..`, не оканчивается `.`/`.lock`); `pr_clean`; `pr_has_secret` (ERE зеркала `REDACT[0]` из `sdx/mo/mesh_endpoint.py:35` — сверить с вендорённым файлом, `grep -Eiq`); `pr_sha256` (`sha256sum` | `shasum -a 256`, нет утилит → rc 2).
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — строки `[L10]` по этим четырём функциям зелёные.
   - Закрывает: REQ-PKG-5, 10; A8.
 
-- [ ] **T09** `[CODE]` `lib/pr-lib.sh`: `pr_url_ok`, `pr_url_show`, `pr_hosting` (`# PKG-URL-WL`)
+- [x] **T09** `[CODE]` `lib/pr-lib.sh`: `pr_url_ok`, `pr_url_show`, `pr_hosting` (`# PKG-URL-WL`)
   - Зависит от: T08
   - Файлы: `sdx/hooks/lib/pr-lib.sh`
   - Что: whitelist схем (`ssh`, `https`, `http`, `file`, scp-вид `user@host:path`, абсолютный локальный путь); отказ на `ext::`/`fd::`/`transport::`, пробелы/управляющие, ведущий `-`; `pr_url_show` вырезает учётные данные; `pr_hosting`: подсказка заказа приоритетнее, иначе `github.com` → `github`, иначе `bare`.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — `[L10]` целиком зелёный.
   - Закрывает: REQ-PKG-14, 15, 16; A8, A9.
 
-- [ ] **T10** `[TEST]` `test-mandate-lib.sh`: секция `[L11]` — git-зависимые функции `pr-lib` на мини-репозитории (красная)
+- [x] **T10** `[TEST]` `test-mandate-lib.sh`: секция `[L11]` — git-зависимые функции `pr-lib` на мини-репозитории (красная)
   - Зависит от: T09
   - Файлы: `sdx/hooks/test-mandate-lib.sh`
   - Что: встроенный мини-репозиторий (`dev`; `sdx/s1` с каталогом сессии → код → `git rm -r` сессии; `order.yaml` в формате «Схема данных» DESIGN, `.mesh/*.yaml`). Проверки: `pr_session_rev` (HEAD с каталогом; HEAD без — родитель коммита `git rm`; нет — rc 1); `pr_sess_cat` (файл есть/нет); `pr_order_load` (все `PR_O_*`; пусто без снимка); `pr_base_ref` (локальная предпочтительнее remote-tracking; нет ни одной → rc 1; дрейф сообщается); `pr_files` (`-z`, путь с кириллицей без quotepath; путь с `\n` → rc 1); `pr_scope_eval` (`PR_OUT`, `PR_SHARED`, `PR_DOCSF`, `PR_SESSF`, `PR_DOCS_OUTSIDE`; пустой `paths` — без `PR_OUT`); `pr_registry` (`docs/DECISIONS.md` изменён → `one` + якорь `ADR-099`; не изменён → `none`; два кандидата по маске → `ambiguous`); `pr_resolve` (порядок источников: снимок заказа > аргумент; расхождение аргумента с непустым снимком → rc 1 `PR_ERR`; `<exec>` только из `mandate.executor`; `docs_in_repo` не задан → `final`).
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — `[L11]` красный (функций нет); `[L10]`, L1–L9 зелёные; перечень приложен.
   - Закрывает: REQ-PKG-4, 5, 7, 12, 26, 27; A3, A5, A11 (тестовая часть).
 
-- [ ] **T11** `[CODE]` `lib/pr-lib.sh`: `pr_session_rev`, `pr_sess_cat`, `pr_order_load` (`# PKG-SESSREV`)
+- [x] **T11** `[CODE]` `lib/pr-lib.sh`: `pr_session_rev`, `pr_sess_cat`, `pr_order_load` (`# PKG-SESSREV`)
   - Зависит от: T10
   - Файлы: `sdx/hooks/lib/pr-lib.sh`
   - Что: D-5 DESIGN: коммит, где ещё лежит `.claude/sessions/<sid>/` (HEAD либо родитель коммита, удалившего `session_state.json` на ветке `sdx/<sid>`; `git log --diff-filter=D`); `git show "$rev:path"`; `pr_order_load` — `my_load` снимка.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — строки `[L11]` по этим трём функциям зелёные.
   - Закрывает: REQ-PKG-4; A3.
 
-- [ ] **T12** `[CODE]` `lib/pr-lib.sh`: `pr_base_ref`, `pr_files`, `pr_scope_eval`
+- [x] **T12** `[CODE]` `lib/pr-lib.sh`: `pr_base_ref`, `pr_files`, `pr_scope_eval`
   - Зависит от: T11
   - Файлы: `sdx/hooks/lib/pr-lib.sh`
   - Что: `refs/heads/<name>` > `refs/remotes/<remote>/<name>`, имя — `repo.base` заказа, иначе `lib/default-branch.sh`, без `fetch`; `git -c core.quotepath=off diff --name-only -z`; путь с управляющим символом → rc 1; `pr_scope_eval` через `mandate_in_union`/`mandate_glob_any`.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — строки `[L11]` по этим функциям зелёные.
   - Закрывает: REQ-PKG-5, 9, 11 (в), 12, 27; A5.
 
-- [ ] **T13** `[CODE]` `lib/pr-lib.sh`: `pr_registry`
+- [x] **T13** `[CODE]` `lib/pr-lib.sh`: `pr_registry`
   - Зависит от: T12
   - Файлы: `sdx/hooks/lib/pr-lib.sh`
   - Что: кандидаты — изменённые файлы диффа `base..head`; `docs/DECISIONS.md` приоритетен, затем единственное совпадение маски `docs/**/{DECISIONS,decisions}*.md`; `PR_REG_PATH`, `PR_REG_STATE` (`one|none|ambiguous`), якоря `git diff -U0 base head -- <reg> | grep '^+#'` → первый токен `[A-Z]+-[0-9]+`.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — строки `[L11]` по `pr_registry` зелёные.
   - Закрывает: REQ-PKG-9 (adr), 26; A11.
 
-- [ ] **T14** `[CODE]` `lib/pr-lib.sh`: `pr_resolve`
+- [x] **T14** `[CODE]` `lib/pr-lib.sh`: `pr_resolve`
   - Зависит от: T13
   - Файлы: `sdx/hooks/lib/pr-lib.sh`
   - Что: итоговые `PR_C`, `PR_EXEC`, `PR_BRANCH`, `PR_TITLE`, `PR_BASE_NAME/REF/SHA`, `PR_URL`, `PR_HOSTING_HINT`, `PR_DELIVERY`, `PR_DOCS_MODE`, `PR_DIGEST`; rc 0|1 с `PR_ERR` «<поле>: <причина>»; молчаливой подмены нет.
   - DoD: `bash sdx/hooks/test-mandate-lib.sh` — `[L11]` целиком зелёный; `grep -nE 'python|eval' sdx/hooks/lib/pr-lib.sh` пусто.
   - Закрывает: REQ-PKG-4, 5, 7; A3.
 
-- [ ] **T15** `[TEST]` [PROC-020] `test-mandate-lib.sh`: мутанты `PKG-FNMATCH`, `PKG-ID`, `PKG-SECRET`, `PKG-URL-WL`, `PKG-SESSREV`
+- [x] **T15** `[TEST]` [PROC-020] `test-mandate-lib.sh`: мутанты `PKG-FNMATCH`, `PKG-ID`, `PKG-SECRET`, `PKG-URL-WL`, `PKG-SESSREV`
   - Зависит от: T14
   - Файлы: `sdx/hooks/test-mandate-lib.sh`
   - Что: мутанты по меткам: `PKG-FNMATCH` (подмена на `glob_one` → краснит «`change` ↔ `change/x`»), `PKG-ID` (снять запрет `..`/`:`), `PKG-SECRET` (пустой шаблон), `PKG-URL-WL` (принимать `ext::`), `PKG-SESSREV` (вернуть всегда `HEAD`).
@@ -145,42 +145,42 @@
 
 #### Ф-2. `lib/pkg-fixture.sh` и оракул `audit()` (DESIGN T2)
 
-- [ ] **T16** `[TEST]` `test-pkg-fixture.sh` — самопроверка помощника и оракула (красная)
+- [x] **T16** `[TEST]` `test-pkg-fixture.sh` — самопроверка помощника и оракула (красная)
   - Зависит от: T15
   - Файлы: `sdx/hooks/test-pkg-fixture.sh` (новый; шапка-комментарий как у других сьютов)
   - Что: каркас; (а) `pkg_fixture_template` создаёт bare `remote.git` (`dev`), клон `wc`, `sdx/s1` с историей «сессия → код → `git rm -r` сессии», `.mesh/endpoint.yaml` + `.mesh/mandate.yaml` (форма дампа узла, `executor: ex1`, `digest: "123456789012"`, `valid_until: "2099-01-01"`, `delivery: pr`, `docs_in_repo: final`, `scope.paths [src/mod1/**]`, `shared_paths [package-lock.json]`, `docs_paths [docs/**]`, `branches [change/*]`), `.claude/sdx/verify-cmd.sh` (управляемый `exit 0|1`); (б) `pkg_fixture_copy` быстрый и независимый (изменение копии не видно шаблону); (в) оракул `pkg_oracle` (python `audit()`): на пакете `pkg_craft_good` → `approve`; на каждой фабрике `pkg_craft_bad_<вид>` → не `approve` с ожидаемым id провала; (г) встроенный негатив: подмена вердикта оракула краснит сверку; (д) INFO-skip без python3/PyYAML; (е) `FORBID`-портируемость `lib/pkg-fixture.sh`.
   - DoD: `bash sdx/hooks/test-pkg-fixture.sh; echo $?` != 0 (нет помощника); `bash -n`; перечень красных строк приложен.
   - Закрывает: REQ-PKG-11; A1, A2 (тестовая часть).
 
-- [ ] **T17** `[CODE]` `lib/pkg-fixture.sh`: `pkg_fixture_template`, `pkg_fixture_copy`
+- [x] **T17** `[CODE]` `lib/pkg-fixture.sh`: `pkg_fixture_template`, `pkg_fixture_copy`
   - Зависит от: T16
   - Файлы: `sdx/hooks/lib/pkg-fixture.sh` (новый; `source`-файл, имя не `test-*.sh`)
   - Что: шаблон один раз за прогон (`PKG_FIXTURE_TEMPLATE` от родителя наследуется вложенными прогонами мутантов); `cp -a` копий; содержимое по DESIGN «`lib/pkg-fixture.sh`» (`src/mod1/a.js`, `src/core/b.js`, `package-lock.json`, `docs/DECISIONS.md` с ADR-099 в диффе, `docs/specs/mod1.md`; `order.yaml`, `decisions_log.md`, `verification_report.md` с `Итог: PASS`, `change_note.md` в каталоге сессии).
   - DoD: `bash sdx/hooks/test-pkg-fixture.sh` — блоки (а), (б) зелёные; создание шаблона ≤ 1 с.
   - Закрывает: инфраструктура A1–A5.
 
-- [ ] **T18** `[CODE]` `lib/pkg-fixture.sh`: python-оракул `pkg_oracle` (транслитерация `audit()`)
+- [x] **T18** `[CODE]` `lib/pkg-fixture.sh`: python-оракул `pkg_oracle` (транслитерация `audit()`)
   - Зависит от: T17
   - Файлы: `sdx/hooks/lib/pkg-fixture.sh`
   - Что: один вызов `python3 -I` (heredoc) на пакет; транслитерация формальных проверок `SK/core/dev.py:340–424` (`manifest_of`, `format`, `manifest.commit` (`tip^ == head`, разница — ровно `CHANGE.yaml`), `branch` по `fnmatch`, `scope` по `glob_any` (`DEV:67–68`), `shared.declared`, `archive_sha256`, `adr`); реестр обязательств, тесты и ревью не воспроизводятся; вывод `approve` или `<verdict> <ids>`; нет python3/PyYAML → INFO-skip (rc 77).
   - DoD: `bash sdx/hooks/test-pkg-fixture.sh` — блок (в) для `pkg_craft_good` → `approve` (после T19), блоки (г), (д) зелёные; `ls -a` чекаута без `__pycache__`.
   - Закрывает: REQ-PKG-11, 35 (живой `audit()` не вызывается); A1.
 
-- [ ] **T19** `[CODE]` `lib/pkg-fixture.sh`: `pkg_craft_good` и фабрики красных пакетов, часть 1
+- [x] **T19** `[CODE]` `lib/pkg-fixture.sh`: `pkg_craft_good` и фабрики красных пакетов, часть 1
   - Зависит от: T18
   - Файлы: `sdx/hooks/lib/pkg-fixture.sh`
   - Что: фабрики обходным plumbing'ом по образцу `mkpkg` (`SK/tests/kit.sh:695–742`), независимо от `pr-build.sh`: `pkg_craft_good`; красные: лишний коммит между `head` и вершиной (`manifest.commit`), посторонний файл в манифест-коммите, неверный `archive_sha256`, файл вне области (`scope`).
   - DoD: `bash sdx/hooks/test-pkg-fixture.sh` — good → `approve`, четыре красные → не `approve` с ожидаемыми id.
   - Закрывает: REQ-PKG-11; A1, A2.
 
-- [ ] **T20** `[CODE]` `lib/pkg-fixture.sh`: фабрики красных пакетов, часть 2
+- [x] **T20** `[CODE]` `lib/pkg-fixture.sh`: фабрики красных пакетов, часть 2
   - Зависит от: T19
   - Файлы: `sdx/hooks/lib/pkg-fixture.sh`
   - Что: `touches_shared` не объявлен при пересечении, каталог сессии в пакете, `format: 2`, манифест внутри головы (без `archive_sha256` вершины), фальшивый `scope_touched`, секрет в `notes`, чужие `commitment`/`executor`/`mandate_digest`.
   - DoD: `bash sdx/hooks/test-pkg-fixture.sh` → `Results: N passed, 0 failed` (при PyYAML — все оракульные ветки PASS; иначе INFO-skip и это записано); время сьюта ≤ 3 с.
   - Закрывает: REQ-PKG-11, 12; A1, A2, A5.
 
-- [ ] **T21** `[INFRA]` Gate Ф: полный прогон перед стартом дорожек A/B/C
+- [x] **T21** `[INFRA]` Gate Ф: полный прогон перед стартом дорожек A/B/C
   - Зависит от: T20, T03
   - Файлы: —
   - Что: `time bash .claude/sdx/verify-cmd.sh`; проверка, что `git diff --stat main -- sdx/hooks/stop-gate.sh sdx/hooks/archive-verify.sh sdx/hooks/sdx-stage.sh sdx/hooks/mo-hook.sh sdx/hooks/mo-session.sh sdx/hooks/lib/miniyaml.sh sdx/hooks/lib/test-cmd.sh hooks/hooks.json` пуст; зафиксировать замер времени (база для К-10).
@@ -724,4 +724,14 @@ Gate: T20, T03 ─> T21 (полный прогон; старт дорожек A,
 
 ## Отклонения при исполнении (фиксируются здесь, не сглаживаются)
 
-(пусто — исполнение не начато)
+Дорожка Ф (T01–T21), исполнитель Ф:
+
+1. **`grep -nE 'python|eval'` по `pr-lib.sh` (DoD T14) не «пусто» буквально.** Находит имя функции `pr_scope_eval` (имя интерфейса из DESIGN/PLAN T12) и упоминания его в комментариях. Слов `python` и команды `eval` в файле нет; сьют проверяет `grep -nE 'py''thon|\bev''al\b'` (граница слова) — зелёный. Имя функции не менялось, чтобы не ломать интерфейс дорожек.
+2. **Время (DoD «≤ N с»).** T15: `test-mandate-lib.sh` ~6,5 с → ~10 с (+3,5 с при пределе +3 с; из них ~2,1 с — собственно `[L11]` на мини-репозитории, ~1,2 с — 5 мутантов; мутант `PKG-SESSREV` идёт в сокращённом прогоне `MANDATE_MIN`). T20: `test-pkg-fixture.sh` ~3,9 с при пределе 3 с (16 пакетов × ~0,24 с на крафт и оракул). Сумма превышения (~1,4 с) уместилась в бюджет К-10: gate Ф 77 с.
+3. **`[L9]` `test-mandate-lib.sh`** («нет python в `lib/*.sh`») переписан: `lib/pkg-fixture.sh` исключён по имени (тестовый помощник с python-оракулом, самопроверяется `test-pkg-fixture.sh`); остальные lib-файлы и `sdx-stage.sh` по-прежнему обязаны быть чистыми. Без этого T18 краснил бы существующий сьют.
+4. **Коммит T08** оставил красной строку портируемости `[L10]` (слова-триггеры в комментарии шапки `pr-lib.sh`); исправлено в коммите T09 (шапка переписана). T08/T09/T11/T12 коммитились по DoD «целевые строки зелёные», а не «весь сьют зелёный» — DoD задач этого и требует.
+5. **Уточнения интерфейса относительно DESIGN (библиотеки заморожены в таком виде):** `pr_registry <proj> <base> <head>` читает `$PR_FILES` (в DESIGN — `<files>`; нужен дифф для якорей) и отдаёт якоря целиком `<файл>#<TOKEN>`; `pr_session_rev` ищет по ветке `refs/heads/sdx/<sid>`, а не по `HEAD` (результат тот же при штатном состоянии); `pr_sess_cat` пересчитывает ревизию на каждый вызов (ветка двигается между шагами); `pr_order_load` возвращает rc 0/1/2 (снимок / нет снимка / не читается) и сохраняет `MY_NORM` вызвавшего (мандат остаётся загруженным); `pr_resolve` сам загружает мандат (`MANDATE_*` пригодны для `pr_scope_eval`), опционально выставляет `PR_DIGEST_DRIFT`, `PR_BASE_DRIFT`; `--title` явно побеждает название из снимка (явное решение пользователя), расхождение `--commitment`/`--base-name` со снимком — отказ; `pr_files` читает без обнаружения переименований (`--no-renames`) — обе стороны переименования попадают в область; `pr_url_show` для `ssh://` вырезает только `user:pass@`, для `http(s)` — весь userinfo; `pr_hosting` отдаёт значение переменной `PR_HOSTING`.
+6. **`lib/pkg-fixture.sh`:** `pkg_fixture_template <workdir>` (шаблон создаётся под рабочим каталогом вызывающего, чистит его `trap`); экспортирует гермеричное окружение git (`GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=<tpl>/gitconfig`; локальные `user.name/email` в клоне); копия переписывает `origin` и добавляет `url.<копия>.insteadOf <шаблон>` (URL заказа в снимке — путь шаблона); сверх списка DESIGN добавлены виды `bad_branch` (имя вне `scope.branches`; ветку называет фабрика, см. `PKG_BRANCH_MADE`) и `no_adr` (оракул: `return adr`); `fake_scope` оракул **не** ловит по построению (аудит узла пересчитывает `scope_touched` сам) — ожидаемый ответ `approve`, ловит его `pr-check post` (`manifest.scope`, дорожка B). Оракульные ветки в моём прогоне PASS (python3, PyYAML 6.0.3); без PyYAML — rc 77 → INFO-skip у вызывающих.
+7. **PLAN.md** актуализирован одним коммитом после T21 (не по задачам): галочки и счётчик.
+8. **T02/T03:** упоминание в `sdx/mo/README.md` сделано в T02 (по плану), в пяти поверхностях и в `protocol.md`/`DECISIONS.md` (датированная оговорка К-1 без числа версии) — в T03.
+9. **Прогон gate T21:** 20/20 сьютов, 77,1 с (real; user 32 с, sys 50 с; load average ~0,8 на старте), 19 прежних + `test-pkg-fixture.sh`; `__pycache__` в чекауте нет; `git status` чист. Базовая оценка feat-016 (123,9 с под нагрузкой / 19 сьютов) здесь не воспроизводится — замер при малой нагрузке; ориентир К-10 для остальных дорожек: Ф добавила ≈ 14 с к «≈ 63 с» чистого прогона 19 сьютов на этой машине.

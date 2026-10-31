@@ -275,7 +275,7 @@ chk_pr_prohibitions() {
   [ -z "$bad" ] || { echo "a 'git push' line outside prohibitive text in $f: $bad"; return 1; }
 }
 # flags/subcommands used in script calls inside <md> must exist in the text of that script (catches drift between lanes).
-# Scripts are looked up in $FLAG_SCRIPTS; a script that is absent there is skipped by the caller (INFO), not passed.
+# Scripts are looked up in $FLAG_SCRIPTS; a script that is absent there is skipped here (the caller reports a missing real script as FAIL).
 pr_calls() {  # md -> "<script>\t<rest of the call up to a backtick or ' #'>"
   awk '{ line=$0; while (match(line, /(pr-check|pr-build|pr-publish|protocol-export|order-import)\.sh/)) {
            s=substr(line,RSTART,RLENGTH); line=substr(line,RSTART+RLENGTH); seg=line
@@ -573,7 +573,7 @@ done
 FX="$TMP/flagfx"; mkdir -p "$FX"
 echo '# --sid --proj --phase --commitment --title --base-name --no-tests pre post all' > "$FX/pr-check.sh"
 echo '# --sid --proj --commitment --title --base-name --allow-diverged --resubmit --notes' > "$FX/pr-build.sh"
-echo '# --sid --proj --commitment --base-name --remote --hosting --dry-run' > "$FX/pr-publish.sh"
+echo '# --sid --proj --commitment --title --base-name --remote --hosting --dry-run' > "$FX/pr-publish.sh"
 echo '# --sid --proj --out --from-rev' > "$FX/protocol-export.sh"
 echo '# from-file from-msg from-issue list stamp-state --proj --out --inbox-json --repo --sid --commitment' > "$FX/order-import.sh"
 for md in "$PR_MD" "$START_MD"; do
@@ -585,11 +585,11 @@ sed 's/--allow-diverged//' "$FX/pr-build.sh" > "$TMP/pr-build.sh"; mkdir -p "$TM
 FLAG_SCRIPTS="$TMP/flagfx2" expect_red "red: a script that dropped --allow-diverged (drift between lanes)" chk_flags "$PR_MD"
 { cat "$START_MD"; echo '`bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/order-import.sh" from-nowhere x`'; } > "$TMP/t20j.md"
 FLAG_SCRIPTS="$FX" expect_red "red: start.md with an unknown order-import subcommand" chk_flags "$TMP/t20j.md"
-# ... and against the real scripts (parallel lanes): INFO-skip while a script is not delivered yet
+# ... and against the real scripts: a script called by the command but absent from sdx/hooks/ is a failure
 for md in "$PR_MD" "$START_MD"; do
   have=""; for s in pr-check pr-build pr-publish protocol-export order-import; do
     if pr_calls "$md" | grep -q "^$s.sh"; then
-      if [ -f "$SCRIPT_DIR/$s.sh" ]; then have="$have $s"; else echo "  INFO: $(basename "$md"): $s.sh is not delivered yet — flag check against the real script skipped (fixture side above stays active)"; fi
+      if [ -f "$SCRIPT_DIR/$s.sh" ]; then have="$have $s"; else fail "$(basename "$md"): $s.sh is called but missing" "no sdx/hooks/$s.sh"; fi
     fi
   done
   if [ -n "$have" ]; then FLAG_SCRIPTS="$SCRIPT_DIR" expect_ok "$(basename "$md"): flags of${have} match the real scripts" chk_flags "$md"; fi

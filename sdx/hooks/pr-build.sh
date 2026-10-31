@@ -150,6 +150,38 @@ vals="$(jq -n --arg commitment "$PR_C" --arg executor "$PR_EXEC" --arg digest "$
    history_ref: $hist, notes: $notes}
   + (if $spec == "" then {} else {spec: $spec} end)')" || die 2 "jq не смог собрать значения манифеста"
 
-# ---- TASK-T42 partial output (replaced in the next steps) ----
+# ---- the manifest text (D-3): the keys and their order come from the vendored template of the node ----
+tpl="$here/../mo/CHANGE.template.yaml"
+[ -f "$tpl" ] || die 2 "нет шаблона sdx/mo/CHANGE.template.yaml плагина"
+keys=""
+while IFS= read -r l || [ -n "$l" ]; do
+  case "$l" in
+    ""|"#"*|"  #"*|"change:") continue ;;
+    "  "[a-z]*:*)
+      k="${l#  }"; k="${k%%:*}"
+      case " format commitment executor mandate_digest base head archive_sha256 scope_touched touches_shared spec verify adr docs history_ref notes " in
+        *" $k "*) keys="$keys $k" ;;
+        *) die 1 "шаблон sim-kit содержит поле '$k', неизвестное pr-build — обновите плагин" ;;   # PKG-TEMPLATE-KEYS
+      esac ;;
+    *) die 1 "строка шаблона sim-kit вне ожидаемой формы — обновите плагин" ;;
+  esac
+done < "$tpl"
+
+# Every string is a JSON string literal (valid YAML double-quoted scalar): quotes, backslashes, ": ", "#", "{}", " - ",
+# unicode are all inert; U+2028/2029/0085 (line breaks for YAML) are folded to a space; digits-only strings stay strings.
+RENDER_CHANGE='
+def q: tojson;   # PKG-QUOTE
+def sc: if type == "string" then (gsub("[  \u0085]"; " ") | q) elif type == "null" then "\"\"" else tojson end;
+def lst($i): if length == 0 then " []" else "\n" + (map($i + "- " + sc) | join("\n")) end;
+def emit($k): $v[$k] as $x
+  | if $k == "verify" then "  verify:\n    tests: " + ($x.tests | sc) + "\n    report: " + ($x.report | sc)
+    elif ($x | type) == "array" then "  " + $k + ":" + ($x | lst("    "))
+    else "  " + $k + ": " + ($x | sc) end;
+"# CHANGE.yaml (format 1) — SDX /sdx:pr по CHANGE.template.yaml sim-kit; манифест — отдельный последний коммит над головой кода\nchange:\n"
+  + ([ ($keys | split(" ")[] | select(length > 0) | . as $k | select($v | has($k)) | emit($k)) ] | join("\n")) + "\n"'
+manifest="$(jq -n -r --argjson v "$vals" --arg keys "$keys" "$RENDER_CHANGE")" || die 2 "jq не смог отрисовать CHANGE.yaml"
+[ -n "$manifest" ] || die 2 "пустой CHANGE.yaml"
+
+# ---- TASK-T44 partial output (replaced in the next step) ----
 jq -n --arg head "$head" '{head:$head}'
 exit 0

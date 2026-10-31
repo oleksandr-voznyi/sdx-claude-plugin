@@ -17,7 +17,7 @@
 #  (8)  unreadable mandate -> FAIL block, rc 1 (fail-closed)
 #  (9)  glob_any reference cases through the script
 #  (10) expired mandate -> a non-heading "> Предупреждение:" line, rc != 1; rc 2 without --into
-# Block [M]: mandate-info.sh — mode, show, status, closeout-mode, closeout-check.
+# Block [M]: mandate-info.sh — mode, show, status, closeout-mode, closeout-check, pr-mode, pr-status.
 # Block [P]: portability (BUG-010) of the two scripts.
 # Block [Mut]: mutation runs on copies of the scripts + lib/ (anchored by "# MAND-*" tags).
 # MANDATE_SCOPE_ONLY="1 2 M" restricts a run to the named blocks (used by the mutation runs).
@@ -413,6 +413,87 @@ info_run no-such-subcommand
 [ "$RC" -eq 2 ] && pass "[M] unknown subcommand -> rc 2" || fail "[M] unknown subcommand" "rc=$RC"
 fi   # closeout-check
 fi   # [M]
+
+# ================================================================ [M] pr-mode / pr-status (FEAT-017, REQ-PKG-2, 17, 34)
+if want M || want Mpm || want Mps; then
+if want M || want Mpm; then
+# ---- pr-mode
+PM_OK=$'mandate:\n  executor: ex1\n  digest: 0123456789ab\n  valid_until: \'2999-12-31\'\n  delivery: pr\n  history: mo\n  docs_in_repo: full\n'
+pm() { # name mandate-body expected-exact|prefix* ; endpoint is always present
+  local d; d="$(mkd "pm-$1" $'on_write: notice\n' "$2")"
+  info_run pr-mode "$d"
+  case "$3" in
+    *'*') if [ "$RC" -eq 1 ] && case "$OUT" in "${3%\*}"*) true ;; *) false ;; esac; then pass "[M] pr-mode $1 -> $OUT"; else fail "[M] pr-mode $1" "rc=$RC out=[$OUT] expected [$3]"; fi ;;
+    OK*) if [ "$RC" -eq 0 ] && [ "$OUT" = "$3" ]; then pass "[M] pr-mode $1 -> $OUT"; else fail "[M] pr-mode $1" "rc=$RC out=[$OUT] expected [$3]"; fi ;;
+    *) if [ "$RC" -eq 1 ] && [ "$OUT" = "$3" ]; then pass "[M] pr-mode $1 -> $OUT"; else fail "[M] pr-mode $1" "rc=$RC out=[$OUT] expected [$3]"; fi ;;
+  esac
+}
+pm pr       "$PM_OK"                                                    'OK executor=ex1 delivery=pr docs_in_repo=full history=mo digest=0123456789ab'
+pm branch   $'mandate:\n  executor: ex1\n  delivery: branch\n'         'OK executor=ex1 delivery=branch docs_in_repo=final history=unset digest=?'
+pm offer    $'mandate:\n  executor: ex1\n  delivery: artifact.offer\n' 'REFUSE delivery:artifact.offer'
+pm patch    $'mandate:\n  executor: ex1\n  delivery: patch\n'          'REFUSE delivery:patch'
+pm unset    $'mandate:\n  executor: ex1\n'                             'REFUSE delivery:?'
+pm broken   $'mandate:\n\tdelivery: pr\n'                               'REFUSE error:*'
+pm hostile  $'mandate:\n  executor: \'e$(id):x"y\'\n  delivery: pr\n'   'OK executor=e??id??x?y delivery=pr docs_in_repo=final history=unset digest=?'
+pm hostdel  $'mandate:\n  delivery: "p$(id)\\"r; x"\n'                  'REFUSE delivery:p??id??r??x'
+info_run pr-mode "$D_NO"
+[ "$RC" -eq 1 ] && [ "$OUT" = 'REFUSE no-mandate' ] && pass "[M] pr-mode without a mandate -> REFUSE no-mandate, rc 1" || fail "[M] pr-mode none" "rc=$RC out=[$OUT]"
+D_EP="$(mkd pm-ep $'on_write: notice\n' -)"
+info_run pr-mode "$D_EP"
+[ "$RC" -eq 1 ] && [ "$OUT" = 'REFUSE no-mandate' ] && pass "[M] pr-mode with an endpoint only -> REFUSE no-mandate" || fail "[M] pr-mode endpoint only" "rc=$RC out=[$OUT]"
+D_OR3="$(mkd pm-or - "$PM_OK")"
+info_run pr-mode "$D_OR3"
+[ "$RC" -eq 1 ] && [ "$OUT" = 'REFUSE orphan' ] && pass "[M] pr-mode with an orphan mandate -> REFUSE orphan" || fail "[M] pr-mode orphan" "rc=$RC out=[$OUT]"
+fi   # pr-mode
+
+if want M || want Mps; then
+# ---- pr-status
+# prrepo <name>: a git repo on sdx/s1 with one commit
+prrepo() {
+  local d="$TMP/pr-$1"; rm -rf "$d"; mkdir -p "$d"
+  gitc "$d" init -q -b main; gitc "$d" config commit.gpgsign false
+  put "$d" a.txt one; gitc "$d" add -A; gitc "$d" commit -q -m base
+  gitc "$d" checkout -q -b sdx/s1
+  printf '%s' "$d"
+}
+# prsvc <repo> <subject> <trailers>: a service commit (empty) with a trailer block
+prsvc() { printf '%s\n\n%s\n' "$2" "$3" | gitc "$1" commit -q --allow-empty -F -; }
+TR_OK=$'SDX-PR-Branch: change/C-1-ex1\nSDX-PR-Head: 1111111111111111111111111111111111111111\nSDX-PR-Tip: 2222222222222222222222222222222222222222\nSDX-PR-Remote: ssh://git@host/srv/app.git\nSDX-PR-Hosting: github\nSDX-PR-Url: https://github.com/o/r/pull/7\nSDX-PR-Ack: base.ancestor\nSDX-PR-Confirmed: manual:user'
+PS1="$(prrepo none)"
+info_run pr-status s1 "$PS1"
+[ "$RC" -eq 0 ] && [ "$OUT" = 'PR: не сдан' ] && pass "[M] pr-status without service commits -> PR: не сдан" || fail "[M] pr-status none" "rc=$RC out=[$OUT]"
+PS2="$(prrepo sub)"; prsvc "$PS2" 'sdx(s1): pr submitted change/C-1-ex1' "$TR_OK"; sha8="$(gitc "$PS2" rev-parse --short=8 HEAD)"
+info_run pr-status s1 "$PS2"
+[ "$RC" -eq 0 ] && [ "$OUT" = "PR: branch=change/C-1-ex1 head=11111111 tip=22222222 remote=ssh://git@host/srv/app.git hosting=github pr=https://github.com/o/r/pull/7 (sdx/s1@$sha8)" ] && pass "[M] pr-status submitted: branch/head/tip/remote/hosting/pr in one line" || fail "[M] pr-status submitted" "rc=$RC out=[$OUT]"
+PS3="$(prrepo built)"; prsvc "$PS3" 'sdx(s1): pr built change/C-1-ex1' "${TR_OK//Url: https:\/\/github.com\/o\/r\/pull\/7/Url: -}"
+info_run pr-status s1 "$PS3"
+[ "$RC" -eq 0 ] && case "$OUT" in 'PR: собран, не отправлен'*'branch=change/C-1-ex1'*'head=11111111'*) true ;; *) false ;; esac && [ "$(printf '%s\n' "$OUT" | grep -c .)" = 1 ] && pass "[M] pr-status built: 'собран, не отправлен' with branch and head" || fail "[M] pr-status built" "rc=$RC out=[$OUT]"
+PS4="$(prrepo last)"; prsvc "$PS4" 'sdx(s1): pr built change/C-1-ex1' "$TR_OK"; prsvc "$PS4" 'sdx(s1): pr submitted change/C-1-ex1' "$TR_OK"
+info_run pr-status s1 "$PS4"
+case "$OUT" in 'PR: branch='*) pass "[M] pr-status takes the latest service commit" ;; *) fail "[M] pr-status latest" "out=[$OUT]" ;; esac
+PS5="$(prrepo other)"; prsvc "$PS5" 'sdx(s2): pr submitted change/C-1-ex1' "$TR_OK"
+info_run pr-status s1 "$PS5"
+[ "$OUT" = 'PR: не сдан' ] && pass "[M] pr-status ignores service commits of another session" || fail "[M] pr-status other sid" "out=[$OUT]"
+PS6="$(prrepo cred)"; prsvc "$PS6" 'sdx(s1): pr submitted change/C-1-ex1' "${TR_OK//ssh:\/\/git@host\/srv\/app.git/https://user:s3cr3t@host/srv/app.git}"
+info_run pr-status s1 "$PS6"
+case "$OUT" in *s3cr3t*|*user:*) fail "[M] pr-status credentials" "out=[$OUT]" ;; *remote=https://host/srv/app.git*) pass "[M] pr-status never prints credentials from SDX-PR-Remote" ;; *) fail "[M] pr-status credentials" "unexpected out=[$OUT]" ;; esac
+PS7="$(prrepo host)"; ESC=$'\033'
+prsvc "$PS7" 'sdx(s1): pr submitted change/C-1-ex1' "SDX-PR-Branch: change/C-1\$(id)${ESC}[31m
+SDX-PR-Head: zz;rm -rf /
+SDX-PR-Tip: 2222222222222222222222222222222222222222
+SDX-PR-Remote: ssh://h/a b${ESC}c
+SDX-PR-Hosting: gith\"ub
+SDX-PR-Url: -"
+info_run pr-status s1 "$PS7"
+if [ "$RC" -eq 0 ] && [ "$(printf '%s\n' "$OUT" | grep -c .)" = 1 ] && ! printf '%s' "$OUT" | LC_ALL=C grep -q "$ESC" && case "$OUT" in *'$('*|*'"'*|*';'*) false ;; *) true ;; esac; then pass "[M] pr-status: hostile trailers are reduced to a safe alphabet on one line"
+else fail "[M] pr-status hostile" "rc=$RC out=[$(printf '%s' "$OUT" | cat -v)]"; fi
+info_run pr-status
+[ "$RC" -eq 2 ] && pass "[M] pr-status without <sid> -> rc 2" || fail "[M] pr-status usage" "rc=$RC"
+snap="$(gitc "$PS2" rev-parse HEAD; gitc "$PS2" status --porcelain)"; info_run pr-status s1 "$PS2"
+[ "$snap" = "$(gitc "$PS2" rev-parse HEAD; gitc "$PS2" status --porcelain)" ] && pass "[M] pr-status is read-only" || fail "[M] pr-status read-only" "repo changed"
+if grep -nE 'eval' "$INFO" >/dev/null 2>&1; then fail "[M] no eval in mandate-info.sh" "$(grep -nE 'eval' "$INFO" | head -2)"; else pass "[M] no eval in mandate-info.sh"; fi
+fi   # pr-status
+fi   # [M] pr-mode / pr-status
 
 # ================================================================ [P] portability
 if want P; then

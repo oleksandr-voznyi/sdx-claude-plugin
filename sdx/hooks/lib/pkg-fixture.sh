@@ -86,3 +86,109 @@ pkg_fixture_copy() {
   PKG_WC="$dst/wc"; PKG_REMOTE="$dst/remote.git"
   return 0
 }
+
+# pkg_oracle <wc> <branch> [target=dev]: an INDEPENDENT second implementation of the formal checks of audit() of the
+# node (sim-kit core/dev.py:340-424, read as data): manifest_of, format, manifest.commit (tip^ == head, the difference
+# is exactly CHANGE.yaml), commitment/executor/mandate_digest against the local mandate, branch by fnmatch, nonempty,
+# scope by glob_any (DEV:67-68), shared.declared, archive_sha256, secrets (DEFAULT_REDACT), adr. NOT reproduced: the
+# commitment registry state, the test suites of the stand and the LLM review. The mandate comes from <wc>/.mesh/mandate.yaml
+# (the node's registry entry), the commitment from $PKG_C. Output: "approve" | "<reject|return> <id,id,...>". rc 77: no
+# python3/PyYAML (the suites print INFO and skip — never PASS). PKG_PYTHON overrides the interpreter (tests).
+pkg_oracle() {
+  local wc="$1" br="$2" target="${3:-dev}" py="${PKG_PYTHON:-python3}"
+  command -v "$py" >/dev/null 2>&1 || return 77
+  "$py" -I -B -c 'import yaml' >/dev/null 2>&1 || return 77
+  "$py" -I -B - "$wc" "$br" "$target" "$PKG_C" <<'PY'
+import sys, subprocess, fnmatch, hashlib, re, datetime
+import yaml
+wc, ref, target, cid_expected = sys.argv[1:5]
+MANIFEST, FORMAT = "CHANGE.yaml", 1
+REDACT = [
+    r'(?i)("?(?:password|passwd|pwd|secret|token|api[_-]?key|client[_-]?secret)"?\s*[:=]\s*)("[^"]*"|[^\s,;}]+)',
+    r'(?i)(authorization:\s*(?:basic|bearer)\s+)(\S+)',
+    r'(?i)((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqp)://[^:/@\s]+:)([^@\s]+)(?=@)',
+]
+def git(args, binary=False):
+    r = subprocess.run(["git", "-C", wc] + args, capture_output=True)
+    if r.returncode:
+        raise RuntimeError("git " + " ".join(args) + ": " + r.stderr.decode("utf-8", "replace")[-200:])
+    return r.stdout if binary else r.stdout.decode("utf-8", "replace")
+def glob_any(path, pats):   # DEV:67-68
+    return any(fnmatch.fnmatch(path, p) or fnmatch.fnmatch(path, p.rstrip("/") + "/*") or path.startswith(p.rstrip("*").rstrip("/") + "/") for p in pats)
+def changed(a, b):
+    return [x for x in git(["diff", "--name-only", a + ".." + b]).splitlines() if x]
+def out(verdict, ids):
+    print(verdict + (" " + ",".join(ids) if ids else "")); sys.exit(0)
+try:
+    tip = git(["rev-parse", "--verify", "-q", "refs/heads/" + ref + "^{commit}"]).strip()
+except RuntimeError:
+    print("reject ref"); sys.exit(3)
+mnd = (yaml.safe_load(open(wc + "/.mesh/mandate.yaml", encoding="utf-8").read()) or {}).get("mandate") or {}
+try:
+    txt = git(["show", tip + ":" + MANIFEST])
+except RuntimeError:
+    out("reject", ["manifest"])
+try:
+    d = yaml.safe_load(txt) or {}
+except yaml.YAMLError:
+    out("reject", ["manifest"])
+man = d.get("change") or d
+checks = []
+def ck(name, ok, level="reject"):
+    checks.append((name, bool(ok), level)); return ok
+head = tip
+code_head = str(man.get("head") or tip)
+ck("format", man.get("format") == FORMAT)
+if code_head != tip:
+    try:
+        only = changed(code_head, tip)
+        ok = git(["rev-parse", tip + "^"]).strip() == code_head and only == [MANIFEST]
+    except RuntimeError:
+        ok = False
+    ck("manifest.commit", ok)
+    head = code_head
+ck("commitment", str(man.get("commitment") or "") == cid_expected)
+eid = str(man.get("executor") or "")
+ck("mandate", bool(mnd) and eid == str(mnd.get("executor")))
+sc = mnd.get("scope") or {}
+ck("mandate.valid", str(mnd.get("valid_until", "")) >= datetime.date.today().isoformat())
+if mnd.get("digest") or man.get("mandate_digest"):
+    md = str(mnd.get("digest"))
+    ck("mandate.digest", str(man.get("mandate_digest", md))[:12] == md, level="return")
+if sc.get("branches"):
+    ck("branch", any(fnmatch.fnmatch(ref, b) for b in sc["branches"]))
+try:
+    base = git(["merge-base", head, "refs/heads/" + target]).strip()
+except RuntimeError:
+    base = str(man.get("base") or head)
+files = [f for f in changed(base, tip) if f != MANIFEST]
+ck("nonempty", bool(files), level="return")
+shared_list = sc.get("shared_paths") or []
+docs_list = sc.get("docs_paths") or ["docs/**"]
+outside = [f for f in files if sc.get("paths") and not glob_any(f, sc["paths"]) and not glob_any(f, shared_list) and not glob_any(f, docs_list)]
+ck("scope", not outside)
+shared = [f for f in files if shared_list and glob_any(f, shared_list)]
+if shared:
+    ck("shared.declared", bool(man.get("touches_shared")), level="return")
+if man.get("archive_sha256"):
+    ck("archive_sha256", man["archive_sha256"] == hashlib.sha256(git(["archive", "--format=tar", head], binary=True)).hexdigest())
+else:
+    ck("archive_sha256", False, level="return")
+hits = []
+for line in git(["diff", base + ".." + tip]).splitlines():
+    if line.startswith("+") and not line.startswith("+++"):
+        for pt in REDACT:
+            mt = re.search(pt, line)
+            if mt and mt.group(2).strip('"') not in ("***", "", "null", "None", "changeme", "<secret>", "${", "$"):
+                hits.append(line[:40]); break
+ck("secrets", not hits)
+if mnd.get("docs_in_repo", "final") == "final":
+    adr = man.get("adr")
+    adrs = [str(a).split("#")[0] for a in (adr if isinstance(adr, list) else [adr])] if adr else []
+    ck("adr", bool(adrs) and all(a in files for a in adrs), level="return")
+bad = [c for c in checks if not c[1]]
+if not bad:
+    out("approve", [])
+out("reject" if any(c[2] == "reject" for c in bad) else "return", [c[0] for c in bad])
+PY
+}

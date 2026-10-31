@@ -46,9 +46,16 @@ pr_valid_id() {
 
 # pr_clean <s> [max=200] -> PR_CLEAN
 pr_clean() {
-  local s="$1" max="${2:-200}" u2028=$'\342\200\250' u2029=$'\342\200\251' u0085=$'\302\205'
+  local s="$1" max="${2:-200}" u2028=$'\342\200\250' u2029=$'\342\200\251'
   s="$(printf '%s' "$s" | LC_ALL=C tr '\t\n' '  ' | LC_ALL=C tr -d '\001-\037\177')"
-  _my_rep "$s" "$u2028" ""; _my_rep "$MY_REP" "$u2029" ""; _my_rep "$MY_REP" "$u0085" ""; s="$MY_REP"
+  # verify-1 W6: the Unicode line separators U+2028/2029 and the C1 controls U+0080..U+009F (UTF-8: C2 80..C2 9F, U+0085 included)
+  # become a space: yaml.safe_load of the node refuses unprintable C1 characters, and a manifest it cannot parse is a rejected package
+  _my_rep "$s" "$u2028" " "; _my_rep "$MY_REP" "$u2029" " "; s="$MY_REP"
+  # (no byte pre-check: in a UTF-8 locale bash matches a pattern by characters, a lone \302 would not find the C1 character)
+  local i
+  for i in 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159; do   # PKG-CLEAN-C1
+    _my_rep "$s" "$(printf "\\302\\$(printf '%03o' "$i")")" " "; s="$MY_REP"
+  done
   while [ "${s# }" != "$s" ]; do s="${s# }"; done
   while [ "${s% }" != "$s" ]; do s="${s% }"; done
   if _my_trunc "$s" "$max"; then s="$MY_TRUNC"; fi
@@ -237,6 +244,14 @@ pr_files() {
   raw="$(git -C "$proj" -c core.quotepath=off diff --no-renames --name-only -z "$a" "$b" -- 2>/dev/null | tr '\0' '\001')"
   _my_rep "$raw" $'\001' ""; chk="$MY_REP"
   case "$chk" in *[[:cntrl:]]*) PR_ERR="files: путь с управляющим символом (в манифест не попадает)"; return 1 ;; esac   # PKG-PATH-CTRL
+  # C1 controls (UTF-8 C2 80..C2 9F) and the line separators U+2028/2029 cannot be carried by the manifest either (verify-1 W6)
+  case "$chk" in
+    *$'\342\200\250'*|*$'\342\200\251'*) PR_ERR="files: путь с разделителем строк Unicode (в манифест не попадает)"; return 1 ;;
+  esac
+  local c1i   # LC_ALL=C here: the patterns are bytes
+  for c1i in 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159; do   # PKG-PATH-C1
+    case "$chk" in *"$(printf "\\302\\$(printf '%03o' "$c1i")")"*) PR_ERR="files: путь с управляющим символом C1 (в манифест не попадает)"; return 1 ;; esac
+  done
   _my_rep "$raw" $'\001' $'\n'; PR_FILES="${MY_REP%$'\n'}"
   return 0
 }

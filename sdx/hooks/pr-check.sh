@@ -45,7 +45,7 @@ nfail=0; nwarn=0
 emit() {
   local LC_ALL=C t="$3"
   case "$t" in
-    *[[:cntrl:]]*|*$'\342\200\250'*|*$'\342\200\251'*|*$'\302\205'*) pr_clean "$t" 300; t="$PR_CLEAN" ;;
+    *[[:cntrl:]]*|*$'\342\200\250'*|*$'\342\200\251'*|*$'\302'*) pr_clean "$t" 300; t="$PR_CLEAN" ;;
     *) [ ${#t} -le 300 ] || { pr_clean "$t" 300; t="$PR_CLEAN"; } ;;
   esac
   printf '%s %s: %s\n' "$1" "$2" "$t"

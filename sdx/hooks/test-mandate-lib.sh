@@ -772,9 +772,16 @@ l10c "newline and tab become spaces" $'a\nb\tc' "a b c"
 l10c "ESC is cut, the rest stays" $'a\033[31mb' "a[31mb"
 l10c "C0 and CR are cut" $'a\001b\rc' "abc"
 l10c "DEL is cut" $'a\177b' "ab"
-l10c "U+2028 is cut" $'a\342\200\250b' "ab"
-l10c "U+2029 is cut" $'a\342\200\251b' "ab"
-l10c "U+0085 is cut" $'a\302\205b' "ab"
+l10c "U+2028 becomes a space" $'a\342\200\250b' "a b"
+l10c "U+2029 becomes a space" $'a\342\200\251b' "a b"
+l10c "U+0085 becomes a space" $'a\302\205b' "a b"
+# verify-1 W6: every C1 control (U+0080..U+009F, UTF-8 C2 80..C2 9F) becomes a space; neighbours (U+00A0, U+007E, U+00BF) stay
+for c1 in 128 129 134 141 150 159; do
+  l10c "C1 U+00$(printf '%X' "$c1") becomes a space" "a$(printf "\\302\\$(printf '%03o' "$c1")")b" "a b"
+done
+l10c "C1 inside a path-like value" $'src/a\302\206b.js' "src/a b.js"
+l10c "the neighbours of C1 survive (U+00A0, U+00BF)" $'a\302\240b\302\277c' $'a\302\240b\302\277c'
+l10c "Cyrillic (D0..D1 lead bytes) survives" "Жук ё" "Жук ё"
 l10c "trim" "   x y  " "x y"
 l10c "trailing newline" $'x\n' "x"
 l10c "plain unicode survives" "Фича ж" "Фича ж"
@@ -1096,6 +1103,7 @@ mutate PKG-FNMATCH       mandate.sh 's|^  case "\$f" in \$p) return 0 ;; esac   
 mutate PKG-ID            pr-lib.sh '/# PKG-ID: closed alphabet/d' "L10"
 mutate PKG-SECRET        pr-lib.sh "/# PKG-SECRET/s/-Eiq '[^']*'/-Eiq ''/" "L10"
 mutate PKG-URL-WL        pr-lib.sh '/# PKG-URL-WL: ext::/s/return 1/return 0/' "L10"
+mutate PKG-CLEAN-C1      pr-lib.sh '/# PKG-CLEAN-C1/s/ 128 / 000 /' "L10"
 mutate PKG-SESSREV       pr-lib.sh 's|"\$del^"|"\$ref"|' "L11" min
 fi
 

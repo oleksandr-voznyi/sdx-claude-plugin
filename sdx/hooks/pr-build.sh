@@ -181,7 +181,7 @@ done < "$tpl"
 # unicode are all inert; U+2028/2029/0085 (line breaks for YAML) are folded to a space; digits-only strings stay strings.
 RENDER_CHANGE='
 def q: tojson;   # PKG-QUOTE
-def sc: if type == "string" then (gsub("[  \u0085]"; " ") | q) elif type == "null" then "\"\"" else tojson end;
+def sc: if type == "string" then (gsub("[  \u0080-\u009f]"; " ") | q) elif type == "null" then "\"\"" else tojson end;
 def lst($i): if length == 0 then " []" else "\n" + (map($i + "- " + sc) | join("\n")) end;
 def emit($k): $v[$k] as $x
   | if $k == "verify" then "  verify:\n    tests: " + ($x.tests | sc) + "\n    report: " + ($x.report | sc)

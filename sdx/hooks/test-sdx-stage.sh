@@ -1086,14 +1086,15 @@ fi
 if mwant 43; then
 echo "[43] next --to refused under no_code: no stray file in the cwd, no backticks in the message"
 setup_sdx_repo "m43" "Verification" "true" "false"
-rm -f "$PWD/false"
-out="$(run_stage next "m43" --to "Execution" 2>&1 1>/dev/null)"; ec=$?
-if [ "$ec" -eq 1 ] && [ ! -e "$PWD/false" ] && ! printf '%s' "$out" | grep -q '[`]'; then
-  pass "[43] refusal (rc 1) leaves no '\$PWD/false' and carries no backticks (DEBT-046)"
+# verify-1 W7: run in the temporary project (never in the checkout): the stray file would be created in the cwd of the call
+rm -f "$TMPPROJ/false"
+out="$(cd "$TMPPROJ" && run_stage next "m43" --to "Execution" 2>&1 1>/dev/null)"; ec=$?
+if [ "$ec" -eq 1 ] && [ ! -e "$TMPPROJ/false" ] && ! printf '%s' "$out" | grep -q '[`]'; then
+  pass "[43] refusal (rc 1) leaves no 'false' in the cwd and carries no backticks (DEBT-046)"
 else
-  fail "[43] no_code refusal side effect" "ec=$ec stray=$([ -e "$PWD/false" ] && echo yes || echo no) backticks=$(printf '%s' "$out" | grep -c '[`]')"
+  fail "[43] no_code refusal side effect" "ec=$ec stray=$([ -e "$TMPPROJ/false" ] && echo yes || echo no) backticks=$(printf '%s' "$out" | grep -c '[`]')"
 fi
-rm -f "$PWD/false"
+rm -f "$TMPPROJ/false"
 fi
 
 # ---- [M41] mutation runs (FEAT-016): copies of sdx-stage.sh + lib/ in a temp dir, anchored by "# MAND-*" tags ----
@@ -1124,7 +1125,6 @@ smut MAND-TO     sdx-stage.sh '/# MAND-TO/s|if is_excluded_by_mandate "\$to_targ
 # FEAT-017: a write_stage that keeps only `.stage` loses the optional `commitment` field -> [42] (no anchor in sdx-stage.sh: matched by text)
 smut WRITE-STAGE-COMMITMENT sdx-stage.sh "s|jq --arg s \"\$new\" '\.stage = \$s' \"\$state\"|jq --arg s \"\$new\" '{stage: \$s}' \"\$state\"|" "42"
 smut STRAY-FALSE sdx-stage.sh 's|(no_code: true -> false в|(`no_code: true -> false` в|' "43"
-rm -f "$PWD/false"   # the STRAY-FALSE mutant recreates the stray file by design; never leave it in the checkout
 rm -rf "$MUTROOT"
 fi
 

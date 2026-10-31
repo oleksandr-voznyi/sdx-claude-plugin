@@ -138,6 +138,14 @@ b7on ctl && newfx && {
   fx_commit "$WC" "src/mod1/$(printf 'x\ty')" "ctl"
   refuse "control character in a path" 1 "files:"
 }
+b7on c1 && newfx && {   # verify-1 W6: a C1 control (U+0086) in a path would make the manifest unparsable for the node
+  fx_commit "$WC" "src/mod1/a$(printf "\\302\\$(printf '%03o' 134)")b.js" "c1"
+  refuse "C1 control character in a path" 1 "files:"
+}
+b7on ls && newfx && {   # a Unicode line separator (U+2028) in a path
+  fx_commit "$WC" "src/mod1/a$(printf '\342\200\250')b.js" "ls"
+  refuse "U+2028 in a path" 1 "files:"
+}
 b7on chg && newfx && {
   fx_commit "$WC" CHANGE.yaml "stray"
   refuse "CHANGE.yaml in the code" 1 "CHANGE.yaml"

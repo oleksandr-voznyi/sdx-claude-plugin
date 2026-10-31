@@ -188,6 +188,178 @@ case_on none && newfx && {
 }
 fi
 
+# build_pkg <wc>: a package from pr-build.sh (the green side of `post`)
+build_pkg() {
+  BUILD_OUT="$(bash "$SCRIPT_DIR/pr-build.sh" --sid s1 --proj "$1" 2>"$TMP/build.err")"; BUILD_RC=$?
+}
+ORACLE_INFO=0
+oracle_of() {   # <wc> <branch> -> ORACLE (verdict line) | SKIP
+  ORACLE="$(pkg_oracle "$1" "$2" 2>/dev/null)"; local rc=$?
+  if [ "$rc" = 77 ]; then ORACLE=SKIP; if [ "$ORACLE_INFO" = 0 ]; then info "oracle skipped: python3 with PyYAML is absent (oracle comparisons are NOT passed, only skipped)"; ORACLE_INFO=1; fi; fi
+}
+verdict_of() {   # the verdict of the last run: PASS | WARN | FAIL
+  case "$CRC" in 0) echo PASS ;; 3) echo WARN ;; 1) echo FAIL ;; *) echo "rc$CRC" ;; esac
+}
+
+# ---------------------------------------------------------------------------------------------------- [C4]
+if want C4; then
+echo "[C4] post: green on a package from pr-build.sh"
+newfx && {
+  build_pkg "$WC"
+  eq "C4 pr-build built the package" "$BUILD_RC" "0"
+  run_check "$WC" --phase post
+  eq "C4 rc 0" "$CRC" "0"
+  eq "C4 last line" "$(last_line)" "PR-CHECK PASS"
+  for id in manifest.parse manifest.format manifest.commit manifest.headtree manifest.identity manifest.archive manifest.scope manifest.shared manifest.adr manifest.secret pkg.session pkg.scope pkg.nonempty branch.scope mandate.valid closeout.tree closeout.branch; do
+    expect_line "C4" OK "$id"
+  done
+  eq "C4 post does not run the project tests" "$(printf '%s\n' "$COUT" | grep -c '^[A-Z]* tests:')" "0"
+  oracle_of "$WC" "$BR"
+  if [ "$ORACLE" != SKIP ]; then eq "C4 the oracle (audit()) says approve" "$ORACLE" "approve"; fi
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [C5]
+KINDS="extra_commit foreign_file bad_archive out_of_scope shared_undeclared session_dir format2 manifest_in_head fake_scope secret_notes wrong_commitment wrong_executor wrong_digest no_adr"
+# expected_ids <kind>: "<verdict> <ids that must be reported>" for pr-check post
+expected_ids() {
+  case "$1" in
+    extra_commit|foreign_file) echo "FAIL manifest.commit" ;;
+    bad_archive) echo "FAIL manifest.archive" ;;
+    out_of_scope) echo "FAIL pkg.scope" ;;
+    shared_undeclared) echo "FAIL manifest.shared" ;;
+    session_dir) echo "FAIL pkg.session" ;;
+    format2) echo "FAIL manifest.format" ;;
+    manifest_in_head) echo "FAIL manifest.head manifest.headtree manifest.archive" ;;
+    fake_scope) echo "FAIL manifest.scope" ;;
+    secret_notes) echo "FAIL manifest.secret" ;;
+    wrong_commitment|wrong_executor|wrong_digest) echo "FAIL manifest.identity" ;;
+    no_adr) echo "WARN manifest.adr" ;;
+  esac
+}
+# what the oracle (audit() of the node) says about the same package; "blind" = the oracle does not cover the check
+oracle_expected() {
+  case "$1" in
+    good) echo "approve" ;;
+    extra_commit|foreign_file) echo "reject manifest.commit" ;;
+    bad_archive) echo "reject archive_sha256" ;;
+    out_of_scope|session_dir) echo "reject scope" ;;
+    shared_undeclared) echo "return shared.declared" ;;
+    format2) echo "reject format" ;;
+    manifest_in_head) echo "return archive_sha256" ;;
+    fake_scope) echo "approve" ;;   # audit() recomputes scope_touched itself: the oracle is blind to a false manifest list BY DESIGN
+    secret_notes) echo "reject secrets" ;;
+    wrong_commitment) echo "reject commitment" ;;
+    wrong_executor) echo "reject mandate" ;;
+    wrong_digest) echo "return mandate.digest" ;;
+    no_adr) echo "return adr" ;;
+  esac
+}
+CRAFT_LOG="$TMP/craft.log"; : > "$CRAFT_LOG"
+if want C5 || want C6; then
+echo "[C5] post: red sides (packages crafted by plumbing, independent of pr-build.sh)"
+newfx && {
+  for k in $KINDS; do
+    case_on "$k" || continue
+    "pkg_craft_bad_$k" "$WC" "$BR" >/dev/null 2>&1
+    run_check "$WC" --phase post
+    exp="$(expected_ids "$k")"; ev="${exp%% *}"; eids="${exp#* }"
+    eq "C5 $k: verdict $ev" "$(verdict_of)" "$ev"
+    for id in $eids; do expect_line "C5 $k" "$ev" "$id"; done
+    oracle_of "$WC" "$BR"
+    printf '%s\t%s\t%s\n' "$k" "$(verdict_of)" "$ORACLE" >> "$CRAFT_LOG"
+  done
+  # the good crafted package is green for both
+  pkg_craft_good "$WC" "$BR" >/dev/null 2>&1
+  run_check "$WC" --phase post
+  eq "C5 a correct package crafted by plumbing: PASS" "$(verdict_of)" "PASS"
+  oracle_of "$WC" "$BR"
+  printf '%s\t%s\t%s\n' "good" "$(verdict_of)" "$ORACLE" >> "$CRAFT_LOG"
+  # the branch was never built
+  gw branch -q -D "$BR" >/dev/null 2>&1
+  run_check "$WC" --phase post
+  eq "C5 no package branch: FAIL (rc 1)" "$CRC" "1"
+  expect_line "C5 no package branch" FAIL pkg.ref
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [C6]
+if want C6; then
+echo "[C6] parity with the oracle: oracle != approve <=> pr-check post != PASS"
+parity_mismatches() {   # [substitute oracle verdict]: how many logged packages break the equivalence
+  local k v o n=0
+  while IFS=$'\t' read -r k v o; do
+    [ -n "$k" ] || continue
+    [ "$k" = fake_scope ] && continue   # the oracle is blind to it by design: see the table below
+    [ -z "${1:-}" ] || o="$1"
+    if [ "$o" = approve ]; then [ "$v" = PASS ] || n=$((n + 1)); else [ "$v" != PASS ] || n=$((n + 1)); fi
+  done < "$CRAFT_LOG"
+  echo "$n"
+}
+if [ -s "$CRAFT_LOG" ] && ! grep -q 'SKIP' "$CRAFT_LOG"; then
+  eq "C6 the recorded verdicts agree (0 mismatches over $(grep -c . "$CRAFT_LOG") packages)" "$(parity_mismatches)" "0"
+  while IFS=$'\t' read -r k v o; do
+    [ -n "$k" ] || continue
+    eq "C6 table: oracle on '$k'" "$o" "$(oracle_expected "$k")"
+  done < "$CRAFT_LOG"
+  fs="$(grep '^fake_scope' "$CRAFT_LOG" | cut -f2,3 | tr '\t' ' ')"
+  eq "C6 fake_scope: the oracle approves (blind) but pr-check FAILs (manifest.scope is pr-check's own)" "$fs" "FAIL approve"
+  bad="$(parity_mismatches approve)"
+  if [ "$bad" -ge 5 ]; then pass "C6 negative: an oracle that always approves breaks the comparison ($bad mismatches)"; else fail "C6 negative (always approve)" "only $bad mismatches"; fi
+  bad="$(parity_mismatches 'reject x')"
+  if [ "$bad" -ge 1 ]; then pass "C6 negative: an oracle that never approves breaks it on the good package ($bad)"; else fail "C6 negative (never approve)" "$bad mismatches"; fi
+elif [ -s "$CRAFT_LOG" ]; then
+  info "C6 skipped: the oracle needs python3 with PyYAML (NOT passed, only skipped)"
+else
+  fail "C6 the craft log is empty" "C5 did not run (PR_CHECK_ONLY must include C5 with C6)"
+fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [C7]
+if want C7; then
+echo "[C7] all = pre then post; --no-tests; hostile values"
+newfx && {   # nothing built yet: pre is green, post cannot find the package
+  run_check "$WC" --phase all
+  expect_line "C7 all before the build: pre ran" OK closeout.tree
+  expect_line "C7 all before the build: post ran and found no package" FAIL pkg.ref
+  eq "C7 all before the build: rc 1" "$CRC" "1"
+}
+newfx && {   # package built: pre WARNs (the branch exists), post runs and is green
+  build_pkg "$WC"
+  run_check "$WC" --phase all
+  expect_line "C7 all after the build: pre ran" WARN branch.exists
+  expect_line "C7 all after the build: post ran" OK manifest.archive
+  eq "C7 all after the build: rc 3" "$CRC" "3"
+  # the pre line `tests` and the post lines come in one run, each id once
+  eq "C7 each id appears once" "$(printf '%s\n' "$COUT" | grep -E '^(OK|FAIL|WARN|NOTE) ' | cut -d: -f1 | sort | uniq -d | wc -l | tr -d ' ')" "0"
+}
+newfx && {   # pre with FAIL: post is not run
+  build_pkg "$WC"; echo dirt >> "$WC/README.md"
+  run_check "$WC" --phase all
+  eq "C7 pre FAIL: rc 1" "$CRC" "1"
+  eq "C7 pre FAIL: post did not run (no manifest.* line)" "$(printf '%s\n' "$COUT" | grep -c ' manifest\.')" "0"
+}
+newfx && {   # --no-tests skips only the tests
+  gw update-index --assume-unchanged .claude/sdx/verify-cmd.sh
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$WC/.claude/sdx/verify-cmd.sh"
+  run_check "$WC" --phase pre --no-tests
+  eq "C7 --no-tests with a red stub: rc 0" "$CRC" "0"
+  expect_line "C7 --no-tests" NOTE tests
+  echo dirt >> "$WC/README.md"
+  run_check "$WC" --phase pre --no-tests
+  expect_line "C7 --no-tests still blocks on a dirty tree" FAIL closeout.tree
+}
+newfx && {   # hostile mandate value: ESC must not reach the output
+  esc=$'\033'
+  mand_edit "s|^  executor: .*|  executor: \"ex1${esc}[31mRED${esc}[0m\"|"
+  run_check "$WC" --phase pre
+  eq "C7 hostile executor: rc 1" "$CRC" "1"
+  expect_line "C7 hostile executor" FAIL id.executor
+  eq "C7 no ESC byte in the output" "$(printf '%s' "$COUT$CERR" | LC_ALL=C grep -c "$esc")" "0"
+  eq "C7 every output line is a status line (no injected line)" "$(printf '%s\n' "$COUT" | grep -cvE '^(OK|FAIL|WARN|NOTE) [a-z.-]+: |^PR-CHECK ')" "0"
+}
+fi
+
 # @@TAIL@@
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

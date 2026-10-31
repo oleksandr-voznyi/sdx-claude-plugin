@@ -301,8 +301,9 @@ chk_start_order() {  # start.md (FEAT-017): --from-order / --from-issue, step 1�
   for t in '--from-order' '--from-issue' 'order-import.sh' 'stamp-state' 'sid_infix' 'from-file' 'from-msg' 'from-issue' 'MISMATCH' 'AskUserQuestion' 'repo.base' 'pr-mode' 'order.yaml' 'commitment'; do
     grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
   done
-  grep -E '^1б\.' "$f" | grep -qF 'AskUserQuestion' || { echo "step 1б lacks AskUserQuestion in $f"; return 1; }
-  grep -E '^1б\.' "$f" | grep -qF 'в любом `gate_mode`' || { echo "step 1б lacks 'в любом gate_mode' in $f"; return 1; }
+  blk="$(awk '/^1б\./{p=1;print;next} p && /^[0-9]/{p=0} p' "$f")"
+  printf "%s" "$blk" | grep -qF AskUserQuestion || { echo "step 1б lacks AskUserQuestion in $f"; return 1; }
+  printf "%s" "$blk" | grep -qF 'в любом `gate_mode`' || { echo "step 1б lacks в любом gate_mode in $f"; return 1; }
   for n in '1' '2' '3' '4' '5' '6' '7' '8'; do
     grep -qE "^$n\. " "$f" || { echo "step $n missing in $f"; return 1; }
   done

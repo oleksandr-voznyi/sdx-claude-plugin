@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# sdx/hooks/protocol-export.sh — protocol.yaml of a session built from its existing journals (FEAT-017, REQ-PKG-19..22).
+# A CLI called by commands/pr.md through the Bash tool as `bash protocol-export.sh --sid <sid> ...`.
+#
+#   protocol-export.sh --sid <sid> [--proj DIR] [--out FILE|-] [--from-rev REV]
+#
+# bash 3.2 (BUG-010: no arrays, no bash-4 builtins), bash + awk + sed + jq + git only. The journals are DATA: awk extracts
+# records into TSV, ONE jq call renders the YAML (every scalar through tojson, a JSON string is a YAML double-quoted
+# scalar); nothing from a journal reaches a shell as code. set -e is deliberately not used.
+set -uo pipefail
+
+here="${BASH_SOURCE[0]%/*}"; [ "$here" != "${BASH_SOURCE[0]}" ] || here=.
+command -v jq >/dev/null 2>&1 || { echo "protocol-export: jq не найден — экспорт невозможен (fail-closed)." >&2; exit 2; }
+# shellcheck disable=SC1091
+. "$here/lib/pr-lib.sh"
+
+# ------------------------------------------------------------------------------------------------------------
+# decisions_log.md -> TSV: kind \t tag \t stage \t title \t what \t why \t alts \t adr(0|1)
+# Two formats are read (К-4): the NORMATIVE block of protocol.md ("### Развилка: [тег] название (этап: X)" followed by
+# "- Вариант:" / "- Обоснование:" / "- Варианты:" lines, indented lines continue the field) and the ACTUAL one-line
+# records of the journals ("- [YYYY-MM-DD ]<tag> text", tag from the closed set of eight, indented lines continue).
+# Nothing is invented: for format B "what" is derived later (first sentence), "why" is the whole record. A record with
+# neither what nor why is skipped with a note on stderr. Tabs, CR and line breaks inside values become spaces here.
+# ------------------------------------------------------------------------------------------------------------
+PX_DEC_AWK='
+function clean(s) { gsub(/[\t\r]/, " ", s); return s }
+function out(   a) {
+  if (have) {
+    if (what == "" && why == "") { printf "protocol-export: запись «%s» без полей «Вариант» и «Обоснование» пропущена\n", title > "/dev/stderr" }
+    else {
+      a = ((what " " why " " title " " alts) ~ /ADR-[0-9]+/) ? 1 : 0                    # PKG-X-ADR
+      if (kind == "A") { if (what == "") what = title; if (why == "") why = what }
+      print kind "\t" tag "\t" stage "\t" clean(title) "\t" clean(what) "\t" clean(why) "\t" clean(alts) "\t" a
+    }
+  }
+  have = 0; what = why = alts = title = tag = stage = ""; cur = ""
+}
+function collect(v) { gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
+BEGIN { have = 0; kind = ""; cur = "" }
+{ sub(/\r$/, "") }
+/^### Развилка:/ {
+  out(); have = 1; kind = "A"
+  t = $0; sub(/^### Развилка:[ \t]*/, "", t)
+  if (match(t, /^\[[^]]+\]/)) { tag = substr(t, 2, RLENGTH - 2); t = substr(t, RLENGTH + 1); sub(/^[ \t]+/, "", t) }
+  if (match(t, /\(этап:[^)]*\)[ \t]*$/)) {
+    stage = substr(t, RSTART, RLENGTH); sub(/^\(этап:[ \t]*/, "", stage); sub(/\)[ \t]*$/, "", stage)
+    t = substr(t, 1, RSTART - 1)
+  }
+  title = collect(t); next
+}
+/^### / { out(); next }
+/^- ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] )?\[(триада|FAIL|контракт|деструктив|объём|ручной-шаг|триаж|директива)\]/ {   # PKG-X-FMTB
+  out(); have = 1; kind = "B"
+  t = $0; sub(/^- ([0-9]+-[0-9]+-[0-9]+ )?/, "", t)
+  match(t, /^\[[^]]+\]/); tag = substr(t, 2, RLENGTH - 2)
+  t = substr(t, RLENGTH + 1); sub(/^[ \t]+/, "", t)
+  why = collect(t); what = ""; title = ""; cur = "b"; next
+}
+kind == "A" && have && /^- Вариант:/     { cur = "what"; v = $0; sub(/^- Вариант:[ \t]*/, "", v); what = collect(v); next }
+kind == "A" && have && /^- Обоснование:/ { cur = "why";  v = $0; sub(/^- Обоснование:[ \t]*/, "", v); why = collect(v); next }
+kind == "A" && have && /^- (Варианты|Альтернативы):/ { cur = "alts"; v = $0; sub(/^- [^:]+:[ \t]*/, "", v); alts = collect(v); next }
+kind == "A" && have && /^- / { cur = ""; next }
+kind == "A" && have && cur != "" && /^[ \t]+[^ \t]/ {
+  v = collect($0)
+  if (cur == "what") what = what " " v; else if (cur == "why") why = why " " v; else alts = alts " " v
+  next
+}
+kind == "B" && have && cur == "b" && /^[ \t]+[^ \t]/ { why = why " " collect($0); next }
+kind == "B" && have && cur == "b" && /^[^ \t]/ { out(); next }
+END { out() }
+'
+
+px_decisions_tsv() { LC_ALL=C awk "$PX_DEC_AWK"; }
+
+# ------------------------------------------------------------------------------------------------------------
+# rendering: ONE jq call. Inputs are plain strings (--arg); the output is the YAML text.
+# ------------------------------------------------------------------------------------------------------------
+PX_JQ='
+def cl: gsub("[\u0001-\u001f\u007f-\u009f  ￾￿]"; " ") | gsub("^ +"; "") | gsub(" +$"; "");
+def q: tojson;
+def lines($s): ($s | split("\n") | map(select(length > 0)));
+def first_sentence: (index(". ")) as $i | if $i != null and $i < 200 then .[0:($i + 1)] elif length > 200 then .[0:200] else . end;
+def lst($k; $a): if ($a | length) == 0 then "\($k): []" else "\($k):\n" + ($a | map("  - " + q) | join("\n")) end;
+(lines($dec) | map(split("\t"))
+  | map({kind: .[0], tag: (.[1] | cl), stage: (.[2] | cl), title: (.[3] | cl), what: (.[4] | cl), why: (.[5] | cl), alts: (.[6] | cl), adr: (.[7] == "1")}
+        | if .kind == "B" then .what = (.why | first_sentence) | .title = .what else . end)
+  | to_entries | map(.value + {id: ("D-" + ((.key + 1) | tostring))})) as $d
+| "# protocol.yaml — экспорт журналов сессии \($sid | cl)\($ver | if . == "" then "" else " (SDX " + . + ")" end). Источник правды — журналы сессии; файл производный.\n"
+  + lst("done"; lines($done) | map(cl[0:120])) + "\n"
+  + (if ($d | length) == 0 then "decisions: []" else "decisions:\n" + ($d | map(
+      "  - id: \(.id | q)\n    what: \(.what | q)\n    why: \(.why | q)\n    alternatives: \(if .alts == "" then [] else [.alts] end | tojson)\n    adr: \(.adr)\n    tag: \(.tag | q)\n    stage: \(.stage | q)") | join("\n")) end) + "\n"
+  + lst("questions"; $d | map(if .tag == "" then .title else "[" + .tag + "] " + .title end)) + "\n"
+  + lst("verified"; lines($ver_l) | map(cl)) + "\n"
+  + lst("deltas"; lines($dlt) | map(cl[0:80])) + "\n"
+'
+
+# px_summary / main are added below
+px_render() {   # reads $DEC_TSV and the other line lists; prints the YAML
+  jq -rn --arg sid "$SID" --arg ver "$PX_VER" --arg dec "$DEC_TSV" --arg done "${DONE_L:-}" --arg ver_l "${VER_L:-}" --arg dlt "${DLT_L:-}" "$PX_JQ"
+}
+
+SID=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; REV=""; PX_VER=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --sid|--proj|--out|--from-rev)
+      [ $# -ge 2 ] || { echo "protocol-export: у $1 нет значения." >&2; exit 2; }
+      case "$1" in --sid) SID="$2" ;; --proj) PROJ="$2" ;; --out) OUTF="$2" ;; *) REV="$2" ;; esac
+      shift 2 ;;
+    *) echo "protocol-export: неизвестный аргумент." >&2; exit 2 ;;
+  esac
+done
+[ -n "$SID" ] || { echo "использование: protocol-export.sh --sid <sid> [--proj DIR] [--out FILE|-] [--from-rev REV]" >&2; exit 2; }
+DEC_TSV=""; if [ -f "$PROJ/.claude/sessions/$SID/decisions_log.md" ]; then DEC_TSV="$(px_decisions_tsv < "$PROJ/.claude/sessions/$SID/decisions_log.md")"; fi
+px_render

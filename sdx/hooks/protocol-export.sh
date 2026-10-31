@@ -80,35 +80,82 @@ def cl: gsub("[\u0001-\u001f\u007f-\u009f  ￾￿]"; " ") | gsub("^ +"; "") 
 def q: tojson;
 def lines($s): ($s | split("\n") | map(select(length > 0)));
 def first_sentence: (index(". ")) as $i | if $i != null and $i < 200 then .[0:($i + 1)] elif length > 200 then .[0:200] else . end;
-def lst($k; $a): if ($a | length) == 0 then "\($k): []" else "\($k):\n" + ($a | map("  - " + q) | join("\n")) end;
+def lst($k; $a):
+  if ($a | length) == 0 then "\($k): []"      # PKG-X-EMPTY
+  else "\($k):\n" + ($a | map("  - " + q) | join("\n")) end;
 (lines($dec) | map(split("\t"))
   | map({kind: .[0], tag: (.[1] | cl), stage: (.[2] | cl), title: (.[3] | cl), what: (.[4] | cl), why: (.[5] | cl), alts: (.[6] | cl), adr: (.[7] == "1")}
         | if .kind == "B" then .what = (.why | first_sentence) | .title = .what else . end)
-  | to_entries | map(.value + {id: ("D-" + ((.key + 1) | tostring))})) as $d
+  | to_entries | map(.value + {id: ("D-" + ((.key + 1) | tostring))})) as $d       # PKG-X-ID
 | "# protocol.yaml — экспорт журналов сессии \($sid | cl)\($ver | if . == "" then "" else " (SDX " + . + ")" end). Источник правды — журналы сессии; файл производный.\n"
   + lst("done"; lines($done) | map(cl[0:120])) + "\n"
   + (if ($d | length) == 0 then "decisions: []" else "decisions:\n" + ($d | map(
       "  - id: \(.id | q)\n    what: \(.what | q)\n    why: \(.why | q)\n    alternatives: \(if .alts == "" then [] else [.alts] end | tojson)\n    adr: \(.adr)\n    tag: \(.tag | q)\n    stage: \(.stage | q)") | join("\n")) end) + "\n"
   + lst("questions"; $d | map(if .tag == "" then .title else "[" + .tag + "] " + .title end)) + "\n"
   + lst("verified"; lines($ver_l) | map(cl)) + "\n"
-  + lst("deltas"; lines($dlt) | map(cl[0:80])) + "\n"
+  + lst("deltas"; lines($dlt) | map(cl[0:80]))
+  + "\n#COUNTS done \(lines($done) | length) decisions \($d | length) (adr \($d | map(select(.adr)) | length)) questions \($d | length) verified \(lines($ver_l) | length) deltas \(lines($dlt) | length)"
 '
 
-# px_summary / main are added below
-px_render() {   # reads $DEC_TSV and the other line lists; prints the YAML
+# px_cat <path relative to the project root>: the file on stdout (at most 1 MiB), rc 1 if absent or unreadable
+px_cat() {
+  [ -f "$PROJ/$1" ] && [ -r "$PROJ/$1" ] || return 1
+  head -c 1048576 "$PROJ/$1"
+}
+
+# px_render: prints the YAML, then one line "#COUNTS ..." (split off by the caller)
+px_render() {
   jq -rn --arg sid "$SID" --arg ver "$PX_VER" --arg dec "$DEC_TSV" --arg done "${DONE_L:-}" --arg ver_l "${VER_L:-}" --arg dlt "${DLT_L:-}" "$PX_JQ"
 }
 
-SID=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; REV=""; PX_VER=""
+usage() {
+  echo "использование: protocol-export.sh --sid <sid> [--proj DIR] [--out FILE|-] [--from-rev REV]" >&2
+  exit 2
+}
+
+SID=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; REV=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --sid|--proj|--out|--from-rev)
       [ $# -ge 2 ] || { echo "protocol-export: у $1 нет значения." >&2; exit 2; }
       case "$1" in --sid) SID="$2" ;; --proj) PROJ="$2" ;; --out) OUTF="$2" ;; *) REV="$2" ;; esac
       shift 2 ;;
-    *) echo "protocol-export: неизвестный аргумент." >&2; exit 2 ;;
+    *) echo "protocol-export: неизвестный аргумент." >&2; usage ;;
   esac
 done
-[ -n "$SID" ] || { echo "использование: protocol-export.sh --sid <sid> [--proj DIR] [--out FILE|-] [--from-rev REV]" >&2; exit 2; }
-DEC_TSV=""; if [ -f "$PROJ/.claude/sessions/$SID/decisions_log.md" ]; then DEC_TSV="$(px_decisions_tsv < "$PROJ/.claude/sessions/$SID/decisions_log.md")"; fi
-px_render
+[ -n "$SID" ] || usage
+_pr_sid_ok "$SID" || { echo "protocol-export: sid: недопустимый идентификатор сессии." >&2; exit 2; }
+
+SDIR=".claude/sessions/$SID"
+PX_VER="$(jq -r '.version // empty' "$here/../../.claude-plugin/plugin.json" 2>/dev/null)"
+case "$PX_VER" in *[!0-9A-Za-z.+-]*) PX_VER="" ;; esac
+
+# ---- sources: an absent source is an empty list, not an error (REQ-PKG-21) ----
+READ_ANY=0
+DEC_TSV=""
+if TXT="$(px_cat "$SDIR/decisions_log.md")"; then
+  READ_ANY=1
+  DEC_TSV="$(printf '%s\n' "$TXT" | px_decisions_tsv)"
+fi
+DONE_L=""; VER_L=""; DLT_L=""
+
+# ---- rc 1 only when there is neither a readable source nor the session directory ----
+if [ "$READ_ANY" = 0 ] && [ ! -d "$PROJ/$SDIR" ]; then
+  echo "protocol-export: нет ни одного источника и каталога сессии $SDIR — экспортировать нечего." >&2
+  exit 1
+fi
+
+RENDERED="$(px_render)" || { echo "protocol-export: не удалось сформировать protocol.yaml." >&2; exit 2; }
+COUNTS="${RENDERED##*$'\n'#COUNTS }"
+BODY="${RENDERED%$'\n'#COUNTS *}"
+if [ -z "$OUTF" ]; then OUTF="$PROJ/$SDIR/protocol.yaml"; fi
+if [ "$OUTF" = "-" ]; then
+  printf '%s\n' "$BODY"
+else
+  dir="$(dirname "$OUTF")"
+  [ -d "$dir" ] || { echo "protocol-export: каталог для записи не существует: $dir" >&2; exit 2; }
+  tmp="$(mktemp "$OUTF.XXXXXX")" || { echo "protocol-export: не удалось создать временный файл рядом с $OUTF." >&2; exit 2; }
+  printf '%s\n' "$BODY" > "$tmp" && mv "$tmp" "$OUTF" || { rm -f "$tmp"; echo "protocol-export: не удалось записать $OUTF." >&2; exit 2; }
+fi
+echo "protocol: $COUNTS" >&2
+exit 0

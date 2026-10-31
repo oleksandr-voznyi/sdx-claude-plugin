@@ -1,11 +1,11 @@
 ---
 id: FEAT-017
 type: feat
-status: open
+status: closed
 priority: high
 wave: null
 source: intake intake-mo-dev-control-20261028 (записка владельца МО `SDX-MO-dev-control-note-2026-10-26.md` §2.2, §2.3, §2.10, §2.11; ответ SDX `SDX-MO-dev-control-reply-2026-10-28.md` §2; sim-kit 0.9.0 `CHANGE.template.yaml`, `core/dev.py audit()`, `policy/dev.yaml`; отзыв MOVE.IO `MOVEIO-dev-control-reply-2026-10-26.md` §2.2)
-session: null
+session: feat-017-mo-change-package-20261031
 links: [FEAT-016, FEAT-018, FEAT-015, PROC-028, PROC-019, ADR-012, ADR-009]
 ---
 
@@ -65,3 +65,19 @@ Feature-сессия после `FEAT-016` и после ответа владе
 - `docs_in_repo: final` трактуется как `full`; реестр решений проверяется по `docs_paths`.
 - `protocol.yaml` до узла командой не доставляется; при `history: executor` канал вне SDX.
 - `status` записи (`closed`, `session`) выставляется на Closeout (C2), не здесь.
+
+## Резолюция
+Закрыта сессией `feat-017-mo-change-package-20261031` (2026-10-31), плагин 2.5.0. Поставлено: `/sdx:pr` — второй вариант
+Closeout (шаги 1–4 → экспорт `protocol.yaml` → шаг 5 → squash в `change/<C>-<exec>` от `base` → `CHANGE.yaml` plumbing-коммитом
+без записи в рабочее дерево → `pr-check` pre/post (зеркало формальных проверок `audit()`) → подтверждение → `pr-publish`
+(только явный refspec `change/*`, без force, prod-guard, пост-проверка до сети; `bare` — ветка + манифест, `github` — `gh pr
+create`, без `gh` — деградация); экспорт `protocol.yaml` (пять списков, оба формата журнала); `/sdx:start --from-order
+<файл|msg_id>` и `--from-issue <N>` (снимок показывается целиком и подтверждается, повторного чтения нет; `commitment` в
+`session_state.json`); `docs_in_repo` (`none` → переносы n/a; `final` = `full`); вендоринг `CHANGE.template.yaml` (К-1 —
+датированное отступление от PROC-028), `sdx/templates/CONTRIBUTING-MO.md`; классификация Closeout «мёрж / пакет / мост /
+undefined» в шести носителях; ADR-022; `.claude/sdx/verify-cmd.sh` с параллельным раннером (`SDX_VERIFY_JOBS`). Отклонения от
+записи: п.1 — `artifact.offer` без поля `change` (узел его игнорирует); повторная сдача при ушедшей базе — `head` с двумя
+родителями (merge-коммит, не squash; `merge-base(head, dev)` = новая база); п.2 — доставка `protocol.yaml` узлу при `history:
+executor` — вне SDX (upstream-записка). Не проверено исполнением (`DEBT-051`): живой `audit()` узла, `gh` на GitHub, хук при
+`deny` на команды `/sdx:pr`, `archive_sha256` между версиями git, реальный `pull` ящика. Риск дрейфа эталона (`DEBT-050`):
+sim-kit уже 0.9.3 с новыми проверками `audit()`.

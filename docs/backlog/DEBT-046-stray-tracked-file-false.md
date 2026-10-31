@@ -1,11 +1,11 @@
 ---
 id: DEBT-046
 type: debt
-status: open
+status: closed
 priority: low
 wave: null
 source: qa сессии feat-015-mo-interop-20261004 (найдено попутно)
-session: null
+session: feat-017-mo-change-package-20261031
 links: [PROC-027]
 ---
 
@@ -19,3 +19,10 @@ links: [PROC-027]
 ## Рекомендация
 `git rm false` отдельной мелкой сессией (или попутно следующей); проверить, нет ли других пустых файлов
 в корне (`find . -maxdepth 1 -type f -empty`).
+
+## Резолюция
+Первопричина найдена сессией `feat-017-mo-change-package-20261031` (дорожка A, попутно): в тексте отказа `sdx-stage.sh`
+(`next --to` на этап, исключённый `no_code`) внутри двойных кавычек стояли обратные кавычки `\`no_code: true -> false\`` —
+подстановка команды, где `> false` — редирект, создававший пустой файл `false` в cwd (в корне репозитория и в `sdx/hooks/`
+при каждом прогоне `test-sdx-stage.sh`). Кавычки сняты; регрессионный сценарий `[43]` и мутант `STRAY-FALSE` в
+`test-sdx-stage.sh`; отслеживаемый `/false` удалён из индекса.

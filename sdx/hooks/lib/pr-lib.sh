@@ -83,7 +83,7 @@ pr_url_ok() {
       case "$host" in -*) return 1 ;; esac
       return 0 ;;
     /*) return 0 ;;
-    *://*|*::*) return 1 ;;
+    *://*|*::*) return 1 ;;                                   # PKG-URL-WL: ext:: fd:: transport:: and unknown schemes
     *@*:*)
       user="${u%%@*}"; host="${u#*@}"; host="${host%%:*}"
       [ -n "$user" ] && [ -n "$host" ] && [ -n "${u#*:}" ] || return 1
@@ -176,7 +176,7 @@ pr_order_load() {
   PR_O_BRANCH=""; PR_O_DELIVERY=""; PR_O_EXEC=""; PR_O_DIGEST=""; PR_O_REPO=""; PR_O_SOURCE=""; PR_O_SOURCE_REF=""
   tmp="$(mktemp "${TMPDIR:-/tmp}/sdx-pr-order.XXXXXX")" || { PR_ERR="order: не удалось создать временный файл"; return 2; }
   if ! pr_sess_cat "$proj" "$sid" order.yaml > "$tmp" 2>/dev/null; then rm -f "$tmp"; PR_ERR=""; return 1; fi
-  saved="$MY_NORM"
+  saved="${MY_NORM-}"
   my_load "$tmp"; rc=$?
   rm -f "$tmp"
   if [ "$rc" -ne 0 ]; then MY_NORM="$saved"; PR_ERR="order.yaml: $MY_ERR"; return 2; fi

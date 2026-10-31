@@ -912,6 +912,9 @@ if l11_have pr_sess_cat; then
   pr_sess_cat "$R" s1 "../x" >/dev/null 2>&1; rc=$?; l11rc "sess_cat refuses a path-like name" "$rc" 1
 else for t in "existing rc" "existing content" "missing" "path-like"; do fail "[L11] sess_cat $t" "pr_sess_cat missing"; done; fi
 
+# MANDATE_MIN=<non-empty> (mutation runs): the fixture and the session-history block only — the rest of [L11] is
+# exercised by the normal run, a mutant of pr_session_rev needs just its own block to turn red.
+if [ -z "${MANDATE_MIN:-}" ]; then
 # ---- pr_order_load
 if l11_have pr_order_load; then
   pr_order_load "$R" s1; rc=$?
@@ -1051,6 +1054,7 @@ if l11_have pr_resolve; then
   rm -f "$TMP/g11/r4/.mesh/endpoint.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1; rc=$?
   l11rc "resolve: no mandate mode (no endpoint.yaml) -> rc 1" "$rc" 1
 else for t in rc C EXEC BRANCH TITLE BASE_NAME BASE_REF BASE_SHA URL HINT DELIVERY DOCS DIGEST arg-ok title-override arg-differs err-field base-differs noorder-rc noorder-C noorder-base noorder-url nocommit badid notitle secret execbad exec-field docs-none docs-unset snap-exec nomode; do fail "[L11] resolve $t" "pr_resolve missing"; done; fi
+fi   # MANDATE_MIN
 fi
 
 if want Mut; then
@@ -1058,12 +1062,12 @@ echo "[Mut] mutation runs: each mutant (a copy of lib/ in a temp dir) must diffe
 MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
 # mutate <name> <lib file> <sed expr> <sections>: re-enter this script with MANDATE_ONLY=<sections> against the mutated lib
 mutate() {
-  local name="$1" file="$2" expr="$3" only="$4" d="$MUTDIR/$1" out first
+  local name="$1" file="$2" expr="$3" only="$4" min="${5:-}" d="$MUTDIR/$1" out first
   if [ ! -f "$LIB/$file" ]; then fail "[Mut] $name" "no $file to mutate"; return; fi
   mkdir -p "$d"; cp "$LIB"/*.sh "$d/"
   sed "$expr" "$LIB/$file" > "$d/$file"
   if cmp -s "$LIB/$file" "$d/$file"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
-  out="$(MANDATE_LIB_UNDER_TEST="$d" MANDATE_ONLY="$only" bash "${BASH_SOURCE[0]}" 2>&1)"
+  out="$(MANDATE_LIB_UNDER_TEST="$d" MANDATE_ONLY="$only" MANDATE_MIN="$min" bash "${BASH_SOURCE[0]}" 2>&1)"
   if printf '%s\n' "$out" | grep -q 'FAIL:'; then
     first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-120)"
     pass "[Mut] мутант $name → красный (ожидаемо) в [$only]: ${first#  FAIL: }"
@@ -1082,6 +1086,12 @@ mutate MAND-EXPIRY       mandate.sh '/# MAND-EXPIRY/s/-lt/-gt/' "L6"
 mutate MAND-MODE         mandate.sh '/# MAND-MODE/s|\[ -f "\$p/.mesh/endpoint.yaml" \] &&|true \&\&|' "L7"
 mutate MAND-SANITIZE     miniyaml.sh '/# MAND-SANITIZE/d' "L1q L8"
 mutate MAND-SCOPE-WARN   mandate.sh '/# MAND-SCOPE-WARN/s/\[ -n "\$MANDATE_PATHS" \]/true/' "L8w"
+# FEAT-017: mutants of mandate_fnmatch and pr-lib (anchors "# PKG-*")
+mutate PKG-FNMATCH       mandate.sh 's|^  case "\$f" in \$p) return 0 ;; esac   # PKG-FNMATCH|  mandate_glob_one "\$f" "\$p" \&\& return 0|' "P"
+mutate PKG-ID            pr-lib.sh '/# PKG-ID: closed alphabet/d' "L10"
+mutate PKG-SECRET        pr-lib.sh "/# PKG-SECRET/s/-Eiq '[^']*'/-Eiq ''/" "L10"
+mutate PKG-URL-WL        pr-lib.sh '/# PKG-URL-WL: ext::/s/return 1/return 0/' "L10"
+mutate PKG-SESSREV       pr-lib.sh 's|"\$del^"|"\$ref"|' "L11" min
 fi
 
 echo ""

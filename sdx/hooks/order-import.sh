@@ -297,6 +297,45 @@ oi_list() {
     done
 }
 
+# ------------------------------------------------------------------------------------------------------------
+# Issue (REQ-PKG-24). ASSUMPTION OF SDX (Q-10): the sim-kit reference does not define how an order is wrapped in an
+# issue; SDX takes the FIRST fenced block ```yaml (or ```yml) that contains the line `action: work.order` at zero
+# indent. The text of an issue is unauthenticated: the command prose asks the user to confirm it in any gate_mode (К-9).
+# ------------------------------------------------------------------------------------------------------------
+OI_FENCE_AWK='
+BEGIN { inb = 0; hit = 0; blk = "" }
+{ sub(/\r$/, "") }
+inb == 0 && /^```[ \t]*(yaml|yml)[ \t]*$/ { inb = 1; hit = 0; blk = ""; next }
+inb == 1 && /^```[ \t]*$/ { if (hit) { printf "%s", blk; exit } inb = 0; next }   # PKG-O-FENCE
+inb == 1 { blk = blk $0 "\n"; if ($0 ~ /^action:[ \t]*["\047]?work\.order["\047]?[ \t]*(#.*)?$/) hit = 1 }
+'
+
+oi_from_issue() {   # <N>
+  local gh="${ORDER_IMPORT_GH:-gh}"
+  case "$1" in ""|*[!0-9]*) refuse "issue: номер должен быть десятичным целым" ;; esac
+  [ "${#1}" -le 9 ] || refuse "issue: номер слишком длинный"
+  if [ -n "$REPO" ]; then
+    case "$REPO" in
+      -*|/*|*/|*/*/*|*[!A-Za-z0-9._/-]*) refuse "repo: ожидается owner/repo (A-Za-z0-9._-)" ;;
+      */*) ;;
+      *) refuse "repo: ожидается owner/repo" ;;
+    esac
+  fi
+  command -v "$gh" >/dev/null 2>&1 || refuse "gh не найден: скопируйте YAML-блок заказа из issue в файл и используйте --from-order <файл> (from-file)"
+  oi_tmpdir
+  if [ -n "$REPO" ]; then
+    "$gh" issue view "$1" --repo "$REPO" --json body > "$OI_TMP/issue.json" 2> "$OI_TMP/gh.err"
+  else
+    "$gh" issue view "$1" --json body > "$OI_TMP/issue.json" 2> "$OI_TMP/gh.err"
+  fi || { pr_clean "$(head -n1 "$OI_TMP/gh.err")" 160; refuse "issue: gh issue view не удался ($PR_CLEAN); используйте --from-order <файл>"; }
+  jq -r '.body // ""' "$OI_TMP/issue.json" 2>/dev/null | LC_ALL=C awk "$OI_FENCE_AWK" > "$OI_TMP/block.yaml"
+  [ -s "$OI_TMP/block.yaml" ] || refuse "issue: в тексте нет блока \`\`\`yaml с action: work.order на нулевом отступе; используйте --from-order <файл>"
+  oi_size_ok "$OI_TMP/block.yaml"
+  oi_load_yaml "$OI_TMP/block.yaml"
+  oi_validate
+  oi_flat issue "#$1"
+}
+
 usage() {
   echo "использование: order-import.sh from-file <path> | from-msg <msg_id> | from-issue <N> | list | stamp-state --sid <sid> --commitment <C> | unfold <path>  [--proj DIR] [--out FILE] [--inbox-json FILE] [--repo owner/repo]" >&2
   exit 2
@@ -323,6 +362,9 @@ case "$sub" in
   from-msg)
     [ -n "$POS" ] || usage
     oi_from_msg "$POS" ;;
+  from-issue)
+    [ -n "$POS" ] || usage
+    oi_from_issue "$POS" ;;
   list) oi_list ;;
   unfold)
     [ -n "$POS" ] || usage

@@ -52,7 +52,7 @@ status: draft (Technical Design, сессия `feat-017-mo-change-package-202610
 | `sdx/hooks/test-{pr-build,pr-check,pr-publish,protocol-export,order-import}.sh` | ADDED | новые сьюты |
 | `sdx/hooks/test-{mo-prose,mandate-scope,mandate-lib,sdx-stage,mo-inventory}.sh` | MODIFIED | только добавлением (кроме закреплённого текста моста — Q-17 SPEC) |
 
-`hooks/hooks.json` **не меняется** (новых хуков нет). `stop-gate.sh`, `archive-verify.sh`, `sdx-stage.sh`, `mo-hook.sh`, `mo-session.sh`, `miniyaml.sh`, `lib/test-cmd.sh` не меняются. Инфраструктуры для DevOps (Docker/CI/деплой) нет; единственный пункт «для devops» — текстовая правка `agents/devops.md`.
+`hooks/hooks.json` **не меняется** (новых хуков нет). `stop-gate.sh`, `archive-verify.sh`, `sdx-stage.sh` *(2026-10-31, круг 1 верификации: одна строка текста отказа `next --to` исправлена попутно по DEBT-046 — см. «Поправки круга 1»)*, `mo-hook.sh`, `mo-session.sh`, `miniyaml.sh`, `lib/test-cmd.sh` не меняются. Инфраструктуры для DevOps (Docker/CI/деплой) нет; единственный пункт «для devops» — текстовая правка `agents/devops.md`.
 
 ## Компоненты и Интеграции
 
@@ -125,7 +125,7 @@ git -C "$proj" cat-file -e "$tree:CHANGE.yaml" 2>/dev/null && die 1 "в коде
 head=$(printf '%s\n' "$PR_C: $PR_TITLE" | git -C "$proj" commit-tree "$tree" -p "$parent") || die 2 "git commit-tree (нет user.name/user.email?)"
 ```
 
-Повторная сдача (REQ-PKG-18, К-3): `head` второго раунда имеет родителем *прежнюю вершину* (манифест-коммит первого раунда); дерево `head` — вершина `sdx/<sid>` без `CHANGE.yaml`, поэтому разница «прежняя вершина → новая голова» удаляет старый `CHANGE.yaml`, а разница `base..head` (чистый net-diff) не меняется. Отправка — fast-forward без `--force`. Узел делает `git merge --squash <head>` (`DEV:451`), несколько коммитов в `base..head` ему безразличны; `tip^ == head` и `diff head..tip = [CHANGE.yaml]` сохраняются.
+Повторная сдача (REQ-PKG-18, К-3): `head` второго раунда имеет родителем *прежнюю вершину* (манифест-коммит первого раунда); дерево `head` — вершина `sdx/<sid>` без `CHANGE.yaml`, поэтому разница «прежняя вершина → новая голова» удаляет старый `CHANGE.yaml`, а разница `base..head` (чистый net-diff) не меняется. Отправка — fast-forward без `--force`. *(2026-10-31, круг 1 верификации: если база ушла вперёд, `head` получает вторым родителем новую базу — см. «Поправки круга 1 верификации».)* Узел делает `git merge --squash <head>` (`DEV:451`), несколько коммитов в `base..head` ему безразличны; `tip^ == head` и `diff head..tip = [CHANGE.yaml]` сохраняются.
 
 Вычисления манифеста (после `head`):
 
@@ -506,7 +506,7 @@ SDX-PR-Confirmed: <gate_mode>:user                          # решение п�
 ### JSON-выходы
 
 `pr-build.sh`: `{"branch","commitment","executor","base","head","tip","base_ref","archive_sha256","scope_touched":N,"touches_shared":bool,"adr":[…],"docs":N,"resubmit":bool,"diverged":bool,"warnings":[…]}`.
-`pr-publish.sh`: `{"branch","remote","remote_sha","pushed":bool,"already":bool,"hosting","pr":{"url","created"}|null,"degraded":"gh-missing|gh-unauthenticated|gh-failed"|null,"instruction":"…"|null}`.
+`pr-publish.sh`: `{"branch","remote","remote_sha","pushed":bool,"already":bool,"ready":bool,"hosting","pr":{"url","created"}|null,"degraded":"gh-missing|gh-unauthenticated|gh-failed"|null,"instruction":"…"|null}`.
 `order-import.sh`: `{"source","source_ref","commitment","title","executor","repo_base","repo_url","branch","delivery","due","sid_infix","warnings":[…]}`.
 
 ### Коды возврата и тексты
@@ -723,6 +723,19 @@ SDX-PR-Confirmed: <gate_mode>:user                          # решение п�
 - **Территория PROC-020:** поставка не меняет механизм надзора; сессия не в `gate_mode: auto`.
 - **Параллельные поставки:** FEAT-018 (`sdx run`/headless) будет вызывать те же скрипты — их контракты (JSON, коды) спроектированы как стабильный интерфейс.
 
+## Поправки круга 1 верификации (2026-10-31)
+
+Отражают решения оркестратора (`decisions_log.md` `[FAIL]`), SPEC — раздел «Поправки круга 1 верификации».
+- **`pr-build.sh`, повторная сдача при ушедшей базе (Д-1, дополняет К-3 и абзац «Повторная сдача» выше).** Если `PR_BASE_SHA` не предок прежней вершины пакета, `head` создаётся `commit-tree` с родителями `<прежняя вершина> <PR_BASE_SHA>`; `merge-base(head, base)` = новая база, `scope_touched` без чужих файлов, `base` манифеста — новая. Если база уже предок прежней вершины, цепочка прежняя (один родитель, fast-forward). `tip^ == head` и `diff head..tip = [CHANGE.yaml]` сохраняются, `pr-check post` проходит. Тест `B13`, мутант `PKG-RESUBMIT-BASE`.
+- **`pr-check.sh`, фаза `post` и `pr.md` P7** принимают `--commitment`/`--title` (ручной режим без заказа). Тест: `C4` (фикстура без `order.yaml`), `test-mo-prose [20]` (каждый вызов `pr-check` в `pr.md` несёт оба флага).
+- **`pr-publish.sh`.** (а) Перед сетью — `pr-check.sh --phase post --no-tests` с теми же `--proj/--sid/--commitment/--title`; rc 1/2 — отказ без push, обхода нет; rc 3 не блокирует (`# PKG-P-POSTCHECK`, тест `P8`). (б) PR-шаг только для `github`; на `bare` при любом `delivery` `instruction: null`; в JSON добавлено `ready` (ветка с `CHANGE.yaml` на remote и, для `github` + `delivery: pr`, существующий PR); при `delivery: branch` PR не создаётся (`# PKG-P-BAREINSTR`, тест `P1`). Раздел «JSON-выходы»: `pr-publish.sh` дополнен полем `ready`.
+- **`lib/pr-lib.sh` (замороженная библиотека, правка по решению оркестратора).** `pr_clean`: C1 (U+0080…U+009F) и U+2028/2029 → пробел (`# PKG-CLEAN-C1`); `pr_files`: путь с C1/U+2028/2029 — отказ; `pr-build` (`sc`) заменяет C1 пробелом.
+- **`protocol-export.sh`** — резерв `verified[]` из строки итога (`# PKG-X-VERDICT`, тест `X11`).
+- **`commands/start.md`, `commands/pr.md`** — `--from-order` в `auto` подтверждается (`[директива]`); `adr.registry` в `auto` — вопрос, прочие WARN P5 принимаются дефолтом с записью в `auto_decisions.md` и раскрытием на P8.
+- **`sdx-stage.sh`** (раздел «Новые и изменяемые файлы» — «не меняется»): исправлена одна строка текста отказа `next --to` под `no_code` (DEBT-046: обратные кавычки внутри двойных создавали файл `false` в cwd); тест `[43]` исполняется во временном каталоге проекта.
+- **`.claude/sdx/verify-cmd.sh`** — рычаг К-10 реализован: `SDX_VERIFY_JOBS` (по умолчанию 2 при `nproc ≥ 4`, иначе 1; `1` — последовательно), вывод сьютов буферизуется и печатается в порядке сьютов, `Summary` и код возврата прежние. Замер под нагрузкой: 192 с → 126,6 с.
+- **Граница (Р-1).** Зеркало `audit()` соответствует вендорённой версии (`SIMKIT_VERSION`); проверки более новых версий узла в нём отсутствуют до перевендоринга.
+
 ## Ручной сценарий для Verification
 
 Автотестами **не** проверяются (и проверяются честно только вручную/на бинарнике):
@@ -771,7 +784,7 @@ SDX-PR-Confirmed: <gate_mode>:user                          # решение п�
 | 29 | `sdx/templates/CONTRIBUTING-MO.md` | `test-mo-prose [27]`; `test-mo-inventory.sh` (d) |
 | 30 | `archive.md`, протокол | `test-mo-prose [12][19][21]` |
 | 31 | ADR-022 | `test-mo-prose [23]` |
-| 32 | сниппет | `test-mo-prose [22]` (равенство §6), `test-snippet-check.sh` |
+| 32 | сниппет | `test-mo-prose [22]` (вхождение текста §6 + предложение), `test-snippet-check.sh` |
 | 33 | `devops.md`, README×2, `CLAUDE.md`, дельты, версия | `test-mo-prose [17][24][25]` |
 | 34 | `pr-mode`, все гейты «режим мандата» | все прежние сьюты без правок; `test-mandate-scope [M]` |
 | 35 | `pr.md` (запреты), `pr-publish` (без force/`--all`) | `test-pr-publish P1`–`P3`, `P6`; `test-mo-prose [20]` |
@@ -785,7 +798,7 @@ SDX-PR-Confirmed: <gate_mode>:user                          # решение п�
 - **`docs/designs/decision-journal-and-resume.md`:** датированная поправка — необязательное поле `commitment` в `session_state.json`; формат B записи журнала.
 - **`commands/{archive,start,status}.md`, `commands/pr.md`:** см. «Компоненты».
 - **`agents/devops.md`:** «Режим МО»: действие сдачи — `/sdx:pr` (основная сессия, не `devops`); слияний вне `scope.branches` и тегов по-прежнему нет; пункт «При `delivery: artifact.offer`…» сохранён; упоминание `CHANGE.template.yaml`.
-- **`sdx/templates/claude-md-snippet.md`:** пункт «МО над стендами» заменяется текстом §6 `MO-INTEROP.md` 0.9.1 (REQ-PKG-32); `snippet-check.sh` сообщает `STALE` для проектов со старым блоком, `reconcile` предлагает обновление (без правок кода скрипта).
+- **`sdx/templates/claude-md-snippet.md`:** пункт «МО над стендами» заменяется текстом §6 `MO-INTEROP.md` 0.9.1 плюс одно предложение с сохранёнными нормами 2.4.0 (REQ-PKG-32); `snippet-check.sh` сообщает `STALE` для проектов со старым блоком, `reconcile` предлагает обновление (без правок кода скрипта).
 - **`README.md` / `README.en.md`** (согласованная пара): таблица `sdx/mo/` — четыре файла; новые скрипты `sdx/hooks/`, `commands/pr.md`, `sdx/templates/CONTRIBUTING-MO.md`; абзац «Версия 2.5.0 — сдача пакетом изменения».
 - **`CLAUDE.md`:** §3 «Этапы → Closeout» — два варианта; §6 — перечень `sdx/hooks/` (+`pr-*`, `protocol-export`, `order-import`, `lib/pr-lib`), `sdx/mo/` (четыре файла, `CHANGE.template.yaml`), `sdx/templates/CONTRIBUTING-MO.md`.
 - **`docs/backlog/FEAT-017-…md`:** уточнения (`CONTRIBUTING-MO.md` в `sdx/templates/`, поле `change` в `artifact.offer` не добавляется, `docs_in_repo`); на Closeout `status: closed`, `session`. Новые записи на Closeout: `DEBT` «токен `closeout-mode` → `package`», `DEBT` «единый формат `decisions_log.md`», `IDEA` «upstream-запись владельцу МО (К-18)», `IDEA` «параллельный раннер `verify-cmd.sh`» (если не понадобится по К-10).

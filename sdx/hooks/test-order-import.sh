@@ -357,6 +357,106 @@ run_oi from-file "$TMP/h.json" --proj "$NOMAND"
 if [ "$RC" -eq 0 ] && [ "$(jv .repo_url)" = "https://git.example.com/srv/app.git" ] && [ "$(jv '.warnings|length')" -ge 1 ] && ! printf '%s' "$OUT" | grep -q tok3n; then pass "[O6] credentials in repo.url are removed from the result, with a warning"; else fail "[O6] url credentials" "rc=$RC out=[$OUT]"; fi
 fi
 
+ensure_fixture() { [ -n "${PKG_FIXTURE_TEMPLATE:-}" ] || pkg_fixture_template "$TMP" || { echo "fixture template failed" >&2; return 1; }; }
+
+# ---------------------------------------------------------------------------------------------------- [O5]
+if want O5; then
+echo "[O5] the local mandate check: mandate_digest / executor / deliver.branch -> rc 3, all mismatches at once"
+if ensure_fixture && pkg_fixture_copy "$TMP/fx5"; then
+  P5="$PKG_WC"
+  mkj "$TMP/m.json" .commitment.id C-ACME-001
+  run_oi from-file "$TMP/m.json" --proj "$P5"
+  eq "[O5] a matching order: rc 0, no mandate warning" "$RC:$(jv '[.warnings[]|select(test("мандат"))]|length')" "0:0"
+  mism() {  # <label> <jq-edit> <expected stdout>
+    printf '%s' "$BASE_JSON" | jq -c "$2" > "$TMP/m.json"
+    run_oi from-file "$TMP/m.json" --proj "$P5" --out "$TMP/m-out.yaml"
+    if [ "$RC" -eq 3 ] && [ "$OUT" = "$3" ] && [ ! -e "$TMP/m-out.yaml" ]; then pass "[O5] $1: rc 3, the exact MISMATCH lines, no snapshot written"
+    else fail "[O5] $1" "rc=$RC out=[$OUT] snapshot=$([ -e "$TMP/m-out.yaml" ] && echo written || echo none)"; fi
+  }
+  mism "digest differs" '.mandate_digest = "999999999999"' "MISMATCH mandate_digest order=999999999999 local=123456789012"
+  mism "executor differs" '.executor = "ex2"' "MISMATCH executor order=ex2 local=ex1"
+  mism "branch differs" '.deliver.branch = "change/C-ACME-001-ex9"' "MISMATCH deliver.branch order=change/C-ACME-001-ex9 local=change/C-ACME-001-ex1"
+  mism "all three differ (all lines at once, fixed order)" '.mandate_digest = "000000000000" | .executor = "ex2" | .deliver.branch = "change/x"' \
+"MISMATCH mandate_digest order=000000000000 local=123456789012
+MISMATCH executor order=ex2 local=ex1
+MISMATCH deliver.branch order=change/x local=change/C-ACME-001-ex1"
+  mism "order without a digest" 'del(.mandate_digest)' "MISMATCH mandate_digest order=- local=123456789012"
+  mism "order without a branch" 'del(.deliver.branch)' "MISMATCH deliver.branch order=- local=change/C-ACME-001-ex1"
+  printf '%s' "$BASE_JSON" | jq -c '.mandate_digest = "12\u001b[31mEVIL"' > "$TMP/m.json"
+  run_oi from-file "$TMP/m.json" --proj "$P5"
+  if [ "$RC" -eq 3 ] && ! printf '%s' "$OUT" | LC_ALL=C grep -q '[[:cntrl:]]' && printf '%s' "$OUT" | grep -q 'order=12\[31mEVIL'; then pass "[O5] a hostile digest is shown cleaned (no control characters)"
+  else fail "[O5] hostile digest" "rc=$RC out=[$OUT]"; fi
+  # an unreadable local mandate cannot be compared: stop, never "no boundary"
+  pkg_fixture_copy "$TMP/fx5b" && printf 'mandate:\n  stages: [bogus\n' > "$PKG_WC/.mesh/mandate.yaml"
+  printf '%s' "$BASE_JSON" > "$TMP/m.json"
+  run_oi from-file "$TMP/m.json" --proj "$PKG_WC"
+  if [ "$RC" -eq 3 ] && printf '%s' "$OUT" | grep -q '^MISMATCH ' && [ -n "$OUT" ]; then pass "[O5] an unreadable local mandate: rc 3 (fail-closed)"; else fail "[O5] unreadable mandate" "rc=$RC out=[$OUT]"; fi
+  run_oi from-file "$TMP/m.json" --proj "$NOMAND"
+  eq "[O5] no local mandate: accepted with a warning, rc 0" "$RC:$(jv '[.warnings[]|select(test("мандат"))]|length')" "0:1"
+else
+  fail "[O5] fixture" "the fixture could not be built"
+fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [O7]
+if want O7; then
+echo "[O7] the snapshot (--out) and stamp-state"
+if ensure_fixture; then
+  RT="$TMP/rt"; rm -rf "$RT"; mkdir -p "$RT"
+  git -C "$RT" init -q && git -C "$RT" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init && git -C "$RT" checkout -q -b sdx/rt
+  mkdir -p "$RT/.claude/sessions/rt"
+  snap() {  # <json file> -> commit the snapshot of that order on sdx/rt
+    run_oi from-file "$1" --proj "$RT" --out "$RT/.claude/sessions/rt/order.yaml"
+    git -C "$RT" add -A && git -C "$RT" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m snap
+  }
+  printf '%s' "$BASE_JSON" | jq '.repo.hosting = "github"' > "$TMP/s.json"
+  snap "$TMP/s.json"; src=$RC
+  pr_order_load "$RT" rt; lrc=$?
+  eq "[O7] --out: rc 0, pr_order_load reads the snapshot" "$src:$lrc" "0:0"
+  eq "[O7] roundtrip: commitment / title / requirements / due" "$PR_O_COMMIT|$PR_O_TITLE|$PR_O_REQS|$PR_O_DUE" "C-ACME-001|Feature mod1|Implement mod1|2026-12-01"
+  eq "[O7] roundtrip: base / url / hosting / repo id" "$PR_O_BASE|$PR_O_URL|$PR_O_HOSTING|$PR_O_REPO" "dev|ssh://git@git.example.com/srv/app.git|github|app"
+  eq "[O7] roundtrip: branch / delivery / executor / digest" "$PR_O_BRANCH|$PR_O_DELIVERY|$PR_O_EXEC|$PR_O_DIGEST" "change/C-ACME-001-ex1|pr|ex1|123456789012"
+  eq "[O7] roundtrip: source / source_ref" "$PR_O_SOURCE|$PR_O_SOURCE_REF" "file|s.json"
+  if ! grep -q 'mandate' "$RT/.claude/sessions/rt/order.yaml" && ! grep -qE '^[ ]*[a-z_]+: [^"]' "$RT/.claude/sessions/rt/order.yaml"; then pass "[O7] the snapshot has no copy of the mandate and every scalar is double-quoted"
+  else fail "[O7] snapshot format" "$(cat "$RT/.claude/sessions/rt/order.yaml")"; fi
+  snap "$TMP/m.json"; pr_order_load "$RT" rt
+  eq "[O7] no hosting in the order -> no hosting in the snapshot" "[$PR_O_HOSTING]" "[]"
+  mkj "$TMP/s.json" .commitment.title 'He said "hi" \ back: a # b'
+  snap "$TMP/s.json"; pr_order_load "$RT" rt
+  eq "[O7] quotes, backslash, colon and hash survive the snapshot" "$PR_O_TITLE" 'He said "hi" \ back: a # b'
+  run_oi from-file "$TMP/m.json" --proj "$RT" --out "$TMP/no-dir/order.yaml"
+  if [ "$RC" -eq 2 ] && [ ! -e "$TMP/no-dir" ]; then pass "[O7] --out into a missing directory: rc 2, nothing created"; else fail "[O7] --out missing dir" "rc=$RC"; fi
+  # stamp-state
+  SP="$TMP/sp"; mkdir -p "$SP/.claude/sessions/s7"
+  CLAUDE_PROJECT_DIR="$SP" bash "$SCRIPT_DIR/sdx-stage.sh" init s7 feature Discovery interactive sdx/s7 false false >/dev/null 2>&1
+  SF="$SP/.claude/sessions/s7/session_state.json"
+  before="$(jq -S 'del(.commitment)' "$SF")"
+  run_oi stamp-state --sid s7 --commitment C-ACME-001 --proj "$SP"
+  if [ "$RC" -eq 0 ] && [ "$(jq -r .commitment "$SF")" = "C-ACME-001" ] && [ "$(jq -S 'del(.commitment)' "$SF")" = "$before" ]; then pass "[O7] stamp-state adds commitment and leaves the other keys alone"
+  else fail "[O7] stamp-state" "rc=$RC err=[$ERR] state=$(jq -c . "$SF")"; fi
+  cp "$SF" "$TMP/sf.before"
+  run_oi stamp-state --sid s7 --commitment C-ACME-001 --proj "$SP"
+  if [ "$RC" -eq 0 ] && cmp -s "$SF" "$TMP/sf.before"; then pass "[O7] stamp-state is idempotent (same value: rc 0, file unchanged)"; else fail "[O7] idempotent" "rc=$RC"; fi
+  run_oi stamp-state --sid s7 --commitment C-OTHER-002 --proj "$SP"
+  if [ "$RC" -eq 1 ] && cmp -s "$SF" "$TMP/sf.before" && printf '%s' "$ERR" | grep -q 'commitment'; then pass "[O7] stamp-state refuses another value (rc 1, file unchanged)"; else fail "[O7] other value" "rc=$RC err=[$ERR]"; fi
+  run_oi stamp-state --sid s7 --commitment 'a/b' --proj "$SP"
+  if [ "$RC" -eq 1 ] && cmp -s "$SF" "$TMP/sf.before"; then pass "[O7] stamp-state refuses an invalid C (rc 1, file unchanged)"; else fail "[O7] invalid C" "rc=$RC"; fi
+  run_oi stamp-state --sid nosuch --commitment C-ACME-001 --proj "$SP"
+  if [ "$RC" -eq 1 ] && [ ! -e "$SP/.claude/sessions/nosuch" ]; then pass "[O7] stamp-state without a state file: rc 1, nothing created"; else fail "[O7] no state" "rc=$RC"; fi
+  run_oi stamp-state --sid '../x' --commitment C-ACME-001 --proj "$SP"
+  eq "[O7] stamp-state with a hostile sid: rc 1" "$RC" "1"
+  run_oi stamp-state --commitment C-ACME-001 --proj "$SP"
+  eq "[O7] stamp-state without --sid: usage, rc 2" "$RC" "2"
+  eq "[O7] no temporary files left beside session_state.json" "$(ls "$SP/.claude/sessions/s7" | sort | tr '\n' ' ')" "session.log session_state.json "
+  # a state of the stamped session is still valid for sdx-stage.sh
+  mkdir -p "$SP/.claude/sessions/s7"; printf 'x\n' > "$SP/.claude/sessions/s7/context_report.md"
+  out="$(CLAUDE_PROJECT_DIR="$SP" bash "$SCRIPT_DIR/sdx-stage.sh" next s7 2>&1)"
+  if [ "$out" = "OK Discovery -> Business Spec" ] && [ "$(jq -r .commitment "$SF")" = "C-ACME-001" ]; then pass "[O7] sdx-stage.sh next works on the stamped state and keeps the field"; else fail "[O7] next after stamp" "out=[$out]"; fi
+else
+  fail "[O7] fixture" "the fixture could not be built"
+fi
+fi
+
 #@@SECTIONS-END@@
 
 echo ""

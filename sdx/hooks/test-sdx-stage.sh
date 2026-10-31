@@ -1051,6 +1051,35 @@ else fail "[M40] read-only" "rc=$e1/$e2/$e3 o1='$o1' tree-same=$([ "$snap1" = "$
 cleanup
 fi
 
+# ---- [42] (FEAT-017, REQ-PKG-25): the optional field `commitment` survives every stage write ----
+# The field is written by order-import.sh stamp-state (a separate jq after init), never by this script; here it is
+# stamped with the same jq. Characterisation: passes without new code in sdx-stage.sh; its red side is the mutant
+# of write_stage in [M41] below (the mutant keeps only `.stage`, a copy of the script — the checkout is untouched).
+if mwant 42; then
+echo "[42] commitment survives next / next --to; init writes the seven keys and no commitment"
+TMPPROJ="$(mktemp -d)"
+out="$(run_stage init m42 feature Discovery interactive sdx/m42 false false 2>&1)"; ec=$?
+keys="$(jq -r 'keys | join(",")' "$(state_file m42)" 2>/dev/null)"
+if [ "$ec" -eq 0 ] && [ "$keys" = "gate_mode,git_branch,no_code,no_gates,session_id,stage,type" ]; then
+  pass "[42] init writes exactly the seven keys, no commitment"
+else fail "[42] init keys" "ec=$ec keys=[$keys] out=[$out]"; fi
+sf="$(state_file m42)"
+jq --arg c "C-ACME-001" '. + {commitment:$c}' "$sf" > "$sf.tmp" && mv "$sf.tmp" "$sf"
+others_before="$(jq -S 'del(.commitment, .stage)' "$sf")"
+put_artifact m42 context_report.md
+out="$(run_stage next m42 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(jq -r .stage "$sf")" = "Business Spec" ] && [ "$(jq -r .commitment "$sf")" = "C-ACME-001" ]; then
+  pass "[42] next keeps commitment (Discovery -> Business Spec)"
+else fail "[42] next keeps commitment" "ec=$ec out=[$out] state=$(jq -c . "$sf")"; fi
+out="$(run_stage next m42 --to Discovery 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(jq -r .stage "$sf")" = "Discovery" ] && [ "$(jq -r .commitment "$sf")" = "C-ACME-001" ]; then
+  pass "[42] next --to keeps commitment (back to Discovery)"
+else fail "[42] next --to keeps commitment" "ec=$ec out=[$out] state=$(jq -c . "$sf")"; fi
+if [ "$(jq -S 'del(.commitment, .stage)' "$sf")" = "$others_before" ]; then pass "[42] the other keys are byte-for-byte the same after both writes"
+else fail "[42] other keys" "changed: $(jq -c . "$sf")"; fi
+cleanup
+fi
+
 # ---- [M41] mutation runs (FEAT-016): copies of sdx-stage.sh + lib/ in a temp dir, anchored by "# MAND-*" tags ----
 if [ -z "${SDX_STAGE_MUT:-}" ]; then
 echo "[M41] mutation runs: each mutant must differ from the original and turn its scenarios red"

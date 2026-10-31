@@ -116,7 +116,7 @@ check_mandate() {
 }
 
 phase_pre() {
-  local anc b
+  local b
   check_mandate
   if printf '%s' "$PR_DIGEST" | grep -Eq '^[0-9a-f]{12}$'; then ok mandate.digest "$PR_DIGEST"; else fail mandate.digest "в мандате нет digest из 12 hex-знаков"; fi
   _my_scalar mandate.history
@@ -126,9 +126,9 @@ phase_pre() {
   if [ -n "$res_err" ] && [ "$res_url_err" != 1 ]; then return 0; fi
   ok base.ref "$PR_BASE_REF"
   if git -C "$proj" merge-base --is-ancestor "$PR_BASE_SHA" "$srcsha" 2>/dev/null; then
-    anc=1; ok base.ancestor "sdx/$sid вырезана от $PR_BASE_NAME"
+    PRE_ANC=1; ok base.ancestor "sdx/$sid вырезана от $PR_BASE_NAME"
   else
-    anc=0; warn base.ancestor "sdx/$sid вырезана не от текущей $PR_BASE_NAME — потребуется --allow-diverged"
+    PRE_ANC=0; warn base.ancestor "sdx/$sid вырезана не от текущей $PR_BASE_NAME — потребуется --allow-diverged"
   fi
   if [ "$PR_BASE_DRIFT" = 1 ]; then warn base.remote-drift "локальная $PR_BASE_NAME отличается от remote-tracking (пакет строится от локальной)"
   else ok base.remote-drift "расхождения локальной и remote-tracking нет"; fi
@@ -137,8 +137,87 @@ phase_pre() {
   else ok branch.exists "ветки $PR_BRANCH ещё нет"; fi
 }
 
+# _flist <newline list> -> FLIST: "a, b, c (+N)"
+_flist() {
+  local n=0 out="" f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    n=$((n + 1))
+    [ "$n" -gt 3 ] || out="$out${out:+, }$f"
+  done <<< "$1"
+  [ "$n" -le 3 ] || out="$out (+$((n - 3)))"
+  FLIST="$out"
+}
+
+# _tree_files <base sha> <tree>: PR_FILES of base..tree (the predicted diff of a diverged base); rc 1 on a control character
+_tree_files() {
+  local LC_ALL=C raw chk
+  PR_FILES=""
+  raw="$(git -C "$proj" -c core.quotepath=off diff --no-renames --name-only -z "$1" "$2" -- 2>/dev/null | tr '\0' '\001')"
+  _my_rep "$raw" $'\001' ""; chk="$MY_REP"
+  case "$chk" in *[[:cntrl:]]*) PR_ERR="files: путь с управляющим символом (в манифест не попадает)"; return 1 ;; esac
+  _my_rep "$raw" $'\001' $'\n'; PR_FILES="${MY_REP%$'\n'}"
+  return 0
+}
+
+# the PREDICTED diff and everything judged by it
+pre_diff() {
+  local mt tree n a r url_res rem rn found
+  PR_FILES=""
+  if [ "${PRE_ANC:-0}" = 1 ]; then
+    pr_files "$proj" "$PR_BASE_SHA" "$srcsha" || { fail diff.predict "$PR_ERR"; return 0; }
+  else
+    mt="$(git -C "$proj" merge-tree --write-tree "$PR_BASE_SHA" "$srcsha" 2>/dev/null)" \
+      || { fail diff.predict "слияние $PR_BASE_NAME и sdx/$sid даёт конфликт или git < 2.38 — дифф пакета не предсказать"; return 0; }
+    tree="$(printf '%s\n' "$mt" | head -n1)"
+    _tree_files "$PR_BASE_SHA" "$tree" || { fail diff.predict "$PR_ERR"; return 0; }
+  fi
+  n="$(printf '%s\n' "$PR_FILES" | grep -c .)"
+  if [ "$n" -gt 0 ]; then ok diff.nonempty "файлов в дельте: $n"; else fail diff.nonempty "дельта base..head пуста — сдавать нечего"; fi
+  pr_scope_eval
+  if [ -n "$PR_OUT" ]; then _flist "$PR_OUT"; fail diff.scope "вне области мандата (paths ∪ shared_paths ∪ docs_paths): $FLIST"   # PKG-C-SCOPE
+  else ok diff.scope "все пути в области мандата"; fi
+  if [ -n "$PR_SESSF" ]; then _flist "$PR_SESSF"; fail diff.session "в дифф попали пути каталога сессии: $FLIST"
+  else ok diff.session "каталога сессии в диффе нет"; fi
+  if [ "$PR_DOCS_MODE" = none ]; then
+    note docs.final "docs_in_repo: none — состав документов не проверяется"
+  elif [ -n "$PR_DOCS_OUTSIDE" ]; then _flist "$PR_DOCS_OUTSIDE"; fail docs.final "документы вне docs_paths при docs_in_repo: final: $FLIST"   # PKG-C-DOCS-FINAL
+  else ok docs.final "документы пакета входят в docs_paths"; fi
+  if [ "$PR_DOCS_MODE" = none ]; then
+    note adr.registry "docs_in_repo: none — реестр решений не проверяется"
+  else
+    pr_registry "$proj" "$PR_BASE_SHA" "$srcsha"
+    case "$PR_REG_STATE" in
+      one)
+        if mandate_match_list "$PR_REG_PATH" "$MANDATE_DOCS"; then ok adr.registry "реестр $PR_REG_PATH изменён и входит в docs_paths"
+        else warn adr.registry "реестр $PR_REG_PATH вне docs_paths мандата (по ответу МО §3 п.3 узел его не примет в составе документов)"; fi ;;
+      ambiguous) _flist "$PR_REG_CAND"; warn adr.registry "реестр решений неоднозначен: $FLIST" ;;
+      *) warn adr.registry "реестр решений за сессию не менялся (adr манифеста будет пуст)" ;;   # PKG-C-ADR
+    esac
+  fi
+  if [ -n "$PR_SHARED" ]; then _flist "$PR_SHARED"; note shared.note "touches_shared: true — слияние такого пакета решает человек: $FLIST"; fi
+  a="$(git -C "$proj" rev-parse --git-path info/attributes 2>/dev/null)"
+  case "$a" in /*) ;; *) a="$proj/$a" ;; esac
+  if { [ -f "$a" ] && grep -Eq 'export-(ignore|subst)' "$a"; } || git -C "$proj" show "$srcsha:.gitattributes" 2>/dev/null | grep -Eq 'export-(ignore|subst)'; then
+    warn attrs.export "в атрибутах git есть export-ignore/export-subst: сумма git archive у узла может не совпасть с archive_sha256"
+  else ok attrs.export "export-ignore / export-subst нет"; fi
+  if [ "$res_url_err" = 1 ]; then :   # url.scheme is already reported by the resolution
+  elif [ -z "$PR_URL" ]; then note url.scheme "repo.url в заказе не задан — push пойдёт в remote origin (или --remote)"
+  elif pr_url_ok "$PR_URL"; then
+    pr_url_show "$PR_URL"; ok url.scheme "$PR_URLS"
+    url_res="$(git -C "$proj" ls-remote --get-url "$PR_URL" 2>/dev/null)"
+    found=0
+    while IFS= read -r rn; do
+      [ -n "$rn" ] || continue
+      rem="$(git -C "$proj" remote get-url "$rn" 2>/dev/null)"
+      if [ "$rem" = "$url_res" ] || [ "$rem" = "$PR_URL" ]; then found=1; break; fi
+    done <<< "$(git -C "$proj" remote 2>/dev/null)"
+    if [ "$found" = 1 ]; then ok url.origin-drift "repo.url заказа совпадает с настроенным remote $rn"
+    else warn url.origin-drift "repo.url заказа ($PR_URLS) не совпадает ни с одним настроенным remote — push пойдёт в URL заказа"; fi
+  else fail url.scheme "repo.url: недопустимая схема или символы"; fi
+}
+
 case "$phase" in
-  pre) phase_pre ;;
-  all) phase_pre ;;
+  pre|all) phase_pre; pre_diff ;;
 esac
 finish

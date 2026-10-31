@@ -1,7 +1,7 @@
 # Implementation Plan: FEAT-017 — сдача пакетом изменения (плагин 2.5.0 «/sdx:pr»)
 
 ## Статус реализации
-21/82 задач Execution (T01–T82; дорожка Ф T01–T21 выполнена, gate Ф зелёный), 0/3 задач Closeout (C1–C3). Этап: Execution (дорожки A/B/C — не начаты).
+82/82 задач Execution (T01–T82; дорожки Ф/A/B/C/З выполнены, 25/25 сьютов зелёные, полный прогон 117,7 с), 0/3 задач Closeout (C1–C3). Этап: Execution завершён → Verification (ручной сценарий — `MANUAL_TEST.md`).
 
 Условные обозначения. `SPEC`/`DESIGN` — одноимённые файлы этой сессии (SPEC включает раздел «Поправки по коллизиям DESIGN» К-1…К-12 и REQ-PKG-36, обязательный). `ДЛ` — `decisions_log.md`. `К-N` — коллизии DESIGN. `A1…A16` — критерии приёмки SPEC в порядке их записи (см. таблицу покрытия внизу). `SK` = `/home/archi/Code/aibok/agentico/meta-orchestrator/sim-kit`. Якоря `# PKG-*` — метки мутационных прогонов (определены в DESIGN). Дорожки: **Ф** — фундамент (последовательно, один исполнитель), **A**, **B**, **C** — параллельные `developer` после Ф, **З** — замыкание (последовательно, после A/B/C).
 
@@ -538,98 +538,98 @@
 
 ### Дорожка З — Замыкание (последовательно, после T31, T38, T54, T59, T63, T68)
 
-- [ ] **T69** `[TEST]` `test-mo-prose.sh`: `[11]` пин, `[17]` пин, `[21]`–`[25]`, `[27]` — красные
+- [x] **T69** `[TEST]` `test-mo-prose.sh`: `[11]` пин, `[17]` пин, `[21]`–`[25]`, `[27]` — красные
   - Зависит от: T31, T38, T54, T59, T63, T68
   - Файлы: `sdx/hooks/test-mo-prose.sh`
   - Что: `[11]` — сниппет: «нет /sdx:pr» → «есть /sdx:pr» (пин 2.4.0 изменён); `[17]`/`chk_plugin_version` — версия `2.4.0` → `2.5.0`; `[21]` — протокол: два варианта Closeout, снятие моста для `pr|branch`, подраздел с `pr-*.sh`, `protocol-export.sh`, `order-import.sh`, служебный коммит с трейлерами, `commitment`, оговорка К-1, граница К-17, оба формата журнала; `[22]` — сниппет = текст §6 `sdx/mo/MO-INTEROP.md` (после снятия `> ` и склейки строк) и содержит `/sdx:pr`; `[23]` — `docs/DECISIONS.md`: ADR-022 заголовком; `[24]` — `agents/devops.md`: `/sdx:pr`, «теги», `CHANGE.template.yaml`, frontmatter не изменён; `[25]` — `README.md`/`README.en.md`/`CLAUDE.md` называют `CHANGE.template.yaml`, `pr-build.sh`, `CONTRIBUTING-MO.md`, `2.5.0`; `[27]` — `sdx/templates/CONTRIBUTING-MO.md` существует, `sdx/mo/` его не содержит. Красная сторона каждого — повреждённая копия.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[11]`, `[17]`, `[21]`–`[25]`, `[27]` красные (перечень приложен); остальное зелёное.
   - Закрывает: REQ-PKG-29–33; A14, A15 (тестовая часть).
 
-- [ ] **T70** `[DOC]` `sdx/protocol.md`
+- [x] **T70** `[DOC]` `sdx/protocol.md`
   - Зависит от: T69
   - Файлы: `sdx/protocol.md`
   - Что: по DESIGN «Перечень правок документов»: (1) «Контракт закрытия» — два варианта Closeout, `bridge` (`pr|branch`) → пакет, ручная инструкция снята, `bridge:offer`/`undefined`/`error` сохранены, токен `bridge` помечен «исторический» (К-7); (2) подраздел «Мандат» — скрипты `pr-build`/`pr-check`/`pr-publish`/`protocol-export`/`order-import`, служебный коммит с трейлерами (К-2, К-16), `commitment` в `session_state.json`, граница (5) `docs_in_repo` (`final` = `full`, реестр по `docs_paths`), граница «внутренние записи скриптов не видны хуку» (К-17), канал `protocol.yaml` (К-18); (3) «Вендорённые компоненты» — четвёртый файл, оговорка К-1 (уже частично — T03), `CONTRIBUTING-MO.md` — не вендорённый; (4) «Журнал решений» — оба формата записи.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[21]`, `[12]` по протоколу зелёные; `bash sdx/hooks/test-mo-inventory.sh` зелёный; список пунктов стоп-рубрики без изменений (`diff` раздела с `git show main:sdx/protocol.md` пуст).
   - Закрывает: REQ-PKG-22, 30, 33; A13, A15.
 
-- [ ] **T71** `[DOC]` `docs/DECISIONS.md` — ADR-022 «Пакет изменения — второй вариант Closeout»
+- [x] **T71** `[DOC]` `docs/DECISIONS.md` — ADR-022 «Пакет изменения — второй вариант Closeout»
   - Зависит от: T70
   - Файлы: `docs/DECISIONS.md`
   - Что: контекст, решение (D-1…D-12 кратко), отвергнутые альтернативы (checkout/worktree, `git notes`, `--force-with-lease`, PyYAML для заказа, переименование токена), последствия; снимает мост FEAT-016 как временный для `pr|branch`; датированная (2026-10-31) поправка к ADR-021 (мост → пакет, `docs_in_repo: final = full`); поправка к ADR-020 не нужна; число упоминаний `mesh_endpoint.py`/`devagent_hook.py`/`MO-INTEROP.md` не уменьшено; ссылки на `CHANGE.template.yaml`.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[23]` и прежние `[16]`, `[9]` зелёные; `grep -c 'mesh_endpoint.py\|devagent_hook.py\|MO-INTEROP.md' docs/DECISIONS.md` не меньше значения на `main`; `bash sdx/hooks/test-mo-inventory.sh` зелёный.
   - Закрывает: REQ-PKG-31; A15.
 
-- [ ] **T72** `[DOC]` Сниппет `claude-md-snippet.md` (§6 `MO-INTEROP.md` 0.9.1) и `agents/devops.md`
+- [x] **T72** `[DOC]` Сниппет `claude-md-snippet.md` (§6 `MO-INTEROP.md` 0.9.1) и `agents/devops.md`
   - Зависит от: T71
   - Файлы: `sdx/templates/claude-md-snippet.md`, `agents/devops.md`
   - Что: сниппет — абзац «МО над стендами» заменяется полным текстом §6 `sdx/mo/MO-INTEROP.md` 0.9.1 (REQ-PKG-32), маркеры `SDX:BEGIN`/`SDX:END` по одному и не меняются; `devops.md` — «Режим МО»: действие сдачи — `/sdx:pr` (основная сессия, не `devops`), слияний вне `scope.branches` и тегов по-прежнему нет, пункт `artifact.offer` сохранён, упоминание `CHANGE.template.yaml`; frontmatter не менять.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[11]`, `[22]`, `[24]` и прежний `[10]` зелёные; `sed -n '1,/^---$/p' agents/devops.md` совпадает с `git show main:agents/devops.md`; `bash sdx/hooks/test-snippet-check.sh` зелёный; `bash sdx/hooks/snippet-check.sh CLAUDE.md` печатает одно из `ABSENT|BROKEN|OK|STALE`.
   - Закрывает: REQ-PKG-32, 33; A15.
 
-- [ ] **T73** `[DOC]` `README.md`, `README.en.md`, `CLAUDE.md`
+- [x] **T73** `[DOC]` `README.md`, `README.en.md`, `CLAUDE.md`
   - Зависит от: T72
   - Файлы: `README.md`, `README.en.md`, `CLAUDE.md`
   - Что: таблица `sdx/mo/` — четыре файла; новые скрипты `sdx/hooks/` (`pr-build`, `pr-check`, `pr-publish`, `protocol-export`, `order-import`, `lib/pr-lib`, `lib/pkg-fixture`), `commands/pr.md`, `sdx/templates/CONTRIBUTING-MO.md`; абзац «Версия 2.5.0 — сдача пакетом изменения» (RU/EN симметрично, те же факты); `CLAUDE.md` §3 «Этапы → Closeout» — два варианта, §6 — перечень `sdx/hooks/`, `sdx/mo/` (четыре файла), `sdx/templates/CONTRIBUTING-MO.md`; три прежних имени `mesh_endpoint.py`/`devagent_hook.py`/`MO-INTEROP.md` остаются на каждой поверхности.
   - DoD: `bash sdx/hooks/test-mo-inventory.sh` зелёный; `bash sdx/hooks/test-mo-prose.sh` — `[25]` и прежний `[9]` по README×2 зелёные; `grep -c 'pr-build.sh' README.md README.en.md CLAUDE.md` ≥ 1 в каждом; визуальная сверка пары RU/EN записана в сообщении коммита.
   - Закрывает: REQ-PKG-33; A15.
 
-- [ ] **T74** `[DOC]` Дельты `docs/specs|designs/mo-interop.md`, поправка `decision-journal-and-resume.md`, запись бэклога FEAT-017
+- [x] **T74** `[DOC]` Дельты `docs/specs|designs/mo-interop.md`, поправка `decision-journal-and-resume.md`, запись бэклога FEAT-017
   - Зависит от: T73
   - Файлы: `docs/specs/mo-interop.md`, `docs/designs/mo-interop.md`, `docs/designs/decision-journal-and-resume.md`, `docs/backlog/FEAT-017-*.md`
   - Что: `docs/specs/mo-interop.md` — REQ-MAND-23/23a/23b с отметкой «заменено REQ-PKG-30 для `pr|branch`», раздел «Дельты FEAT-017» (REQ-PKG-1…36 сжато); `docs/designs/mo-interop.md` — «Дельта FEAT-017» (сжатый перенос дизайна; полный дизайн после Closeout — `docs/history/designs/feat-017-…md`); `decision-journal-and-resume.md` — датированная поправка: необязательное поле `commitment` в `session_state.json`, формат B записи журнала; запись бэклога — уточнения (`CONTRIBUTING-MO.md` в `sdx/templates/`, поле `change` в `artifact.offer` не добавляется, `docs_in_repo`), `status` на Closeout (C2), не здесь.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` зелёный по этим файлам; `bash sdx/hooks/test-mo-inventory.sh` зелёный; `grep -c 'FEAT-017' docs/specs/mo-interop.md docs/designs/mo-interop.md` ≥ 1 в каждом; `grep -c 'commitment' docs/designs/decision-journal-and-resume.md` ≥ 1.
   - Закрывает: REQ-PKG-30, 33; A15.
 
-- [ ] **T75** `[CODE]` `plugin.json` 2.4.0 → 2.5.0
+- [x] **T75** `[CODE]` `plugin.json` 2.4.0 → 2.5.0
   - Зависит от: T69 (красный `[17]` уже есть), T74
   - Файлы: `.claude-plugin/plugin.json` (`marketplace.json` версии не содержит — не трогать)
   - Что: `version` → `2.5.0`.
   - DoD: `jq -r .version .claude-plugin/plugin.json` → `2.5.0`; `bash sdx/hooks/test-mo-prose.sh` → `Results: N passed, 0 failed` (все `[9]`–`[27]` зелёные); `grep -n version .claude-plugin/marketplace.json` — версии нет.
   - Закрывает: REQ-PKG-33; A15.
 
-- [ ] **T76** `[DOC]` Заготовки релизных заметок 2.5.0 и записки upstream (в каталоге сессии)
+- [x] **T76** `[DOC]` Заготовки релизных заметок 2.5.0 и записки upstream (в каталоге сессии)
   - Зависит от: T75
   - Файлы: `.claude/sessions/feat-017-mo-change-package-20261031/release_notes_draft.md`, `.claude/sessions/feat-017-mo-change-package-20261031/upstream_note_draft.md` (только в каталоге сессии; публикация в `docs/history/releases/v2.5.0-notes.md` — на Closeout)
   - Что: двуязычные накопительные заметки (русский блок, `---`, английский); раздел «Границы»/«Boundaries» с непроверенным: живой `audit()`, `gh` на реальном GitHub, `archive_sha256` между версиями git, хук области на `/sdx:pr`, канал `protocol.yaml` при `history: executor`, `--from-order` с реальным ящиком; записка upstream владельцу МО (К-18): (1) канал доставки `protocol.yaml` при `history: executor`, (2) формат issue-заказа, (3) исключение корневого `CHANGE.yaml` из `_in_scope` хука, (4) семантика `docs_in_repo: final|full`, (5) `artifact.offer` с полем `change` не добавляется.
   - DoD: оба файла существуют; в заметках есть «Границы»/«Boundaries»; `git -C /home/archi/Code/aibok/agentico/meta-orchestrator/sim-kit status --porcelain` не показывает изменений от этой работы.
   - Закрывает: REQ-PKG-33; A15 (процесс).
 
-- [ ] **T77** `[INFRA]` Полный прогон с замером; сверка флагов `pr.md` со скриптами; решение по К-10
+- [x] **T77** `[INFRA]` Полный прогон с замером; сверка флагов `pr.md` со скриптами; решение по К-10
   - Зависит от: T75, T76
   - Файлы: —
   - Что: `time bash .claude/sdx/verify-cmd.sh`; приложить итоговые строки `Results:` всех сьютов (включая новые `test-pr-build`, `test-pr-check`, `test-pr-publish`, `test-protocol-export`, `test-order-import`, `test-pkg-fixture`); записать, какие оракульные ветки дали PASS, какие INFO-skip; убедиться, что `test-mo-prose [20]` (сверка флагов `pr.md` ↔ скрипты) зелёный на финальных скриптах (при расхождении — править `commands/pr.md`/`start.md`, не скрипты, либо зафиксировать отклонение). Если время > 150 с без нагрузки — решение К-10: сначала `SCEN_MIN=1` для мутантов в основном прогоне (полный набор — под `PKG_FULL=1`), затем параллельный раннер (T78).
   - DoD: exit 0, все сьюты `0 failed`; **время ≤ 150 с (цель), ≤ 180 с (предел)**; число сьютов = прежнее + 6; `find . -name __pycache__ -not -path './.git/*'` пусто; `git status --porcelain` пуст.
   - Закрывает: REQ-PKG-36; A16.
 
-- [ ] **T78** `[DOC]` `.claude/sdx/verify-cmd.sh`: комментарий о длительности (при необходимости — `SDX_VERIFY_JOBS`, К-10)
+- [x] **T78** `[DOC]` `.claude/sdx/verify-cmd.sh`: комментарий о длительности (при необходимости — `SDX_VERIFY_JOBS`, К-10)
   - Зависит от: T77
   - Файлы: `.claude/sdx/verify-cmd.sh` (dogfood-раннер репозитория, не плагин)
   - Что: актуализировать комментарий «число сьютов, время» по замеру T77 (без изменения исполняемой части). **Условная ветка:** если T77 дал > 150 с — добавить параллельный запуск сьютов (`SDX_VERIFY_JOBS`, по умолчанию 2; сьюты независимы — каждый работает в `mktemp`) как отдельный коммит с собственной проверкой (`bash -n`, повторный полный прогон ≤ 150 с, порядок/вывод итоговых строк сохранены) и записью в «Отклонения».
   - DoD: без условной ветки — `git diff .claude/sdx/verify-cmd.sh` содержит только строки комментариев; с условной веткой — `SDX_VERIFY_JOBS=1` даёт прежнее поведение, повторный замер приложен; `bash -n .claude/sdx/verify-cmd.sh`.
   - Закрывает: REQ-PKG-36; A16.
 
-- [ ] **T79** `[DOC]` `MANUAL_TEST.md` — ручной сценарий для Verification
+- [x] **T79** `[DOC]` `MANUAL_TEST.md` — ручной сценарий для Verification
   - Зависит от: T58, T67
   - Файлы: `.claude/sessions/feat-017-mo-change-package-20261031/MANUAL_TEST.md` (новый)
   - Что: перенести DESIGN «Ручной сценарий для Verification» (пп. 1–8) как «Случай N» с полями «Действие / Предусловие / Ожидаемый результат / Результат (заполняется)»: (1) живой `audit()` узла 0.9.1 на пакете (`./mo change poll app` → `./mo change audit app change/C-…`; точные команды выдачи мандата помечены «не проверены»); (2) `gh pr create` на реальном репозитории GitHub и деградация после `gh auth logout`; (3) доставка `protocol.yaml` (`./mo work protocol <C>`); (4) хук области на командные строки `/sdx:pr` при `on_write: deny`; (5) проза `pr.md`/`archive.md` (подтверждение push в `interactive` **и** `auto`, отказ без мандата, делегирование); (6) `/sdx:start --from-order <msg_id>` с реальным `mesh_endpoint.py pull`, `--from-issue`; (7) `archive_sha256` на другой версии git; (8) замер полного прогона; ветка «выполнить нельзя» → «не проверено» (непроверенное допущение); поля версий (`git --version`, `claude --version`, sim-kit).
   - DoD: `grep -c '^## Случай' MANUAL_TEST.md` ≥ 8; у каждого случая есть строки «Ожидаемый результат» и «Результат (заполняется)»; фраза «не проверено» присутствует в ветках невозможности; прогон — задача `qa`/пользователя на Verification.
   - Закрывает: A1, A9, A10, A8 (живые части), A16.
 
-- [ ] **T80** `[INFRA]` Проверки инвариантов поставки
+- [x] **T80** `[INFRA]` Проверки инвариантов поставки
   - Зависит от: T77
   - Файлы: —
   - Что: (а) `(cd sdx/mo && sha256sum -c SIMKIT_SHA256)` — `OK`×4 и `git diff --stat main -- sdx/mo/mesh_endpoint.py sdx/mo/devagent_hook.py sdx/mo/MO-INTEROP.md` пуст; (б) `git diff --stat main -- hooks/hooks.json sdx/hooks/stop-gate.sh sdx/hooks/archive-verify.sh sdx/hooks/sdx-stage.sh sdx/hooks/mo-hook.sh sdx/hooks/mo-session.sh sdx/hooks/lib/miniyaml.sh sdx/hooks/lib/test-cmd.sh agents/reviewer.md` пуст; (в) `grep -nE 'python|eval' sdx/hooks/lib/pr-lib.sh sdx/hooks/lib/mandate.sh sdx/hooks/pr-build.sh sdx/hooks/pr-check.sh sdx/hooks/pr-publish.sh sdx/hooks/protocol-export.sh` пусто, а в `order-import.sh` — только вызов `mesh_endpoint.py` в `from-msg`; (г) без мандата поведение прежнее: `bash sdx/hooks/mandate-info.sh pr-mode` в этом репозитории (`.mesh/` нет) → `REFUSE no-mandate`; `mo-hook.sh` и `mo-session.sh` на этом репозитории — пустой вывод, rc 0; (д) `pr.md` не содержит `git push` вне запретительного текста.
   - DoD: все пять проверок дают указанный результат (вывод приложен).
   - Закрывает: REQ-PKG-28, 34, 35; A12, A13, A14.
 
-- [ ] **T81** `[TEST]` Регресс: прежние сьюты без правок утверждений
+- [x] **T81** `[TEST]` Регресс: прежние сьюты без правок утверждений
   - Зависит от: T77
   - Файлы: —
   - Что: `git diff main -- sdx/hooks/test-*.sh` — только добавления, кроме пинов `test-mo-prose.sh` (`[11]`, `[12]`, `[17]`, `chk_plugin_version`; Q-17 SPEC), каждый изменённый пин перечислен; `test-stop-gate.sh`, `test-archive-verify.sh`, `test-hook-wiring.sh`, `test-selftest.sh`, `test-snippet-check.sh`, `test-mo-inventory.sh`, `test-sdx-stage.sh`, `test-mo-hook.sh`, `test-mo-session.sh`, `test-suites-gen.sh`, `test-init-patterns.sh` зелёные.
   - DoD: перечисленные сьюты `0 failed`; дифф — только добавление плюс перечисленные пины.
   - Закрывает: REQ-PKG-30, 34; A12, A13, A15.
 
-- [ ] **T82** `[INFRA]` Финальная сверка процесса
+- [x] **T82** `[INFRA]` Финальная сверка процесса
   - Зависит от: T77–T81
   - Файлы: —
   - Что: `jq -r .gate_mode .claude/sessions/feat-017-mo-change-package-20261031/session_state.json` != `auto`; перечень красных сторон (T05, T07, T10, T16, T22, T25, T28, T32, T35, T39, T41, T43, T47, T51, T55, T57, T60, T64, T69) отмечен ссылками на коммиты; раздел «Отклонения» заполнен фактами (если были); чек-лист PLAN актуализирован (процент, галочки); ни один коммит ветки не сделан через `--amend`.
@@ -741,3 +741,21 @@ Gate: T20, T03 ─> T21 (полный прогон; старт дорожек A,
 **B (T39–T59).** Порядок: `PKG-EMPTY` в T40 (не T42); DoD T44 (B6/B10) и T48 (C1) выполнены в последующих задачах. Времена сьютов 10,5/12,3/13,0 с выше целей DESIGN (один прогон `pr-build` ≈0,4 с, `pr-check` ≈0,33 с; блоки распараллелены). `PKG-CAS`: якорь на `update-ref`, гонка B8 эмулируется подменой `git` в PATH. Коды `pr-build` B7: rc 2 только для отсутствия идентичности git. Реестр вне `docs_paths` при `final` → одновременно WARN `adr.registry` и FAIL `docs.final` (rc 1). Сверх DESIGN: отказ при `.claude/sessions/` в диффе; `adr` = [реестр] без новых заголовков + пометка в `notes`; версия из `plugin.json`; `.gitattributes` вершины проверяется; `pr-publish` строит тело PR из `CHANGE.yaml` и отказывает при секрете; `--title` у `pr-publish`; флага `--confirmed` нет — подтверждение за `/sdx:pr`. `fake_scope` ловит только `pr-check post` (оракул слеп по построению).
 **C (T60–T68).** T61+T62 одним коммитом. `test-mandate-scope` +1,5 с (DoD ≤1 с). Алфавиты вывода `pr-status` раздельные (ветка `/`, URL `:/@%+=~`); пустое значение `?`. `[12]` для `archive.md` — `chk_bridge_archive`. Сверх DESIGN: в `auto` на P5 вопросы только по `base.ancestor`/`branch.exists`/`url.origin-drift`, остальные WARN — `[триаж]` в `SDX-PR-Ack`; при сборке без отправки трейлеры `Remote/Hosting/Url` = `-`. `[20]` сверяет флаги с реальными скриптами (A/B появились позже — проверить итог).
 **Оркестратор.** Первопричина посторонних файлов `false` (DEBT-046): обратные кавычки внутри двойных кавычек в тексте отказа `sdx-stage.sh` (`\`no_code: true -> false\``) — подстановка команды с редиректом `> false`. Исправлено (кавычки сняты), регрессионная проверка в `[30]` + мутант `STRAY-FALSE`; отслеживаемый `/false` удалён из индекса (`git rm --cached`).
+
+### Дорожка З (T69–T82) и сверка прозы с CLI (исполнитель З, 2026-10-31)
+
+**Сверка прозы команд с фактическими CLI** (коммит `900805a`; `start.md`/`status.md`/`archive.md` с `order-import.sh`, `mandate-info.sh` согласованы без правок): (1) `pr.md` P5 не знал WARN `attrs.export` (есть в `pr-check.sh pre`) — добавлен в список классов; (2) `pr.md` P7 не обрабатывал код 3 фазы `post` (WARN `manifest.adr`) — добавлен вопрос «принять и продолжить / остановиться» и запись в `SDX-PR-Ack`; (3) `pr.md` P9: у `pr-publish.sh` нет `--confirmed` (подтверждение — `AskUserQuestion` на P8 до вызова), флаги `--hosting`/`--title`/`--dry-run` названы, код 1 — отказ; (4) заглушка CLI `pr-publish.sh` в фикстуре `[20]` не знала `--title` (в DESIGN его не было) — приведена к реальному CLI; (5) ветка INFO-skip «`<script>.sh is not delivered yet`» в `[20]` заменена на `FAIL` (вызываемый скрипт обязан существовать) — строк INFO в выводе нет. Остальные идентификаторы WARN фазы `pre` (`base.ancestor`, `branch.exists`, `url.origin-drift`, `base.remote-drift`, `adr.registry`, `mandate.lint`, `tests`) и коды `pr-build.sh` 3 (`NEED allow-diverged`/`NEED resubmit`), `order-import.sh` 3 (`MISMATCH …`), `protocol-export.sh --sid [--out|--from-rev]` совпадали. Граница проверки: `chk_flags` ищет текст флага в файле скрипта (включая usage/комментарии), а не разбирает `case` — дрейф семантики она не ловит.
+
+**T69.** Красные строки: `[11]` (нет `/sdx:pr` в блоке), `[17]` (версия), `[21]` (нет «два варианта»), `[22]` ×1 (сниппет ≠ §6), `[23]` (нет ADR-022), `[24]` (нет `/sdx:pr` в `devops.md`), `[25]` ×3 (README, README.en, CLAUDE.md без `pr-build.sh`) — 9 строк. **`[27]` зелёный сразу**: `sdx/templates/CONTRIBUTING-MO.md` уже есть (лист Ф/C), красная сторона `[27]` — копии-деревья во временном каталоге. Отклонение от DoD «красные `[27]`».
+
+**T70–T74.** Формулировки без буквальной строки `delivery: pr|branch` (сторож `[12b]` запрещает её как признак старого моста): везде «`delivery` = `pr` или `branch`». Число версии вендорённого sim-kit в протоколе/DECISIONS/дельтах не названо. Стоп-рубрика протокола не тронута. `session_state.json`: в протоколе добавлено описание необязательного поля `commitment` (поправка 2026-10-31). README: «16 команд» → «17» (добавлен `pr`). Сниппет: §6 `MO-INTEROP.md` целиком + добавочное предложение (`PYTHONDONTWRITEBYTECODE=1`, `self_deploy`) — `[22]` проверяет вхождение, а не равенство абзаца.
+
+**T76.** Релизные заметки — «накопительные» только в смысле 2.5.0 (2.4.0 опубликован, предыдущие заметки в `docs/history/releases/v2.4.0-notes.md`); в 2.5.0 включено исправление DEBT-046 (`sdx-stage.sh`). Репозиторий sim-kit из этой работы не правился; в нём есть неотслеживаемый каталог `Claude outputs/` — не от этой работы (не исследовался).
+
+**T77/T78.** Полный прогон: `real 1m57,719s` (117,7 с; user 1m26s, sys 2m23s), load average на старте 0,69 (1 мин) / 2,92 (5 мин), после 4,29; `Summary: 25/25 suites passed` (19 + 6); `__pycache__` нет, `git status` чист. Итоги `Results:`: archive-verify 26, default-branch 6, hook-wiring 18, init-patterns 3, integration-stage-lifecycle 11, mandate-lib 420, mandate-scope 115, mo-hook 159, mo-inventory 26, mo-prose 260, mo-session 43, order-import 119, pkg-fixture 67, pr-build 162, pr-check 197, prod-guard 9, protocol-export 79, pr-publish 137, resolve-session 3, resume-contract 40, sdx-stage 102, selftest 36, snippet-check 22, stop-gate 20, suites-gen 76 — везде `0 failed`. Оракульные ветки (python3, PyYAML) в этом окружении — **PASS**, INFO-skip нет (в выводе остаются только INFO-границы `test-mo-hook [7d]` и заголовок `[F5]`). Цель ≤ 150 с достигнута → условная ветка T78 (`SDX_VERIFY_JOBS`) **не реализована**; `verify-cmd.sh` — только комментарий (число сьютов, замер). T77 и T78 — один коммит (`46921c6`). `IDEA-` «параллельный раннер `verify-cmd.sh`» на Closeout (C2) — по плану, «если не понадобился».
+
+**T80.** (а) `sha256sum -c`: 4 × OK, дифф трёх прежних файлов `sdx/mo/` пуст; (б) дифф `hooks/hooks.json`, `stop-gate.sh`, `archive-verify.sh`, `mo-hook.sh`, `mo-session.sh`, `lib/miniyaml.sh`, `lib/test-cmd.sh`, `agents/reviewer.md` пуст; **`sdx-stage.sh` отличается от `main` одной строкой — исправление DEBT-046 (обратные кавычки в тексте отказа), внесено оркестратором**, не дорожкой З (отклонение от формулировки «не менять» из PLAN, зафиксировано выше); (в) `grep -nwE 'python3?|eval'` по `pr-build|pr-check|pr-publish|protocol-export|order-import|lib/pr-lib|lib/mandate` — только `order-import.sh` (запуск `mesh_endpoint.py` в `from-msg`, комментарий и два текста отказа), имя `pr_scope_eval` словом не считается; (г) `mandate-info.sh pr-mode` без `.mesh/` → `REFUSE no-mandate`, rc 1; `mo-hook.sh` и `mo-session.sh` на этом репозитории — пустой вывод, rc 0; (д) `pr.md` — единственная строка с `git push` в запретительном тексте; файлов `false` и `__pycache__` в чекауте нет.
+
+**T81.** `git diff main -- sdx/hooks/test-*.sh`: добавления, кроме — `test-mo-prose.sh` (пины `[11]`, `[12]`, `[17]`, `chk_plugin_version`, 9 удалённых строк), `test-mandate-lib.sh` (3 строки: исключение `lib/pkg-fixture.sh` из `[L9]` и сигнатура мутационного помощника `MANDATE_MIN`; см. отклонение Ф-3), `test-mandate-scope.sh` (1 строка — комментарий блока `[M]`). Прежние сьюты зелёные в полном прогоне T77.
+
+**T82.** `gate_mode` = `interactive`; 98 коммитов `main..HEAD`, во всех `Co-Authored-By`; `--amend` на ветке не использовался (три записи `amend` в reflog относятся к более ранним сессиям); красные стороны: T05 `12f7fb7`, T07 `b52dafe`, T10 `992da91`, T16 `9372981`, T22 `3bb3b1f`, T25 `0f6e208`, T28 `994d9ee`, T32 `f458199`, T35 `8c61335`, T39 `b2649ac`, T41 `e31892f`, T43 `d7564a2`, T47 `39b4eb8`, T51 `b3535b4`, T55 `b899540`, T57 `0cd4bdd`, T60 `774748c`, T64 `3a16c9c`, T69 `7c64b22`. Коммиты дорожки З: сверка `900805a`, T69 `7c64b22`, T70 `85b6789`, T71 `aaadfb0`, T72 `fed360b`, T73 `f8ef782`, T74 `c5c301b`, T75 `49f96c5`, T76 `a1349fe`, T77/T78 `46921c6`, T79 `80cdf8e`, T80–T82 — коммит PLAN (этот).

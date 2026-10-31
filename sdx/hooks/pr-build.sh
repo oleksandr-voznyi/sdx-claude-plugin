@@ -75,11 +75,21 @@ if [ -n "$old" ]; then
   git -C "$proj" cat-file -e "$old:CHANGE.yaml" 2>/dev/null || die 1 "ветка $PR_BRANCH уже есть, но это не пакет SDX (нет CHANGE.yaml в корне)"
   [ "$resubmit" = 1 ] || { echo "NEED resubmit: ветка $PR_BRANCH уже есть (повторная сдача поверх прежней вершины)" >&2; exit 3; }
   parent="$old"; zero="$old"
+  # re-submission over a base that moved on (verify-1 Д-1): the new head gets TWO parents, the previous tip and the new base,
+  # so merge-base(head, base) is the new base (scope_touched without foreign files, "base" of the manifest = the new base);
+  # a base that is already an ancestor of the previous tip keeps the plain fast-forward chain with one parent
+  pparent2=""
+  if ! git -C "$proj" merge-base --is-ancestor "$PR_BASE_SHA" "$old" 2>/dev/null; then pparent2="$PR_BASE_SHA"; fi   # PKG-RESUBMIT-BASE
 else
   parent="$PR_BASE_SHA"; zero=0000000000000000000000000000000000000000   # creation: the ref must not exist
+  pparent2=""
 fi
 git -C "$proj" cat-file -e "$tree:CHANGE.yaml" 2>/dev/null && die 1 "в коде уже есть корневой CHANGE.yaml (код пакета манифеста не содержит)"   # PKG-NOCHANGEYAML
-head="$(printf '%s: %s\n' "$PR_C" "$PR_TITLE" | git -C "$proj" commit-tree "$tree" -p "$parent")" || die 2 "git commit-tree не удался (нет user.name/user.email?)"
+if [ -n "$pparent2" ]; then
+  head="$(printf '%s: %s\n' "$PR_C" "$PR_TITLE" | git -C "$proj" commit-tree "$tree" -p "$parent" -p "$pparent2")" || die 2 "git commit-tree не удался (нет user.name/user.email?)"
+else
+  head="$(printf '%s: %s\n' "$PR_C" "$PR_TITLE" | git -C "$proj" commit-tree "$tree" -p "$parent")" || die 2 "git commit-tree не удался (нет user.name/user.email?)"
+fi
 
 # ---- refusals that need the diff of the package: control characters, secrets, an empty change ----
 mbase="$(git -C "$proj" merge-base "$head" "$PR_BASE_SHA")" || die 1 "нет общего предка пакета и $PR_BASE_NAME"

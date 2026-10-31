@@ -20,6 +20,7 @@
 #  [B9]  diverged base: rc 3 NEED allow-diverged; with the flag the diff base..head is only the session's; conflict -> rc 1
 #  [B10] template-driven generation: keys and order of the manifest = keys of sdx/mo/CHANGE.template.yaml
 #  [B11] the package tree has no .claude/sessions/ and no protocol.yaml
+#  [B13] re-submission x diverged base: two-parent head, merge-base(head, dev) = the new base, post passes (verify-1 Д-1)
 #  [B12] the manifest commit's parent is head (not base) and it changes exactly one file
 #  [Port] portability of pr-build.sh (BUG-010) + red side; no python/eval/checkout/worktree
 #  [Mut] mutation runs (copies of pr-build.sh + lib/ in a temp dir, anchors "# PKG-*")
@@ -205,6 +206,45 @@ newfx && {
   has "B8a message: not an SDX package" "$BERR" "не пакет SDX"
   run_build "$WC" --resubmit; eq "B8a non-package change/* with the flag: rc 1" "$BRC" "1"
   eq "B8a the foreign branch is untouched" "$(gw rev-parse "refs/heads/$BR")" "$(gw rev-parse refs/heads/dev)"
+}
+}
+
+# ---------------------------------------------------------------------------------------------------- [B13]
+# verify-1 Д-1 (QA): re-submission when the base moved on. The new head gets TWO parents (the previous tip and the new base), so
+# merge-base(head, base) is the new base: scope_touched has no foreign files, "base" of the manifest is the new base, pr-check post passes.
+blk_B13() {
+echo "[B13] re-submission x diverged base"
+BR=change/C-ACME-001-ex1
+newfx && {
+  pkg_craft_good "$WC" "$BR" >/dev/null 2>&1; old="$PKG_TIP"
+  gw checkout -q dev && fx_commit "$WC" foreign.txt "foreign" "dev moves (foreign file)" && gw checkout -q sdx/s1
+  fx_commit "$WC" src/mod1/a.js "a=3" "s1 more code"
+  dev="$(gw rev-parse refs/heads/dev)"
+  run_build "$WC" --resubmit
+  eq "B13 dev moved on, --resubmit alone: rc 3 NEED allow-diverged" "$BRC" "3"
+  eq "B13 ... the old tip is untouched" "$(gw rev-parse "refs/heads/$BR")" "$old"
+  run_build "$WC" --resubmit --allow-diverged
+  eq "B13 --resubmit --allow-diverged: rc 0" "$BRC" "0"
+  head="$(jv .head)"; tip="$(jv .tip)"
+  eq "B13 the new head has two parents: the previous tip and the new base" "$(gw rev-list --parents -n1 "$head" | cut -d' ' -f2-)" "$old $dev"
+  eq "B13 merge-base(head, dev) is the new base" "$(gw merge-base "$head" refs/heads/dev)" "$dev"
+  eq "B13 the JSON base is the new base" "$(jv .base)" "$dev"
+  mf_load "$WC" "$tip"
+  eq "B13 the manifest base is the new base" "$(mf base)" "$dev"
+  case "$(mfl scope_touched)" in *foreign.txt*) fail "B13 scope_touched has no foreign file" "foreign.txt in [$(mfl scope_touched)]" ;; *) pass "B13 scope_touched has no foreign file" ;; esac
+  has "B13 scope_touched has the session's own file" "$(mfl scope_touched)" "src/mod1/a.js"
+  eq "B13 the manifest commit sits on the head" "$(gw rev-list --parents -n1 "$tip" | cut -d' ' -f2-)" "$head"
+  oracle_expect "B13 the oracle (audit()) says approve" "$WC" "$BR" "approve"
+  pc="$(bash "$SCRIPT_DIR/pr-check.sh" --sid s1 --proj "$WC" --phase post 2>&1)"; pcrc=$?
+  eq "B13 pr-check post passes on the re-submitted package" "$pcrc" "0"
+  has "B13 ... PR-CHECK PASS" "$pc" "PR-CHECK PASS"
+}
+# a base that did not move: the plain fast-forward chain, one parent
+newfx && {
+  pkg_craft_good "$WC" "$BR" >/dev/null 2>&1; old="$PKG_TIP"
+  run_build "$WC" --resubmit
+  eq "B13 base unchanged, --resubmit: rc 0" "$BRC" "0"
+  eq "B13 ... the head keeps ONE parent (the previous tip)" "$(gw rev-list --parents -n1 "$(jv .head)" | cut -d' ' -f2-)" "$old"
 }
 }
 
@@ -507,6 +547,7 @@ mutate PKG-EMPTY          '/# PKG-EMPTY/s/|| die 1 "[^"]*"/|| true/' "B7" "empty
 mutate PKG-CAS            '/# PKG-CAS/s/"\$tip" "\$zero"/"$tip"/' "B8"
 mutate PKG-ANCESTOR       '/# PKG-ANCESTOR/s/if git -C "\$proj" merge-base --is-ancestor "\$PR_BASE_SHA" "\$srcsha"; then/if true; then/' "B9"
 mutate PKG-TEMPLATE-KEYS  '/# PKG-TEMPLATE-KEYS/s/\*) die 1 "[^"]*" ;;/*) : ;;/' "B10"
+mutate PKG-RESUBMIT-BASE  '/# PKG-RESUBMIT-BASE/s/then pparent2="\$PR_BASE_SHA"; fi/then pparent2=""; fi/' "B13"
 mutate PKG-TIPPARENT      '/# PKG-TIPPARENT/s/-p "\$head"/-p "$PR_BASE_SHA"/' "B12"
 wait
 for name in $MUT_NAMES; do
@@ -536,7 +577,7 @@ run_blocks() {
     FAIL_COUNT=$((FAIL_COUNT + $(grep -c "^  FAIL: " "$TMP/out-$b.txt")))
   done
 }
-run_blocks B7 B9 B8a B1 B2 B3 B4 B5 B6 B10 B12 B8 B11 Port Mut
+run_blocks B7 B9 B8a B13 B1 B2 B3 B4 B5 B6 B10 B12 B8 B11 Port Mut
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

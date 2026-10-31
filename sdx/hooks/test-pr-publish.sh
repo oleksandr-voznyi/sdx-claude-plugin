@@ -13,6 +13,7 @@
 #  [P4] hosting detection: github.com URLs -> github, local path -> bare, the order's hint and --hosting win
 #  [P5] gh stub: list then create with the exact argv; body content; no gh -> degraded gh-missing; unauthenticated; PR exists; gh fails
 #  [P6] refusals: a non-change branch, ext:: / -o... / spaced URL, no remote, prod-guard.conf with `git push`
+#  [P8] the post-check before the push: a substituted package -> rc 1, the remote untouched; WARN-only passes (verify-1 W3)
 #  [P7] credentials of https://u:p@host/x.git never reach stdout / stderr / JSON (--dry-run)
 #  [Port] portability of pr-publish.sh (BUG-010), no force/all/mirror/tags/+refspec; red side
 #  [Mut] mutation runs (copies of pr-publish.sh + lib/ + prod-guard.sh in a temp dir, anchors "# PKG-P-*")
@@ -100,8 +101,13 @@ newfx && {
   eq "P1 JSON already" "$(jv .already)" "false"
   eq "P1 JSON remote_sha == tip" "$(jv .remote_sha)" "$TIP"
   eq "P1 the remote ref == tip" "$(git -C "$REM" rev-parse "refs/heads/$BR")" "$TIP"
-  eq "P1 JSON keys" "$(jv 'keys|join(",")')" "already,branch,degraded,hosting,instruction,pr,pushed,remote,remote_sha" 
+  eq "P1 JSON keys" "$(jv 'keys|join(",")')" "already,branch,degraded,hosting,instruction,pr,pushed,ready,remote,remote_sha"
   eq "P1 local bare -> hosting bare, no PR" "$(jv '.hosting+"/"+(.pr|tostring)')" "bare/null"
+  # verify-1 W1: a bare host has no pull requests; delivery: pr in the order does not change that (the package = branch + CHANGE.yaml)
+  eq "P1 bare + delivery pr: instruction is null (no 'open the PR manually')" "$(jv '.instruction|tostring')" "null"
+  eq "P1 bare: the package is ready (branch + CHANGE.yaml on the remote)" "$(jv .ready)" "true"
+  eq "P1 CHANGE.yaml is at the root of the remote tip" "$(git -C "$REM" cat-file -e "refs/heads/$BR:CHANGE.yaml" 2>&1; echo $?)" "0"
+  eq "P1 stderr has no instruction either" "$(printf '%s' "$PERR" | grep -c 'Откройте PR вручную')" "0"
   eq "P1 the working tree and HEAD are untouched" "$(gw status --porcelain)$(gw symbolic-ref HEAD)" "refs/heads/sdx/s1"
 }
 }
@@ -248,6 +254,34 @@ newfx && {
 }
 }
 
+# ---------------------------------------------------------------------------------------------------- [P8]
+# verify-1 W3: pr-publish re-checks the package (pr-check --phase post --no-tests) before ANY push; FAIL -> rc 1, the remote is untouched
+blk_P8() {
+echo "[P8] the post-check before the push"
+case_on bad && newfx && {
+  pkg_craft_bad_extra_commit "$WC" "$BR" >/dev/null 2>&1
+  run_pub "$WC"
+  eq "P8 a substituted package (a commit between head and tip): rc 1" "$PRC" "1"
+  has "P8 ... the reason names pr-check and the failed check" "$PERR" "manifest.commit"
+  eq "P8 ... nothing was pushed (the remote is unchanged)" "$(remote_refs "$REM")" "refs/heads/dev"
+  run_pub "$WC" --dry-run
+  eq "P8 --dry-run refuses it as well" "$PRC" "1"
+  pkg_craft_bad_out_of_scope "$WC" "$BR" >/dev/null 2>&1
+  run_pub "$WC"
+  eq "P8 a package with a file out of scope: rc 1, the remote is unchanged" "$PRC/$(remote_refs "$REM")" "1/refs/heads/dev"
+}
+case_on warn && newfx && {   # WARN was confirmed at P7 of the command: it does not block the push
+  pkg_craft_bad_no_adr "$WC" "$BR" >/dev/null 2>&1
+  run_pub "$WC"
+  eq "P8 a WARN-only package (manifest.adr): rc 0, pushed" "$PRC/$(jv .pushed)" "0/true"
+}
+case_on good && newfx && {
+  build_pkg "$WC" || return 0
+  run_pub "$WC"
+  eq "P8 a correct package passes the post-check: rc 0, pushed" "$PRC/$(jv .pushed)" "0/true"
+}
+}
+
 # ---------------------------------------------------------------------------------------------------- [P5]
 # gh_stub <dir>: a fake `gh` that records its argv ("[a][b]..." per call) in $GH_LOG and the body file in $GH_BODY
 gh_stub() {
@@ -270,7 +304,7 @@ STUB
 nogh_path() {
   local t p
   mkdir -p "$1"
-  for t in git jq bash sh env awk sed grep cut tr head tail mktemp rm cat sort uniq wc dirname basename mv cp ls date find tee uname id; do
+  for t in git jq bash sh env awk sed grep cut tr head tail mktemp rm cat sort uniq wc dirname basename mv cp ls date find tee uname id sha256sum shasum tar xargs expr stat od; do
     p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$1/$t"
   done
 }
@@ -295,6 +329,7 @@ p5_a() {
   eq "P5a then gh pr create with the exact argv" "$(sed -n 3p "$GH_LOG" | sed 's/\[--body-file\]\[[^]]*\]$/[--body-file][F]/')" "[pr][create][--repo][o/r][--base][dev][--head][$BR][--title][C-ACME-001: Feature mod1][--body-file][F]"
   eq "P5a no further gh calls" "$(grep -c . "$GH_LOG")" "3"
   eq "P5a JSON pr.url, created" "$(jv '.pr.url+" "+(.pr.created|tostring)')" "https://github.com/o/r/pull/7 true"
+  eq "P5a JSON ready (the PR exists)" "$(jv .ready)" "true"
   eq "P5a JSON degraded and instruction are null" "$(jv '(.degraded|tostring)+" "+(.instruction|tostring)')" "null null"
   body="$(cat "$GH_BODY" 2>/dev/null)"
   has "P5a body: the commitment" "$body" "C-ACME-001"
@@ -347,6 +382,7 @@ p5_e() {
   PATH="$GHD:$PATH" GH_CREATE_RC=1 run_pub "$WC"
   eq "P5e gh pr create fails: rc 0, gh-failed" "$PRC/$(jv .degraded)" "0/gh-failed"
   has "P5e ... with the instruction" "$(jv .instruction)" "Откройте PR вручную"
+  eq "P5e ... and the package is NOT ready (no pull request)" "$(jv .ready)" "false"
   eq "P5e ... and the push is done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
   }
 }
@@ -366,6 +402,7 @@ p5_g() {
   PATH="$GHD:$PATH" run_pub "$WC"
   eq "P5g delivery branch: rc 0, pushed" "$PRC/$(jv .pushed)" "0/true"
   eq "P5g gh was not called" "$(grep -c . "$GH_LOG")" "0"
+  eq "P5g ready: the branch with CHANGE.yaml is enough for delivery branch" "$(jv .ready)" "true"
   eq "P5g no PR, no degradation, no instruction" "$(jv '(.pr|tostring)+(.degraded|tostring)+(.instruction|tostring)')" "nullnullnull"
   }
 }
@@ -401,7 +438,7 @@ OWNED="sdx/hooks/pr-publish.sh sdx/hooks/lib sdx/hooks/prod-guard.sh"
 ST_BEFORE="$(git -C "$ROOT" status --porcelain -- $OWNED)"
 MUT_NAMES=""
 mk_plugin() {   # <dir>: a copy of the script under test with its lib/ and prod-guard.sh
-  mkdir -p "$1/hooks" && cp -Rp "$(dirname "$SUT")/lib" "$1/hooks/lib" && cp "$SUT" "$1/hooks/pr-publish.sh" && cp "$SCRIPT_DIR/prod-guard.sh" "$1/hooks/prod-guard.sh"
+  mkdir -p "$1/hooks" && cp -Rp "$(dirname "$SUT")/lib" "$1/hooks/lib" && cp "$SUT" "$1/hooks/pr-publish.sh" && cp "$SCRIPT_DIR/prod-guard.sh" "$1/hooks/prod-guard.sh" && cp "$SCRIPT_DIR/pr-check.sh" "$1/hooks/pr-check.sh" && cp "$SCRIPT_DIR/mandate-info.sh" "$1/hooks/mandate-info.sh"
 }
 mutate() {   # <name> <sed expr> <blocks> [cases]
   local name="$1" expr="$2" only="$3" cases="${4:-}" d="$MUTDIR/$1"
@@ -416,6 +453,8 @@ mutate PKG-P-NOFOLLOW  '/# PKG-P-NOFOLLOW/s/-c push.followTags=false -c push.def
 mutate PKG-P-FF        '/# PKG-P-FF/s/die 1 "[^"]*"/true/' "P3" "ff"
 mutate PKG-P-GH        '/# PKG-P-GH/s/degraded="\$1";/die 1 "gh: $1";/' "P5" "b"
 mutate PKG-P-URLWL     '/# PKG-P-URLWL/s/pr_url_ok "\$remote" ||/true ||/' "P6" "urls"
+mutate PKG-P-POSTCHECK '/# PKG-P-POSTCHECK/s/pcrc=\$?/pcrc=0/' "P8" "bad"
+mutate PKG-P-BAREINSTR '/# PKG-P-BAREINSTR/s/if \[ "\$hosting" = github \]; then gh_step; fi/if [ "$hosting" = github ]; then gh_step; else instruction="$instr"; fi/' "P1"
 mutate PKG-P-PRODGUARD '/# PKG-P-PRODGUARD/s/die 1 "[^"]*"/true/' "P6" "prod"
 wait
 for name in $MUT_NAMES; do
@@ -446,7 +485,7 @@ run_blocks() {
     FAIL_COUNT=$((FAIL_COUNT + $(grep -c "^  FAIL: " "$TMP/out-$b.txt")))
   done
 }
-run_blocks P1 P2 P3 P4 P5 P6 P7 Port Mut
+run_blocks P1 P2 P3 P4 P5 P6 P7 P8 Port Mut
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

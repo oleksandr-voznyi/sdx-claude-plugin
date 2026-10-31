@@ -3,7 +3,7 @@
 #
 #   bash pr-publish.sh --sid <sid> [--proj DIR] [--commitment C] [--title T] [--base-name B]
 #                      [--remote <name|URL>] [--hosting auto|github|bare] [--dry-run]
-#   stdout: one JSON object {branch, remote, remote_sha, pushed, already, hosting, pr:{url,created}|null,
+#   stdout: one JSON object {branch, remote, remote_sha, pushed, already, ready, hosting, pr:{url,created}|null,
 #           degraded: gh-missing|gh-unauthenticated|gh-failed|null, instruction: string|null}
 #   stderr: progress.  rc: 0 published (a degraded PR step included) | 1 refusal | 2 usage / environment
 #
@@ -12,6 +12,7 @@
 # --force / --force-with-lease / --all / --mirror / --tags / --follow-tags; the user's git configuration is neutralised),
 # a whitelist of URL schemes (GIT_ALLOW_PROTOCOL as well), prod-guard on the synthesised `git push`, fast-forward only
 # (overwriting a remote change/* is not implemented in 2.5.0). Every output goes through pr_url_show: no credentials.
+# Before any network access the package is re-checked by pr-check.sh --phase post --no-tests (FAIL -> rc 1, no push).
 # --dry-run validates everything and prints the result WITHOUT any network access (no ls-remote, no push, no gh).
 # bash 3.2, no arrays; no interpreters other than bash/awk/sed/jq/git (+ the optional gh CLI). Anchors "# PKG-P-*" are
 # mutation-run labels.
@@ -109,6 +110,16 @@ $b_sl
   printf '%s\n' "$body" > "$bodyf"
 fi
 
+# ---- the package is re-checked BEFORE any push (verify-1 W3): "pr-check blocks the push" is enforced here, not only by the order of the steps
+# of /sdx:pr. Phase post, without the project tests (they ran in phase pre). FAIL (rc 1) or an environment error (rc 2) refuse the push;
+# WARN (rc 3) was confirmed by the user at P7 of the command, so it does not block. There is no way to skip this check.
+pcx="$(bash "$here/pr-check.sh" --sid "$sid" --proj "$proj" --phase post --no-tests "$@" 2>&1)"; pcrc=$?   # PKG-P-POSTCHECK
+case "$pcrc" in
+  0|3) ;;
+  *) pcf="$(printf '%s\n' "$pcx" | grep -E '^(FAIL|PR-CHECK)' | head -n 6 | scrub | tr '\n' ' ')"
+     die 1 "pr-check --phase post отверг пакет (rc $pcrc), push не выполнен: $pcf" ;;
+esac
+
 rsha=""; pushed=false; already=false
 if [ "$dry" = 0 ]; then
   export GIT_ALLOW_PROTOCOL=file:ssh:https:http GIT_TERMINAL_PROMPT=0
@@ -161,14 +172,21 @@ gh_step() {
   return 0
 }
 if [ "$PR_DELIVERY" = pr ] && [ "$dry" = 0 ]; then
-  if [ "$hosting" = github ]; then gh_step; else instruction="$instr"; fi
+  # github only: a bare host has no pull requests, the package is ready as the branch + CHANGE.yaml (REQ-PKG-15); "open the PR manually"
+  # is shown solely for a degraded github step. With delivery: branch no PR is created at all.
+  if [ "$hosting" = github ]; then gh_step; fi   # PKG-P-BAREINSTR
+fi
+# ready: the branch with CHANGE.yaml is on the remote and, for a github host with delivery: pr, the pull request exists
+ready=false
+if [ "$pushed" = true ]; then
+  if [ "$PR_DELIVERY" = pr ] && [ "$hosting" = github ] && [ -z "$pr_url" ]; then ready=false; else ready=true; fi
 fi
 if [ -n "$pr_url" ]; then pr_clean "$pr_url" 300; pr_url="$PR_CLEAN"; fi
 
 # ---- result ----
-jq -n -c --arg branch "$PR_BRANCH" --arg remote "$remote_show" --arg rsha "$rsha" --argjson pushed "$pushed" --argjson already "$already" \
+jq -n -c --arg branch "$PR_BRANCH" --arg remote "$remote_show" --arg rsha "$rsha" --argjson pushed "$pushed" --argjson already "$already" --argjson ready "$ready" \
   --arg hosting "$hosting" --arg purl "$pr_url" --argjson created "$pr_created" --arg degraded "$degraded" --arg instruction "$instruction" '
-  {branch: $branch, remote: $remote, remote_sha: (if $rsha == "" then null else $rsha end), pushed: $pushed, already: $already,
+  {branch: $branch, remote: $remote, remote_sha: (if $rsha == "" then null else $rsha end), pushed: $pushed, already: $already, ready: $ready,
    hosting: $hosting, pr: (if $purl == "" then null else {url: $purl, created: $created} end),
    degraded: (if $degraded == "" then null else $degraded end), instruction: (if $instruction == "" then null else $instruction end)}'
 exit 0

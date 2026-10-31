@@ -99,7 +99,7 @@ newfx && {
   eq "P1 JSON already" "$(jv .already)" "false"
   eq "P1 JSON remote_sha == tip" "$(jv .remote_sha)" "$TIP"
   eq "P1 the remote ref == tip" "$(git -C "$REM" rev-parse "refs/heads/$BR")" "$TIP"
-  eq "P1 JSON keys" "$(jv 'keys|join(",")')" "branch,degraded,hosting,instruction,already,pr,pushed,remote,remote_sha" 
+  eq "P1 JSON keys" "$(jv 'keys|join(",")')" "already,branch,degraded,hosting,instruction,pr,pushed,remote,remote_sha" 
   eq "P1 local bare -> hosting bare, no PR" "$(jv '.hosting+"/"+(.pr|tostring)')" "bare/null"
   eq "P1 the working tree and HEAD are untouched" "$(gw status --porcelain)$(gw symbolic-ref HEAD)" "refs/heads/sdx/s1"
 }

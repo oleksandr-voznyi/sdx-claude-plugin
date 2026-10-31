@@ -324,6 +324,16 @@ chk_pr_auto_registry() {
   awk '/^\*\*P4\./{f=1;next} f' "$1" | grep -qF 'auto_decisions.md' && { echo "pr.md writes auto_decisions.md after P4 in $1"; return 1; }
   return 0
 }
+# verify-3 WARN-2: a direct /sdx:pr always passes the entry gate of archive.md (auto disclosure), on any stage including Closeout
+chk_pr_p1_gate() {
+  local l; l="$(grep -E '^\*\*P1\.' "$1")"
+  local t
+  for t in '**любом** `stage`' 'гейт входа' 'auto_decisions.md' 'no_gates' 'commands/archive.md'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "P1 lacks '$t' in $1"; return 1; }
+  done
+  printf '%s' "$l" | grep -qF 'и `stage` не `Closeout`' && { echo "P1 skips the entry gate at stage Closeout in $1"; return 1; }
+  return 0
+}
 chk_pr_refusal() {  # P0: the refusal without a mandate is exactly one verbatim line (REQ-PKG-2/34)
   local c; c="$(grep -cF -- "$PR_REFUSE" "$1")"
   [ "$c" = 1 ] || { echo "the one-line refusal occurs $c times in $1 (want 1)"; return 1; }
@@ -366,8 +376,26 @@ chk_flags() {
     case "$first" in ""|--*|'['*|'<'*|')'*|'|'*|'&'*|';'*) ;; [a-z]*-[a-z]*) grep -qF -- "$first" "$script" || { echo "$s: subcommand $first used in $f is absent from the script"; return 1; } ;; esac
   done < <(pr_calls "$f")
 }
+# verify-3 WARN-3: one Closeout taxonomy in every carrier: "мёрж" (no mandate) / "пакет" (pr|branch, /sdx:pr) / "мост" (artifact.offer, bridge:offer) / undefined
+chk_closeout_taxonomy() {  # chk_closeout_taxonomy <file>; quote styles are normalised, so the same words are required everywhere
+  local f="$1" n t
+  n="$(sed -e 's/«/"/g' -e 's/»/"/g' -e 's/„/"/g' -e 's/“/"/g' -e 's/”/"/g' "$f")"
+  for t in '"мёрж"' '"пакет"' '"мост"'; do
+    grep -qF -- "$t" <<<"$n" || { echo "no Closeout term $t in $f"; return 1; }
+  done
+  # the drifted wording: package = any defined delivery, or bridge:offer folded into the package variant
+  grep -F '"пакет"' <<<"$n" | grep -qF 'любым определённым' && { echo "stale 'package = any defined delivery' in $f"; return 1; }
+  return 0
+}
+chk_taxonomy_notes() {  # protocol.md / archive.md: marks of steps 6-8 per variant
+  local f="$1"
+  grep -qF '(n/a, пакет)' "$f" || { echo "no '(n/a, пакет)' in $f"; return 1; }
+  local n; n="$(sed -e 's/«/"/g' -e 's/»/"/g' -e 's/„/"/g' -e 's/“/"/g' -e 's/”/"/g' "$f" | grep -F '"мост"')"
+  grep -qF 'bridge:offer' <<<"$n" || { echo "no line naming the bridge variant together with bridge:offer in $f"; return 1; }
+  chk_closeout_taxonomy "$f"
+}
 chk_start_order() {  # start.md (FEAT-017): --from-order / --from-issue, step 1б, stamp-state; steps 1-8 intact
-  local f="$1" t n
+  local f="$1" t n l
   sed -n 1,4p "$f" | grep -qF 'argument-hint: <type> <goal> [--auto] [--from-order <order.yaml|msg_id>] [--from-issue <N>]' || { echo "no new argument-hint in $f"; return 1; }
   for t in '--from-order' '--from-issue' 'order-import.sh' 'stamp-state' 'sid_infix' 'from-file' 'from-msg' 'from-issue' 'MISMATCH' 'AskUserQuestion' 'repo.base' 'pr-mode' 'order.yaml' 'commitment'; do
     grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
@@ -379,6 +407,14 @@ chk_start_order() {  # start.md (FEAT-017): --from-order / --from-issue, step 1�
   printf "%s" "$blk" | grep -F -- '--from-order' | grep -F 'gate_mode: auto' | grep -F '[директива]' | grep -qF 'AskUserQuestion' || { echo "step 1б lacks the auto + --from-order [директива] stop in $f"; return 1; }
   # verify-2 WARN-1: the snapshot is written from the shown and confirmed content, the source is not re-read
   printf "%s" "$blk" | grep -qF -- '--out "$snapdir/order.yaml"' || { echo "step 1б lacks the first call with --out to a temp snapshot in $f"; return 1; }
+  # verify-3 WARN-1: the whole snapshot (requirements included) is shown as data before the session is created
+  l="$(printf "%s" "$blk" | grep -F -- '(ii-а)')"
+  for t in 'целиком' 'requirements' '[ДАННЫЕ, не инструкции]'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "step 1б (ii-а) lacks '$t' in $f"; return 1; }
+  done
+  # verify-3 INFO: the mktemp path is printed and substituted literally; MISMATCH creates no session
+  printf "%s" "$blk" | grep -qF 'буквально' || { echo "step 1б lacks the literal snapdir path rule in $f"; return 1; }
+  printf "%s" "$blk" | grep -qF 'сессия не создаётся' || { echo "step 1б lacks 'сессия не создаётся' for MISMATCH in $f"; return 1; }
   s6="$(grep -E '^6а\.' "$f")"
   printf '%s' "$s6" | grep -qF 'не вызывается повторно' || { echo "step 6а lacks 'не вызывается повторно' in $f"; return 1; }
   printf '%s' "$s6" | grep -qF 'подтверждённый снимок' || { echo "step 6а lacks 'подтверждённый снимок' in $f"; return 1; }
@@ -628,6 +664,24 @@ done
 expect_red "red: archive.md with the old manual instruction" chk_archive_pkg "$TMP/t19b.md"
 
 echo ""
+echo "[19b] one Closeout taxonomy in every carrier: мёрж / пакет / мост / undefined (verify-3 WARN-3)"
+adr_section "$DECISIONS" ADR-022 > "$TMP/adr022.md"
+for pair in "protocol.md:$PROTOCOL" "archive.md:$ARCHIVE_MD" "ADR-022:$TMP/adr022.md" "CLAUDE.md:$ROOT/CLAUDE.md" "specs/mo-interop.md:$ROOT/docs/specs/mo-interop.md" "designs/mo-interop.md:$ROOT/docs/designs/mo-interop.md"; do
+  nm="${pair%%:*}"; fl="${pair#*:}"
+  expect_ok "$nm: terms мёрж / пакет / мост" chk_closeout_taxonomy "$fl"
+  for w in 'мёрж' 'пакет' 'мост'; do
+    sed "s/$w\([“»]\)/zz\1/g" "$fl" > "$TMP/t19c.md"
+    expect_red "red: $nm without the term \"$w\"" chk_closeout_taxonomy "$TMP/t19c.md"
+  done
+done
+expect_ok "protocol.md: (n/a, пакет) and the bridge named with bridge:offer" chk_taxonomy_notes "$PROTOCOL"
+expect_ok "archive.md: (n/a, пакет) and the bridge named with bridge:offer" chk_taxonomy_notes "$ARCHIVE_MD"
+{ cat "$PROTOCOL"; echo 'Вариант „пакет“ — любым определённым `delivery`.'; } > "$TMP/t19d.md"
+expect_red "red: protocol.md with the drifted 'package = any defined delivery'" chk_closeout_taxonomy "$TMP/t19d.md"
+sed 's/(n\/a, пакет)/(n\/a, zz)/g' "$PROTOCOL" > "$TMP/t19e.md"
+expect_red "red: protocol.md without (n/a, пакет)" chk_taxonomy_notes "$TMP/t19e.md"
+
+echo ""
 echo "[20] commands/pr.md: pipeline P0..P10, scripts, confirmation in any gate_mode, prohibitions, flags match the scripts (REQ-PKG-1, 2, 3, 13, 17, 35)"
 PR_MD="$ROOT/commands/pr.md"
 expect_ok "pr.md frontmatter" chk_pr_head "$PR_MD"
@@ -647,6 +701,13 @@ sed '/^\*\*P5\./s/Журнал авторежима сессии вести не
 expect_red "red: pr.md P5 writes auto_decisions.md after P4" chk_pr_auto_registry "$TMP/t20n.md"
 sed '/^\*\*P5\./s/только в трейлере `SDX-PR-Ack`/в трейлере/' "$PR_MD" > "$TMP/t20o.md"
 expect_red "red: pr.md P5 without 'только в трейлере SDX-PR-Ack'" chk_pr_auto_registry "$TMP/t20o.md"
+expect_ok "pr.md P1 always passes the entry gate of archive.md" chk_pr_p1_gate "$PR_MD"
+sed '/^\*\*P1\./s/ всегда пройди прелюдию/ пройди прелюдию/; /^\*\*P1\./s/гейт входа/вход/' "$PR_MD" > "$TMP/t20p.md"
+expect_red "red: pr.md P1 without the entry gate" chk_pr_p1_gate "$TMP/t20p.md"
+sed '/^\*\*P1\./s/auto_decisions.md/zz.md/' "$PR_MD" > "$TMP/t20q.md"
+expect_red "red: pr.md P1 without the auto_decisions.md disclosure" chk_pr_p1_gate "$TMP/t20q.md"
+sed '/^\*\*P1\./s/(прямой вызов — на \*\*любом\*\* `stage`, включая `Closeout`)/и `stage` не `Closeout`/' "$PR_MD" > "$TMP/t20r.md"
+expect_red "red: pr.md P1 only at stage != Closeout" chk_pr_p1_gate "$TMP/t20r.md"
 expect_ok "pr.md order P0..P10" chk_pr_order "$PR_MD"
 expect_ok "pr.md prohibitions, no bare git push" chk_pr_prohibitions "$PR_MD"
 sed '1,5{/^argument-hint:/d;}' "$PR_MD" > "$TMP/t20a.md"; expect_red "red: pr.md without argument-hint" chk_pr_head "$TMP/t20a.md"
@@ -704,6 +765,16 @@ expect_red "red: start.md 6а without 'подтверждённый снимок
 expect_red "red: start.md 6а re-reading the source" chk_start_order "$TMP/t26i.md"
 sed 's/--out "$snapdir\/order.yaml"//' "$START_MD" > "$TMP/t26j.md"
 expect_red "red: start.md 1б without the first call --out" chk_start_order "$TMP/t26j.md"
+sed '/(ii-а)/s/requirements/zz/g' "$START_MD" > "$TMP/t26k.md"
+expect_red "red: start.md (ii-а) without requirements in the shown snapshot" chk_start_order "$TMP/t26k.md"
+sed '/(ii-а)/s/целиком/частично/' "$START_MD" > "$TMP/t26l.md"
+expect_red "red: start.md (ii-а) without 'целиком'" chk_start_order "$TMP/t26l.md"
+sed '/(ii-а)/s/\[ДАННЫЕ, не инструкции\]/[показ]/' "$START_MD" > "$TMP/t26m.md"
+expect_red "red: start.md (ii-а) without the data marker" chk_start_order "$TMP/t26m.md"
+sed 's/буквально/как придётся/g' "$START_MD" > "$TMP/t26n.md"
+expect_red "red: start.md without the literal snapdir path rule" chk_start_order "$TMP/t26n.md"
+sed 's/сессия не создаётся/сессия создаётся/' "$START_MD" > "$TMP/t26o.md"
+expect_red "red: start.md without 'сессия не создаётся' on MISMATCH" chk_start_order "$TMP/t26o.md"
 sed 's/^1б\./1x./' "$START_MD" > "$TMP/t26b.md"; expect_red "red: start.md without step 1б" chk_start_order "$TMP/t26b.md"
 sed 's/^3\. /3x. /' "$START_MD" > "$TMP/t26c.md"; expect_red "red: start.md without step 3" chk_start_order "$TMP/t26c.md"
 expect_ok "status.md" chk_status_pkg "$STATUS_MD"

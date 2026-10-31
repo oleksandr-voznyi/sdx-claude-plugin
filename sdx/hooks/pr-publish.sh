@@ -72,12 +72,48 @@ case "$pg" in *'"permissionDecision":"deny"'*) die 1 "prod-guard: push забл�
 # ---- hosting ----
 if [ "$hosting_arg" = auto ]; then pr_hosting "$rurl" "$PR_HOSTING_HINT"; hosting="$PR_HOSTING"; else hosting="$hosting_arg"; fi
 
+# ---- the PR body (from the manifest of the tip) is built BEFORE any network access: a secret refuses the push ----
+errf=""; bodyf=""
+trap 'rm -f "$errf" "$bodyf"' EXIT
+if [ "$PR_DELIVERY" = pr ]; then
+  man="$(mktemp "${TMPDIR:-/tmp}/sdx-pr-man.XXXXXX")" || die 2 "не удалось создать временный файл"
+  if git -C "$proj" show "$tip:CHANGE.yaml" > "$man" 2>/dev/null && my_load "$man"; then
+    _my_scalar change.commitment; pr_clean "$MY_S" 80; b_c="$PR_CLEAN"
+    _my_scalar change.executor; pr_clean "$MY_S" 80; b_e="$PR_CLEAN"
+    _my_list change.scope_touched; b_n="$(printf '%s\n' "$MY_L" | grep -c .)"
+    _my_scalar change.verify.tests; pr_clean "$MY_S" 40; b_v="$PR_CLEAN"
+    _my_list change.adr; pr_clean "$(printf '%s' "$MY_L" | tr '\n' ',' | sed 's/,/, /g')" 300; b_a="${PR_CLEAN%, }"
+    _my_scalar change.touches_shared; b_s="$MY_S"
+    _my_scalar change.history_ref; pr_clean "$MY_S" 120; b_h="$PR_CLEAN"
+    _my_scalar change.notes; pr_clean "$MY_S" 300; b_o="$PR_CLEAN"
+    if [ "$b_s" = true ]; then b_sl="touches_shared: true — слияние такого пакета — решение человека"; else b_sl="touches_shared: false"; fi
+    body="Обязательство: $b_c
+Исполнитель: $b_e
+Изменено файлов: $b_n
+Проверка исполнителя (verify.tests): ${b_v:-—}
+ADR: ${b_a:-—}
+$b_sl
+История: ${b_h:-—}
+Примечания исполнителя: ${b_o:-—}
+
+Пакет собран SDX (/sdx:pr): один squash-коммит кода и отдельный последний коммит CHANGE.yaml."
+  else
+    body="Обязательство: $PR_C
+Исполнитель: $PR_EXEC
+
+(манифест CHANGE.yaml в вершине ветки не прочитан)"
+  fi
+  rm -f "$man"
+  if pr_has_secret "$body"; then die 1 "тело PR похоже на секрет (поле манифеста) — отправка отменена"; fi
+  bodyf="$(mktemp "${TMPDIR:-/tmp}/sdx-pr-body.XXXXXX")" || die 2 "не удалось создать временный файл"
+  printf '%s\n' "$body" > "$bodyf"
+fi
+
 rsha=""; pushed=false; already=false
 if [ "$dry" = 0 ]; then
   export GIT_ALLOW_PROTOCOL=file:ssh:https:http GIT_TERMINAL_PROMPT=0
   : "${GIT_SSH_COMMAND:=ssh -o BatchMode=yes}"; export GIT_SSH_COMMAND
   errf="$(mktemp "${TMPDIR:-/tmp}/sdx-pr-pub.XXXXXX")" || die 2 "не удалось создать временный файл"
-  trap 'rm -f "$errf"' EXIT
   lsout="$(git -C "$proj" ls-remote --heads -- "$remote" "refs/heads/$PR_BRANCH" 2>"$errf")" \
     || die 1 "не удалось прочитать remote $remote_show: $(head -n 3 "$errf" | scrub | tr '\n' ' ')"
   rsha="$(printf '%s\n' "$lsout" | awk 'NR == 1 { print $1 }')"
@@ -99,9 +135,40 @@ if [ "$dry" = 0 ]; then
   fi
 fi
 
+# ---- the pull request (delivery: pr): gh when it is there; any trouble with it is a degradation, never a refusal ----
+pr_url=""; pr_created=false; degraded=""; instruction=""
+instr="Откройте PR вручную: $PR_BRANCH → $PR_BASE_NAME в $rurl_show."
+degrade() { degraded="$1"; instruction="$instr"; }   # PKG-P-GH
+gh_step() {
+  local t owner repo slug="" lst purl out line
+  case "$rurl_show" in
+    *github.com[:/]*)
+      t="${rurl_show#*github.com}"; t="${t#[:/]}"; t="${t%/}"; t="${t%.git}"
+      case "$t" in */*)
+        owner="${t%%/*}"; repo="${t#*/}"
+        case "$owner" in ""|*[!A-Za-z0-9._-]*) ;; *) case "$repo" in ""|*[!A-Za-z0-9._-]*) ;; *) slug="$owner/$repo" ;; esac ;; esac ;;
+      esac ;;
+  esac
+  command -v gh >/dev/null 2>&1 || { degrade gh-missing; return 0; }
+  GH_PROMPT_DISABLED=1 gh auth status >/dev/null 2>&1 || { degrade gh-unauthenticated; return 0; }
+  [ -n "$slug" ] || { degrade gh-failed; return 0; }
+  lst="$(GH_PROMPT_DISABLED=1 gh pr list --head "$PR_BRANCH" --repo "$slug" --json url 2>/dev/null)" || { degrade gh-failed; return 0; }
+  purl="$(printf '%s' "$lst" | jq -r '.[0].url // empty' 2>/dev/null)"
+  if [ -n "$purl" ]; then pr_url="$purl"; pr_created=false; return 0; fi
+  out="$(GH_PROMPT_DISABLED=1 gh pr create --repo "$slug" --base "$PR_BASE_NAME" --head "$PR_BRANCH" --title "$PR_C: $PR_TITLE" --body-file "$bodyf" 2>/dev/null)" || { degrade gh-failed; return 0; }
+  line="$(printf '%s\n' "$out" | grep -E '^https?://' | tail -n 1)"
+  if [ -n "$line" ]; then pr_url="$line"; pr_created=true; else degrade gh-failed; fi
+  return 0
+}
+if [ "$PR_DELIVERY" = pr ] && [ "$dry" = 0 ]; then
+  if [ "$hosting" = github ]; then gh_step; else instruction="$instr"; fi
+fi
+if [ -n "$pr_url" ]; then pr_clean "$pr_url" 300; pr_url="$PR_CLEAN"; fi
+
 # ---- result ----
 jq -n -c --arg branch "$PR_BRANCH" --arg remote "$remote_show" --arg rsha "$rsha" --argjson pushed "$pushed" --argjson already "$already" \
-  --arg hosting "$hosting" '
+  --arg hosting "$hosting" --arg purl "$pr_url" --argjson created "$pr_created" --arg degraded "$degraded" --arg instruction "$instruction" '
   {branch: $branch, remote: $remote, remote_sha: (if $rsha == "" then null else $rsha end), pushed: $pushed, already: $already,
-   hosting: $hosting, pr: null, degraded: null, instruction: null}'
+   hosting: $hosting, pr: (if $purl == "" then null else {url: $purl, created: $created} end),
+   degraded: (if $degraded == "" then null else $degraded end), instruction: (if $instruction == "" then null else $instruction end)}'
 exit 0

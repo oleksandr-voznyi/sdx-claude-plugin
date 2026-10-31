@@ -68,17 +68,18 @@ gw() { git -C "$WC" "$@"; }
 mand_edit() {   # <sed expr>: edit the (untracked) mandate of the current copy
   sed "$1" "$WC/.mesh/mandate.yaml" > "$WC/.mesh/mandate.new" && mv "$WC/.mesh/mandate.new" "$WC/.mesh/mandate.yaml"
 }
-# fx_set_order <wc> <file|none>: rebuild the history of sdx/s1 with another order.yaml snapshot (or without one) by plumbing
-fx_set_order() {
-  local wc="$1" src="$2" idx="$TMP/idx.$$" b t1 t2 t3 c1 c2 c3
+# fx_set_sfile <wc> <session file name> <file|none>: rebuild the history of sdx/s1 with another version of one session
+# file (or without it) by plumbing; the code and the closing commit keep their trees
+fx_set_sfile() {
+  local wc="$1" name="$2" src="$3" idx="$TMP/idx.$$" b c1 c2 c3
   b="$(git -C "$wc" rev-parse refs/heads/dev)"
-  rebuild() {   # <rev> <parent>: the tree of <rev> with the order replaced -> commit
+  rebuild() {   # <rev> <parent>: the tree of <rev> with the file replaced -> commit
     rm -f "$idx"
     GIT_INDEX_FILE="$idx" git -C "$wc" read-tree "$1"
-    if [ "$src" = none ]; then GIT_INDEX_FILE="$idx" git -C "$wc" update-index --force-remove .claude/sessions/s1/order.yaml
+    if [ "$src" = none ]; then GIT_INDEX_FILE="$idx" git -C "$wc" update-index --force-remove ".claude/sessions/s1/$name"
     else
       local bl; bl="$(git -C "$wc" hash-object -w "$src")"
-      GIT_INDEX_FILE="$idx" git -C "$wc" update-index --add --cacheinfo "100644,$bl,.claude/sessions/s1/order.yaml"
+      GIT_INDEX_FILE="$idx" git -C "$wc" update-index --add --cacheinfo "100644,$bl,.claude/sessions/s1/$name"
     fi
     local t; t="$(GIT_INDEX_FILE="$idx" git -C "$wc" write-tree)"
     printf 'rebuilt\n' | git -C "$wc" commit-tree "$t" -p "$2"
@@ -87,6 +88,7 @@ fx_set_order() {
   c3="$(printf 'close\n' | git -C "$wc" commit-tree "refs/heads/sdx/s1^{tree}" -p "$c2")"
   git -C "$wc" reset -q --hard "$c3"; rm -f "$idx"
 }
+fx_set_order() { fx_set_sfile "$1" order.yaml "$2"; }
 # fx_commit <wc> <path> <content> [msg]: a commit on the checked-out branch
 fx_commit() {
   mkdir -p "$(dirname "$1/$2")"; printf '%s\n' "$3" > "$1/$2"
@@ -201,6 +203,157 @@ newfx && {
   has "B8a message: not an SDX package" "$BERR" "не пакет SDX"
   run_build "$WC" --resubmit; eq "B8a non-package change/* with the flag: rc 1" "$BRC" "1"
   eq "B8a the foreign branch is untouched" "$(gw rev-parse "refs/heads/$BR")" "$(gw rev-parse refs/heads/dev)"
+}
+fi
+
+# manifest helpers: mf_load <wc> <tip> loads CHANGE.yaml of the tip with miniyaml; mf <key> prints a scalar, mfl <key> a list
+mf_load() { git -C "$1" show "$2:CHANGE.yaml" > "$TMP/m.yaml" 2>/dev/null; my_load "$TMP/m.yaml"; }
+mf() { _my_scalar "change.$1"; printf '%s' "$MY_S"; }
+mfl() { _my_list "change.$1"; printf '%s' "$MY_L"; }
+REG_ADR="docs/DECISIONS.md#ADR-099"
+BR=change/C-ACME-001-ex1
+
+# ---------------------------------------------------------------------------------------------------- [B1]
+if want B1; then
+echo "[B1] golden path"
+newfx && {
+  run_build "$WC"
+  eq "B1 rc 0" "$BRC" "0"
+  eq "B1 stdout is one JSON object with the documented keys" "$(jv 'keys|join(",")')" "adr,archive_sha256,base,base_ref,branch,commitment,diverged,docs,executor,head,resubmit,scope_touched,tip,touches_shared,warnings"
+  head="$(jv .head)"; tip="$(jv .tip)"; dev="$(gw rev-parse refs/heads/dev)"
+  eq "B1 branch" "$(jv .branch)" "$BR"
+  eq "B1 the ref points to the tip" "$(gw rev-parse "refs/heads/$BR")" "$tip"
+  eq "B1 tip^ == head" "$(gw rev-parse "$tip^" 2>/dev/null)" "$head"
+  eq "B1 head's parent == base" "$(gw rev-parse "$head^" 2>/dev/null)" "$dev"
+  eq "B1 base..head is exactly one commit" "$(gw rev-list --count "$dev..$head")" "1"
+  eq "B1 its subject is 'C: title'" "$(gw log -n1 --format=%s "$head")" "C-ACME-001: Feature mod1"
+  eq "B1 JSON base == dev" "$(jv .base)" "$dev"
+  eq "B1 JSON base_ref" "$(jv .base_ref)" "refs/heads/dev"
+  eq "B1 JSON commitment/executor" "$(jv '.commitment+"/"+.executor')" "C-ACME-001/ex1"
+  eq "B1 JSON resubmit/diverged false" "$(jv '(.resubmit|tostring)+"/"+(.diverged|tostring)')" "false/false"
+  oracle_expect "B1 oracle audit() -> approve" "$WC" "$BR" "approve"
+  # built-in negative: the same oracle on a damaged package is NOT approve
+  pkg_craft_bad_bad_archive "$WC" change/damaged >/dev/null 2>&1
+  oracle_of "$WC" change/damaged
+  if [ "$ORACLE" = SKIP ]; then :; elif [ "$ORACLE" != approve ]; then pass "B1 negative: the oracle rejects a damaged package ($ORACLE)"; else fail "B1 negative" "the oracle approved a damaged package"; fi
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B2]
+if want B2; then
+echo "[B2] plumbing invariants"
+newfx && {
+  snap() { { gw symbolic-ref HEAD; gw status --porcelain; gw ls-files -s; gw rev-parse refs/heads/sdx/s1 refs/heads/dev; gw for-each-ref --format='%(refname)' refs/heads refs/tags; } 2>&1; }
+  before="$(snap)"
+  run_build "$WC"
+  after="$(snap)"
+  eq "B2 rc 0" "$BRC" "0"
+  # the only change in refs/heads is the new package branch
+  eq "B2 HEAD, status, index and the other refs are unchanged (the new branch aside)" "$(printf '%s\n' "$after" | grep -vxF "refs/heads/$BR")" "$before"
+  eq "B2 no CHANGE.yaml on disk" "$(find "$WC" -name CHANGE.yaml -not -path '*/.git/*' | wc -l | tr -d ' ')" "0"
+  eq "B2 the working tree is clean" "$(gw status --porcelain)" ""
+  eq "B2 tip tree = head tree + exactly one blob (CHANGE.yaml)" "$(gw diff-tree -r --name-status "$(jv .head)" "$(jv .tip)" | tr '\t' ' ')" "A CHANGE.yaml"
+  eq "B2 the new ref is the only addition" "$(gw for-each-ref --format='%(refname)' refs/heads | grep -c "^refs/heads/change/")" "1"
+  eq "B2 no stray temporary index left in TMPDIR by the run" "$(ls "${TMPDIR:-/tmp}"/sdx-pr-idx.* 2>/dev/null | wc -l | tr -d ' ')" "0"
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B3]
+if want B3; then
+echo "[B3] archive_sha256"
+newfx && {
+  run_build "$WC"
+  head="$(jv .head)"; asha="$(jv .archive_sha256)"
+  eq "B3 JSON archive_sha256 is 64 hex" "$(printf '%s' "$asha" | grep -cE '^[0-9a-f]{64}$')" "1"
+  eq "B3 manifest carries the same value" "$(mf_load "$WC" "$(jv .tip)"; mf archive_sha256)" "$asha"
+  eq "B3 = sha256(git archive --format=tar head) in the fixture" "$(gw archive --format=tar "$head" | _pkg_sha256)" "$asha"
+  git clone -q "$WC" "$TMP/clone3" >/dev/null 2>&1
+  eq "B3 = the same sum recomputed in an INDEPENDENT clone" "$(git -C "$TMP/clone3" archive --format=tar "$head" 2>/dev/null | _pkg_sha256)" "$asha"
+  eq "B3 != the sum over the tip (the manifest commit is not part of the identity)" "$([ "$(gw archive --format=tar "$(jv .tip)" | _pkg_sha256)" != "$asha" ] && echo differs)" "differs"
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B4]
+if want B4; then
+echo "[B4] scope_touched (generated files included) and touches_shared"
+newfx && {
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"
+  eq "B4 scope_touched = all changed paths incl. package-lock.json" "$(mfl scope_touched | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md package-lock.json src/mod1/a.js "
+  eq "B4 JSON scope_touched is the count" "$(jv .scope_touched)" "4"
+  eq "B4 touches_shared true (package-lock.json is a shared path)" "$(mf touches_shared)" "true"
+  eq "B4 JSON touches_shared" "$(jv .touches_shared)" "true"
+}
+newfx && {
+  sed '/^    shared_paths:/{N;s/.*/    shared_paths: []/;}' "$WC/.mesh/mandate.yaml" > "$WC/.mesh/m.new" && mv "$WC/.mesh/m.new" "$WC/.mesh/mandate.yaml"
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"
+  eq "B4 touches_shared false when no shared path is touched" "$(mf touches_shared)" "false"
+  eq "B4 ... the lock file is still listed in scope_touched" "$(mfl scope_touched | grep -c '^package-lock.json$')" "1"
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B5]
+if want B5; then
+echo "[B5] adr, spec, verify, docs"
+newfx && {
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"
+  eq "B5 adr = the heading added to the registry" "$(mfl adr)" "$REG_ADR"
+  eq "B5 JSON adr" "$(jv '.adr|join(",")')" "$REG_ADR"
+  eq "B5 spec = path@short sha" "$(mf spec | sed 's/@[0-9a-f]*$/@H/')" "docs/specs/mod1.md@H"
+  eq "B5 the spec sha is a commit of sdx/s1" "$(gw cat-file -t "$(mf spec | sed 's/.*@//')" 2>/dev/null)" "commit"
+  eq "B5 verify.tests pass (verification_report.md says 'Итог: PASS')" "$(mf_load "$WC" "$(jv .tip)"; _my_scalar change.verify.tests; printf '%s' "$MY_S")" "pass"
+  eq "B5 verify.report points into the branch history" "$(_my_scalar change.verify.report; printf '%s' "$MY_S" | sed 's/@[0-9a-f]*:/@R:/')" "sdx/s1@R:.claude/sessions/s1/verification_report.md"
+  eq "B5 docs = changed files under docs_paths" "$(mfl docs | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md "
+  eq "B5 history_ref" "$(mf history_ref)" "executor:sdx/s1"
+  has "B5 notes name the session" "$(mf notes)" "s1"
+  eq "B5 JSON docs is the count" "$(jv .docs)" "2"
+}
+newfx && {   # registry not changed by the session
+  gw checkout -q dev -- docs/DECISIONS.md && gw commit -q -m "registry untouched"
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"
+  eq "B5 registry not changed -> adr: []" "$(mfl adr)" ""
+  eq "B5 ... and the manifest notes say so" "$(printf '%s' "$(mf notes)" | grep -c 'реестр')" "1"
+  eq "B5 ... docs no longer lists the registry" "$(mfl docs | tr '\n' ' ')" "docs/specs/mod1.md "
+}
+newfx && {   # docs_in_repo: none
+  sed 's/^  docs_in_repo: .*/  docs_in_repo: none/' "$WC/.mesh/mandate.yaml" > "$WC/.mesh/m.new" && mv "$WC/.mesh/m.new" "$WC/.mesh/mandate.yaml"
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"
+  eq "B5 docs_in_repo: none -> adr: []" "$(mfl adr)" ""
+  eq "B5 ... rc 0" "$BRC" "0"
+}
+newfx && {   # no spec in the change
+  gw checkout -q dev -- docs/specs/mod1.md && gw commit -q -m "spec untouched"
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"
+  eq "B5 no spec in the change -> the key is omitted" "$(my_exists change.spec && echo present || echo omitted)" "omitted"
+}
+newfx && {   # verification report without PASS
+  printf '# V\nИтог: FAIL\n' > "$TMP/vr.md"; fx_set_sfile "$WC" verification_report.md "$TMP/vr.md"
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"; _my_scalar change.verify.tests
+  eq "B5 report without 'Итог: PASS' -> verify.tests unknown" "$MY_S" "unknown"
+}
+newfx && {   # no verification report at all
+  fx_set_sfile "$WC" verification_report.md none
+  run_build "$WC"
+  mf_load "$WC" "$(jv .tip)"; _my_scalar change.verify.tests; t="$MY_S"; _my_scalar change.verify.report
+  eq "B5 no report -> verify.tests unknown, verify.report empty" "$t/$MY_S" "unknown/"
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B11]
+if want B11; then
+echo "[B11] the package does not carry the session"
+newfx && {
+  run_build "$WC"
+  lst="$(gw ls-tree -r --name-only "$(jv .tip)")"
+  eq "B11 no .claude/sessions/ in the tip tree" "$(printf '%s\n' "$lst" | grep -c '^\.claude/sessions/')" "0"
+  eq "B11 no protocol.yaml anywhere in the tip tree" "$(printf '%s\n' "$lst" | grep -cE '(^|/)protocol\.yaml$')" "0"
+  eq "B11 tip tree has CHANGE.yaml at the root" "$(printf '%s\n' "$lst" | grep -cx 'CHANGE.yaml')" "1"
 }
 fi
 

@@ -142,7 +142,7 @@ newfx && {
   refuse "empty diff" 1 "пуст"
 }
 newfx && {
-  fx_commit "$WC" .claude/sessions/s1/session_state.json '{"stage":"Closeout"}'
+  gw checkout -q refs/heads/sdx/s1~1 -- .claude/sessions/s1 && gw commit -q -m "session dir back"
   refuse "session directory in the tree" 1 "каталог сессии"
 }
 newfx && { rm -f "$WC/.mesh/mandate.yaml" "$WC/.mesh/endpoint.yaml"; refuse "no mandate" 1 "мандат"; }

@@ -108,17 +108,23 @@ function clean(s) { gsub(/[\t\r]/, " ", s); gsub(/^[ \t]+/, "", s); gsub(/[ \t]+
 index($0, "SDX-MANDATE-SCOPE:BEGIN") { blk = 1; next }
 index($0, "SDX-MANDATE-SCOPE:END") { blk = 0; next }
 blk && /^[ \t]*-[ \t]+Итог по области:/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); scope = clean(v); next }
+# Н-1 (verify-1): a report without bullet lines in "## Сводка" still carries its verdict: "Итог: PASS|FAIL|WARN" (plain, bold or as a
+# "## Итог: …" heading) or a "## Итог" heading with the verdict on the next line. The FIRST such line becomes one record when there are no bullets.
+pend && /^[ \t]*$/ { next }
+pend { v = $0; sub(/^[ \t]*[-*][ \t]+/, "", v); if (fb == "") fb = clean(v); pend = 0; next }
+/^##[ \t]+Итог[ \t]*$/ { pend = 1; next }                                                                  # PKG-X-VERDICT
+/^[ \t]*(##?[ \t]+)?(\*\*)?Итог(\*\*)?[ \t]*:[ \t]*(\*\*)?[ \t]*(PASS|FAIL|WARN)/ { v = $0; sub(/^[ \t]*##?[ \t]+/, "", v); gsub(/\*\*/, "", v); if (fb == "") fb = clean(v) }
 /^## Сводка[ \t]*$/ { sec = "s"; next }
 /^## Матрица/ { sec = "m"; next }
 /^##? / { sec = ""; next }
-sec == "s" && /^[ \t]*-[ \t]+/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); print clean(v); next }
+sec == "s" && /^[ \t]*-[ \t]+/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); print clean(v); nb++; next }
 sec == "m" && /^[ \t]*\|/ {
   line = $0; gsub(/[ \t]+$/, "", line); n = split(line, c, "|")
   last = (line ~ /\|$/) ? c[n - 1] : c[n]
   gsub(/[ \t*`]/, "", last)
   if (last == "OK") ok++; else if (last == "WARN") warn++; else if (last == "FAIL") fail++
 }
-END { if (ok + warn + fail > 0) print "Матрица: OK " (ok + 0) ", WARN " (warn + 0) ", FAIL " (fail + 0); if (scope != "") print scope }
+END { if (nb == 0 && fb != "") print fb; if (ok + warn + fail > 0) print "Матрица: OK " (ok + 0) ", WARN " (warn + 0) ", FAIL " (fail + 0); if (scope != "") print scope }
 '
 # SPEC.md / change_note.md -> "[ADDED|MODIFIED|REMOVED] <REQ id | other id | text>", duplicates dropped, order kept
 PX_DLT_AWK='

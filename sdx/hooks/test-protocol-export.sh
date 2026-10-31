@@ -11,6 +11,7 @@
 #  [X5] adr: a record that names ADR-<n> -> true, otherwise false
 #  [X6] id: D-1..D-n, unique, continuous (a skipped record takes no number)
 #  [X7] hostile values (quote, backslash, ---, ": ", tab, 5000 characters, U+2028) survive a safe_load roundtrip
+#  [X11] verified[] fallback: no bulleted Сводка -> the verdict line as one record (verify-1 Н-1)
 #  [X8] verified / deltas / done from verification_report.md, SPEC.md / change_note.md, PLAN.md / docs/history/plans/<sid>.md
 #  [X9] --from-rev <parent of the Closeout step-5 commit> gives the same file as a run before step 5
 #  [X10] portability (BUG-010), no python / eval in the script
@@ -321,6 +322,61 @@ else
 fi
 fi
 
+# ---------------------------------------------------------------------------------------------------- [X11]
+# verify-1 Н-1: a report whose "## Сводка" has no bullet lines still gives one verified[] record: the verdict line
+if want X11; then
+echo "[X11] verified[]: no bulleted Сводка -> the verdict line (Итог: PASS|FAIL / ## Итог) as one record"
+mkproj x11 "$LOG_A"
+S11="$PXP/.claude/sessions/$PXSID"
+vrun() {   # <label> <expected verified joined by |> : the report body is on stdin
+  cat > "$S11/verification_report.md"
+  px "$PXP"
+  if [ "$HAVE_YAML" = 1 ]; then oracle "$OUT"; eq "[X11] $1" "$(pj '.data.verified|join("|")')" "$2"
+  else info "[X11] python3/PyYAML absent: the content check '$1' is skipped (not a PASS)"; fi
+}
+vrun "plain 'Итог: PASS' under Сводка" "Итог: PASS" <<'MD'
+# Verification Report: s1
+
+## Сводка
+Итог: PASS
+MD
+vrun "'## Итог: FAIL' heading without Сводка" "Итог: FAIL" <<'MD'
+# Verification Report
+## Итог: FAIL
+- Находки: 1
+MD
+vrun "'## Итог' heading, the verdict on the next line" "PASS" <<'MD'
+# Verification Report
+
+## Итог
+
+PASS
+MD
+vrun "bold verdict, the first one wins" "Итог: PASS" <<'MD'
+# Report
+**Итог: PASS**
+Итог: FAIL
+MD
+vrun "bullets present: the bullets only (no extra verdict record)" "Объём: полный|Итог: PASS" <<'MD'
+## Сводка
+- Объём: полный
+- Итог: PASS
+
+## Итог
+FAIL
+MD
+vrun "the mandate-scope verdict is not taken for the report verdict" "Итог по области: PASS" <<'MD'
+# Report
+<!-- SDX-MANDATE-SCOPE:BEGIN -->
+- Итог по области: PASS
+<!-- SDX-MANDATE-SCOPE:END -->
+MD
+vrun "no verdict at all: empty" "" <<'MD'
+# Report
+Просто текст.
+MD
+fi
+
 # ---------------------------------------------------------------------------------------------------- [X9]
 if want X9; then
 echo "[X9] --from-rev <parent of the Closeout step-5 commit> gives the same file as a run before step 5"
@@ -381,6 +437,8 @@ mutate PKG-X-FMTB  '/# PKG-X-FMTB/s/триада/нетакоготега/' X2
 mutate PKG-X-EMPTY '/# PKG-X-EMPTY/s/"\\(\$k): \[\]"/""/' X4
 mutate PKG-X-ADR   '/# PKG-X-ADR/s/a = .*) ? 1 : 0/a = 0/' X5
 mutate PKG-X-ID    '/# PKG-X-ID/s/((\.key + 1) . tostring)/"1"/' X6
+mutate PKG-X-VERDICT '/# PKG-X-VERDICT/s/pend = 1/pend = 0/' X11
+mutate PKG-X-VERDICT-FB '/^END {/s/nb == 0 \&\& fb != ""/nb == 99 \&\& fb != ""/' X11
 mutate PKG-X-REV   '/# PKG-X-REV/s/if \[ -n "\$REVSHA" \]/if false/' X9
 fi
 

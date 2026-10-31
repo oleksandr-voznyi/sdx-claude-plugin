@@ -181,18 +181,19 @@ for n in range(26):
     walk(got, "")
     open("%s/%02d.exp" % (out, n), "w", encoding="utf-8").write("\n".join(lines) + "\n")
 PY
-  okn=0; badn=0; badlist=""
+  okn=0; badn=0; badlist=""; foldedn=0
   for y in "$TMP"/gen/*.yaml; do
     b="${y%.yaml}"
     bash "$SCRIPT" unfold "$y" > "$b.unf" 2>/dev/null
+    [ "$(wc -l < "$b.unf")" -lt "$(wc -l < "$y")" ] && foldedn=$((foldedn + 1))
     if my_load "$b.unf"; then
       printf '%s\n' "$MY_NORM" | tr '\037' '\t' | grep -E '^[SZLE]'$'\t' | LC_ALL=C sort > "$b.got"
       LC_ALL=C sort "$b.exp" | grep . > "$b.expsorted"
       if cmp -s "$b.got" "$b.expsorted"; then okn=$((okn + 1)); else badn=$((badn + 1)); badlist="$badlist ${b##*/}"; fi
     else badn=$((badn + 1)); badlist="$badlist ${b##*/}(parse: $MY_ERR)"; fi
   done
-  if [ "$okn" -ge 25 ] && [ "$badn" -eq 0 ]; then pass "[O2] parity with yaml.safe_load on $okn generated dumps (0 divergences)"
-  else fail "[O2] parity with yaml.safe_load" "$okn equal, $badn diverge:$badlist"; fi
+  if [ "$okn" -ge 25 ] && [ "$badn" -eq 0 ] && [ "$foldedn" -ge 15 ]; then pass "[O2] parity with yaml.safe_load on $okn generated dumps ($foldedn of them folded; 0 divergences)"
+  else fail "[O2] parity with yaml.safe_load" "$okn equal, $badn diverge, $foldedn folded:$badlist"; fi
 else
   info "[O2] python3/PyYAML absent: the parity with yaml.safe_load is skipped (not a PASS)"
 fi

@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# sdx/hooks/order-import.sh — acceptance of a work order (FEAT-017, REQ-PKG-23..25, 10). A CLI called by
+# commands/start.md through the Bash tool as `bash order-import.sh <subcommand> ...`; it never touches git state.
+#
+#   order-import.sh from-file  <path>        [--proj DIR] [--out FILE]
+#   order-import.sh from-msg   <msg_id>      [--proj DIR] [--out FILE] [--inbox-json FILE]
+#   order-import.sh from-issue <N> [--repo owner/repo] [--proj DIR] [--out FILE]
+#   order-import.sh list                     [--proj DIR] [--inbox-json FILE]
+#   order-import.sh stamp-state --sid <sid> --commitment <C> [--proj DIR]
+#   order-import.sh unfold <path>            (internal: the order-unfold stage on stdout; used by the tests)
+#
+# bash 3.2 (BUG-010: no arrays, no mapfile, ...), bash + awk + sed + jq + git only; the order text is DATA: it is
+# unfolded, parsed by miniyaml (a YAML subset), validated and cleaned, and never reaches a shell as code.
+# set -e is deliberately not used: every failure is handled where it happens.
+set -uo pipefail
+
+here="${BASH_SOURCE[0]%/*}"
+command -v jq >/dev/null 2>&1 || { echo "order-import: jq не найден — приём заказа невозможен (fail-closed)." >&2; exit 2; }
+# shellcheck disable=SC1091
+. "$here/lib/pr-lib.sh"
+
+# ------------------------------------------------------------------------------------------------------------
+# order-unfold (D-9, К-8). yaml.safe_dump folds long plain / single-quoted scalars (width 80) onto continuation lines
+# indented deeper than their key; miniyaml reads one line per value. This awk stage joins such continuations with ONE
+# space (as the YAML folding rule does). THE BOUNDARY (named here and in docs/specs/mo-interop.md): joined = plain and
+# single-quoted scalars of "key: value" and "- value" lines whose continuation is indented deeper than the key / dash.
+# Refused with the marker "#UNFOLD-ERR" (-> rc 1): a double-quoted scalar not closed on its line (PyYAML emits those
+# for values with line breaks) and an empty line INSIDE a value. Left to miniyaml (which refuses them): block scalars,
+# anchors, tags, flow dictionaries, lists of dictionaries ("- key: v" lines are never joined). A comment line that
+# is indented deeper than an open scalar counts as its continuation (the dumper never emits such a comment).
+# ------------------------------------------------------------------------------------------------------------
+OI_UNFOLD_AWK='
+function ind_of(s) { match(s, /^ */); return RLENGTH }
+function flush() { if (have) print cur; have = 0; open = 0 }
+function die(msg) { print "#UNFOLD-ERR: " msg " (строка " NR ")"; err = 1; exit }
+# dq_closed(v): the double-quoted scalar v (first char is the quote) is closed on this line
+function dq_closed(v,   i, n, ch) {
+  n = length(v); i = 2
+  while (i <= n) { ch = substr(v, i, 1); if (ch == "\\") { i += 2; continue } if (ch == "\"") return 1; i++ }
+  return 0
+}
+function sq_closed(v,   i, n, ch) {
+  n = length(v); i = 2
+  while (i <= n) { ch = substr(v, i, 1); if (ch == "\047") { if (substr(v, i + 1, 1) == "\047") { i += 2; continue } return 1 } i++ }
+  return 0
+}
+BEGIN { have = 0; open = 0; cind = 0; pend = 0; err = 0 }
+{
+  line = $0
+  if (line ~ /^[ \t]*$/) { if (open) pend = 1; next }
+  ind = ind_of(line); body = substr(line, ind + 1)
+  if (open && ind > cind) {                                   # PKG-O-UNFOLD: the continuation of an open value
+    if (pend) die("пустая строка внутри значения")
+    sub(/[ \t]+$/, "", cur); sub(/[ \t]+$/, "", body)
+    cur = cur " " body
+    next
+  }
+  flush(); pend = 0
+  if (body ~ /^#/) { print line; next }
+  val = ""
+  if (body ~ /^[A-Za-z0-9_-]+:([ \t]|$)/) { val = body; sub(/^[A-Za-z0-9_-]+:[ \t]*/, "", val) }
+  else if (body ~ /^-([ \t]|$)/) { val = body; sub(/^-[ \t]*/, "", val); if (val ~ /^[A-Za-z0-9_-]+:([ \t]|$)/) val = "" }
+  cur = line; have = 1
+  if (val == "" || val ~ /^#/) next
+  c = substr(val, 1, 1)
+  if (index("[{|>&*!%@`", c) > 0) next
+  if (c == "\"") { if (!dq_closed(val)) die("двойные кавычки с переносом строки не поддерживаются"); next }
+  cind = ind
+  if (c == "\047") { open = !sq_closed(val); next }
+  open = 1
+}
+END { if (!err) flush() }
+'
+
+# oi_unfold: stdin (CR already removed) -> stdout
+oi_unfold() { LC_ALL=C awk "$OI_UNFOLD_AWK"; }
+
+OI_MAX=65536           # the size limit of an order text (bytes)
+OI_TMP=""
+oi_cleanup() { [ -n "$OI_TMP" ] && rm -rf "$OI_TMP"; }
+trap oi_cleanup EXIT
+oi_tmpdir() { [ -n "$OI_TMP" ] && return 0; OI_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdx-order-import.XXXXXX")" || { echo "order-import: не удалось создать временный каталог." >&2; exit 2; }; }
+
+refuse() { echo "order-import: $1" >&2; exit 1; }
+
+# oi_size_ok <file>: refuse a file over the limit
+oi_size_ok() {
+  local n
+  n="$(wc -c < "$1" 2>/dev/null | tr -d ' ')"
+  [ -n "$n" ] && [ "$n" -le "$OI_MAX" ] || refuse "заказ больше 64 КиБ — отказ"
+}
+
+# oi_load_yaml <file>: unfold + miniyaml; sets OI_MODE=yaml
+oi_load_yaml() {
+  oi_tmpdir
+  LC_ALL=C tr -d '\r' < "$1" | oi_unfold > "$OI_TMP/unfolded.yaml"
+  if grep -q '^#UNFOLD-ERR' "$OI_TMP/unfolded.yaml"; then
+    pr_clean "$(grep -m1 '^#UNFOLD-ERR' "$OI_TMP/unfolded.yaml")" 160
+    refuse "order: ${PR_CLEAN#\#UNFOLD-ERR: }"
+  fi
+  my_load "$OI_TMP/unfolded.yaml"
+  case $? in
+    0) ;;
+    *) pr_clean "$MY_ERR" 160; refuse "order: не разобран ($PR_CLEAN)" ;;
+  esac
+  OI_MODE=yaml
+}
+
+# oi_get <path>: OI_V (a scalar's text; a list is joined by "; ") and OI_K (scalar|list|map|absent)
+oi_get() {
+  local out
+  OI_V=""; OI_K=absent
+  if [ "$OI_MODE" = json ]; then
+    out="$(jq -r --arg p "$1" '(try getpath($p | split(".")) catch null) as $v
+      | if $v == null then "absent\n"
+        elif ($v | type) == "string" or ($v | type) == "number" or ($v | type) == "boolean" then "scalar\n" + ($v | tostring)
+        elif ($v | type) == "array" then (if ([$v[] | type] | all(. == "string" or . == "number")) then "list\n" + ($v | map(tostring) | join("; ")) else "map\n" end)
+        else "map\n" end' "$OI_DOC" 2>/dev/null)"
+    OI_K="${out%%$'\n'*}"; OI_V="${out#*$'\n'}"
+    [ "$OI_V" = "$out" ] && OI_V=""
+  else
+    _my_kind "$1"; OI_K="$MY_K"
+    case "$OI_K" in
+      scalar) _my_scalar "$1"; OI_V="$MY_S" ;;
+      list) _my_list "$1"; OI_V="${MY_L//$'\n'/; }" ;;
+      null) OI_K=absent ;;
+    esac
+  fi
+  return 0
+}
+
+# oi_need_scalar <path>: like oi_get, but a map (or, unless <list-ok>, a list) is refused
+oi_need_scalar() {
+  oi_get "$1"
+  case "$OI_K" in
+    map) refuse "$1: ожидается значение, а не вложенная структура" ;;
+    list) [ "${2:-}" = list-ok ] || refuse "$1: ожидается значение, а не список" ;;
+  esac
+}
+
+# oi_read_doc <file>: JSON ({ first) or YAML
+oi_read_doc() {
+  local first
+  [ -f "$1" ] && [ -r "$1" ] || refuse "файл заказа не читается: $(pr_clean "$1" 120; printf '%s' "$PR_CLEAN")"
+  oi_size_ok "$1"
+  first="$(LC_ALL=C tr -d ' \t\r\n' < "$1" | head -c1)"
+  if [ "$first" = "{" ]; then
+    jq -e 'type == "object"' "$1" >/dev/null 2>&1 || refuse "order: JSON не разобран"
+    oi_tmpdir
+    jq 'if (.action == null and ((.body | type) == "object")) then .body else . end' "$1" > "$OI_TMP/doc.json" 2>/dev/null || refuse "order: JSON не разобран"
+    OI_DOC="$OI_TMP/doc.json"; OI_MODE=json
+  else
+    oi_load_yaml "$1"
+  fi
+}
+
+# oi_accept <file> <source> <source-ref>: parse + print the flat JSON (validation is added in the next stages)
+oi_accept() {
+  oi_read_doc "$1"
+  oi_need_scalar commitment.id; local c="$OI_V"
+  oi_need_scalar commitment.title; local t="$OI_V"
+  oi_need_scalar executor; local ex="$OI_V"
+  oi_need_scalar repo.base; local rb="$OI_V"
+  oi_need_scalar repo.url; local ru="$OI_V"
+  oi_need_scalar deliver.branch; local br="$OI_V"
+  oi_need_scalar deliver.delivery; local dl="$OI_V"
+  oi_need_scalar commitment.due; local due="$OI_V"
+  jq -n --arg source "$2" --arg source_ref "$3" --arg commitment "$c" --arg title "$t" --arg executor "$ex" \
+    --arg repo_base "$rb" --arg repo_url "$ru" --arg branch "$br" --arg delivery "$dl" --arg due "$due" \
+    '{source:$source, source_ref:$source_ref, commitment:$commitment, title:$title, executor:$executor, repo_base:$repo_base, repo_url:$repo_url, branch:$branch, delivery:$delivery, due:$due}'
+}
+
+usage() {
+  echo "использование: order-import.sh from-file <path> | from-msg <msg_id> | from-issue <N> | list | stamp-state --sid <sid> --commitment <C> | unfold <path>  [--proj DIR] [--out FILE] [--inbox-json FILE] [--repo owner/repo]" >&2
+  exit 2
+}
+
+sub="${1:-}"; [ $# -gt 0 ] && shift
+POS=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; INBOX=""; REPO=""; SID=""; CARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --proj|--out|--inbox-json|--repo|--sid|--commitment)
+      [ $# -ge 2 ] || { echo "order-import: у $1 нет значения." >&2; exit 2; }
+      case "$1" in --proj) PROJ="$2" ;; --out) OUTF="$2" ;; --inbox-json) INBOX="$2" ;; --repo) REPO="$2" ;; --sid) SID="$2" ;; *) CARG="$2" ;; esac
+      shift 2 ;;
+    --*) echo "order-import: неизвестный аргумент: $(pr_clean "$1" 40; printf '%s' "$PR_CLEAN")" >&2; usage ;;
+    *) [ -z "$POS" ] || usage; POS="$1"; shift ;;
+  esac
+done
+
+case "$sub" in
+  from-file)
+    [ -n "$POS" ] || usage
+    pr_clean "${POS##*/}" 80
+    oi_accept "$POS" file "$PR_CLEAN" ;;
+  unfold)
+    [ -n "$POS" ] || usage
+    [ -f "$POS" ] || refuse "файл не читается"
+    oi_tmpdir
+    LC_ALL=C tr -d '\r' < "$POS" | oi_unfold > "$OI_TMP/unfold.out" || exit 2
+    if grep -q '^#UNFOLD-ERR' "$OI_TMP/unfold.out"; then refuse "order: ошибка склейки строк"; fi
+    cat "$OI_TMP/unfold.out" ;;
+  *) usage ;;
+esac

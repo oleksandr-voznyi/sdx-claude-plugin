@@ -217,6 +217,18 @@ newfx && {
   oracle_of "$WC" "$BR"
   if [ "$ORACLE" != SKIP ]; then eq "C4 the oracle (audit()) says approve" "$ORACLE" "approve"; fi
 }
+# verify-1 FAIL-1 (REQ-PKG-7): without order.yaml the commitment and the title come only from the arguments; post must accept them
+case_on noorder && newfx && {
+  fx_set_sfile "$WC" order.yaml none
+  BUILD_OUT="$(bash "$SCRIPT_DIR/pr-build.sh" --sid s1 --proj "$WC" --commitment C-ACME-001 --title "Feature mod1" --base-name dev 2>"$TMP/build.err")"; BUILD_RC=$?
+  eq "C4 no order.yaml: pr-build with --commitment/--title built the package" "$BUILD_RC" "0"
+  run_check "$WC" --phase post --commitment C-ACME-001 --title "Feature mod1"
+  eq "C4 no order.yaml: post with --commitment/--title: PASS" "$(verdict_of)" "PASS"
+  expect_line "C4 no order.yaml" OK manifest.identity
+  run_check "$WC" --phase post
+  eq "C4 no order.yaml: post WITHOUT the flags: FAIL (the red side)" "$(verdict_of)" "FAIL"
+  expect_line "C4 no order.yaml, no flags" FAIL id.commitment
+}
 }
 
 # ---------------------------------------------------------------------------------------------------- [C5]

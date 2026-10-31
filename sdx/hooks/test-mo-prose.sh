@@ -300,6 +300,25 @@ chk_pr_calls() {  # the pipeline names every script and the confirmation contrac
     grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
   done
 }
+# verify-1 FAIL-1: every pr-check.sh call in pr.md carries both --commitment and --title (without an order they are the only source)
+chk_pr_carry() {
+  local f="$1" s seg n=0
+  while IFS="$(printf '\t')" read -r s seg; do
+    [ "$s" = pr-check.sh ] || continue
+    n=$((n + 1))
+    case "$seg" in *--commitment*) ;; *) echo "a pr-check.sh call without --commitment in $f: $seg"; return 1 ;; esac
+    case "$seg" in *--title*) ;; *) echo "a pr-check.sh call without --title in $f: $seg"; return 1 ;; esac
+  done < <(pr_calls "$f")
+  [ "$n" -ge 2 ] || { echo "fewer than 2 pr-check.sh calls found in $f ($n)"; return 1; }
+}
+# verify-1 W5: in gate_mode: auto adr.registry is never accepted silently (P5 names it among the questions that stay)
+chk_pr_auto_registry() {
+  local l; l="$(grep -E '^\*\*P5\.' "$1")"
+  printf '%s' "$l" | grep -F 'gate_mode: auto' | grep -qF 'и `adr.registry` остаются' || { echo "P5 does not keep adr.registry as a question in auto in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'молча не принимается' || { echo "P5 lacks 'молча не принимается' in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'принимаются как `[триаж]`' && { echo "P5 still accepts WARN as [триаж] in $1"; return 1; }
+  return 0
+}
 chk_pr_refusal() {  # P0: the refusal without a mandate is exactly one verbatim line (REQ-PKG-2/34)
   local c; c="$(grep -cF -- "$PR_REFUSE" "$1")"
   [ "$c" = 1 ] || { echo "the one-line refusal occurs $c times in $1 (want 1)"; return 1; }
@@ -351,6 +370,8 @@ chk_start_order() {  # start.md (FEAT-017): --from-order / --from-issue, step 1�
   blk="$(awk '/^1б\./{p=1;print;next} p && /^[0-9]/{p=0} p' "$f")"
   printf "%s" "$blk" | grep -qF AskUserQuestion || { echo "step 1б lacks AskUserQuestion in $f"; return 1; }
   printf "%s" "$blk" | grep -qF 'в любом `gate_mode`' || { echo "step 1б lacks в любом gate_mode in $f"; return 1; }
+  # verify-1 W4: --from-order in gate_mode: auto is a [директива] stop (AskUserQuestion), like --from-issue
+  printf "%s" "$blk" | grep -F -- '--from-order' | grep -F 'gate_mode: auto' | grep -F '[директива]' | grep -qF 'AskUserQuestion' || { echo "step 1б lacks the auto + --from-order [директива] stop in $f"; return 1; }
   for n in '1' '2' '3' '4' '5' '6' '7' '8'; do
     grep -qE "^$n\. " "$f" || { echo "step $n missing in $f"; return 1; }
   done
@@ -601,6 +622,16 @@ PR_MD="$ROOT/commands/pr.md"
 expect_ok "pr.md frontmatter" chk_pr_head "$PR_MD"
 expect_ok "pr.md calls and contract" chk_pr_calls "$PR_MD"
 expect_ok "pr.md one-line refusal (P0)" chk_pr_refusal "$PR_MD"
+expect_ok "pr.md every pr-check call carries --commitment and --title" chk_pr_carry "$PR_MD"
+sed '/^\*\*P7\./s/ \[--commitment <C>\] \[--title "<T>"\]` (те/` (те/' "$PR_MD" > "$TMP/t20k.md"
+expect_red "red: pr.md P7 pr-check post without --commitment/--title" chk_pr_carry "$TMP/t20k.md"
+sed '/^\*\*P7\./s/ \[--title "<T>"\]` (те/` (те/' "$PR_MD" > "$TMP/t20k2.md"
+expect_red "red: pr.md P7 pr-check post without --title" chk_pr_carry "$TMP/t20k2.md"
+expect_ok "pr.md P5 keeps adr.registry as a question in auto" chk_pr_auto_registry "$PR_MD"
+sed '/^\*\*P5\./s/ и `adr.registry` остаются/ остаются/' "$PR_MD" > "$TMP/t20l.md"
+expect_red "red: pr.md P5 without adr.registry among the auto questions" chk_pr_auto_registry "$TMP/t20l.md"
+sed '/^\*\*P5\./s/молча не принимается/принимается/' "$PR_MD" > "$TMP/t20m.md"
+expect_red "red: pr.md P5 without 'молча не принимается'" chk_pr_auto_registry "$TMP/t20m.md"
 expect_ok "pr.md order P0..P10" chk_pr_order "$PR_MD"
 expect_ok "pr.md prohibitions, no bare git push" chk_pr_prohibitions "$PR_MD"
 sed '1,5{/^argument-hint:/d;}' "$PR_MD" > "$TMP/t20a.md"; expect_red "red: pr.md without argument-hint" chk_pr_head "$TMP/t20a.md"
@@ -648,6 +679,8 @@ expect_ok "start.md" chk_start_order "$START_MD"
 for t in '--from-order' '--from-issue' 'stamp-state' 'sid_infix' 'MISMATCH' 'repo.base' 'pr-mode' 'order.yaml'; do
   sed "s/$t/zz-removed/g" "$START_MD" > "$TMP/t26a.md"; expect_red "red: start.md without '$t'" chk_start_order "$TMP/t26a.md"
 done
+sed 's/^   - (iii-а) При `gate_mode: auto` приём заказа через `--from-order`/   - (iii-а) При другом режиме приём через `--from-order`/' "$START_MD" > "$TMP/t26f.md"
+expect_red "red: start.md without the auto + --from-order [директива] stop" chk_start_order "$TMP/t26f.md"
 sed 's/^1б\./1x./' "$START_MD" > "$TMP/t26b.md"; expect_red "red: start.md without step 1б" chk_start_order "$TMP/t26b.md"
 sed 's/^3\. /3x. /' "$START_MD" > "$TMP/t26c.md"; expect_red "red: start.md without step 3" chk_start_order "$TMP/t26c.md"
 expect_ok "status.md" chk_status_pkg "$STATUS_MD"

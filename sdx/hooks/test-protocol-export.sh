@@ -214,6 +214,139 @@ else
 fi
 fi
 
+# ---------------------------------------------------------------------------------------------------- [X5]
+if want X5; then
+echo "[X5] adr: a record that names ADR-<n> -> true, otherwise false"
+mkproj x5 $'- 2026-10-31 [контракт] Принято решение по ADR-021. Подробности ниже.\n- [триаж] Обычное решение без ссылок. Хвост.\n\n### Развилка: [контракт] Формат\n- Вариант: Вариант A\n- Обоснование: Закреплено в ADR-007, см. реестр\n\n### Развилка: [объём] Другое\n- Вариант: Вариант B\n- Обоснование: Просто так\n'
+px "$PXP"
+eq "[X5] rc 0" "$RC" "0"
+if [ "$HAVE_YAML" = 1 ]; then
+  oracle "$OUT"
+  eq "[X5] adr per record: B with ADR-021 / B without / A with ADR-007 / A without" "$(pj '.data.decisions|map(.adr)|join(",")')" "true,false,true,false"
+else
+  info "[X5] python3/PyYAML absent: the content checks are skipped (not a PASS)"
+  eq "[X5] (no oracle) adr lines" "$(printf '%s\n' "$OUT" | grep '^    adr:' | tr -d ' \n')" "adr:trueadr:falseadr:trueadr:false"
+fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [X7]
+if want X7; then
+echo "[X7] hostile values survive a safe_load roundtrip (line breaks, tabs and U+2028 become spaces)"
+big="$(head -c 5000 /dev/zero | tr '\0' 'x')"
+raw="say \"hi\" \\ back --- end: x"$'\t'"tab"$'\xe2\x80\xa8'"sep # not-a-comment [a, b] {c: d} & * ! | > '' $big"
+exp="say \"hi\" \\ back --- end: x tab sep # not-a-comment [a, b] {c: d} & * ! | > '' $big"
+mkproj x7 "- 2026-10-31 [триаж] $raw"$'\n'"### Развилка: [контракт] Заголовок: с двоеточием \"и кавычками\""$'\n'"- Вариант: $raw"$'\n'"- Обоснование: $raw"$'\n'
+px "$PXP"
+eq "[X7] rc 0" "$RC" "0"
+if [ "$HAVE_YAML" = 1 ]; then
+  oracle "$OUT"
+  eq "[X7] the schema oracle accepts the output" "$(pj '.errors|length')" "0"
+  eq "[X7] B: why = the record with the tab and U+2028 replaced by spaces" "$(pj '.data.decisions[0].why')" "$exp"
+  eq "[X7] A: what survives" "$(pj '.data.decisions[1].what')" "$exp"
+  eq "[X7] A: why survives (5000-character tail intact)" "$(pj '.data.decisions[1].why|length')" "${#exp}"
+  eq "[X7] the title with a colon and quotes survives in questions" "$(pj '.data.questions[1]')" '[контракт] Заголовок: с двоеточием "и кавычками"'
+else
+  info "[X7] python3/PyYAML absent: the roundtrip is skipped (not a PASS)"
+fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [X8]
+if want X8; then
+echo "[X8] verified / deltas / done from the session artifacts"
+mkproj x8 "$LOG_A"
+S8="$PXP/.claude/sessions/$PXSID"
+cat > "$S8/verification_report.md" <<'MD'
+# Verification Report: s1
+
+## Сводка
+- Объём: полный, no_code: нет
+- Итог: PASS
+- Находки: FAIL: 0, WARN: 1
+
+## Матрица трассируемости
+| Требование / критерий | Реализация (файл) | Тест | Когерентность | Статус |
+|------------------------|-------------------|------|----------------|--------|
+| REQ-1 | a.sh:1 | да | ok | OK |
+| REQ-2 | b.sh:2 | нет | ok | WARN |
+| REQ-3 | c.sh:3 | да | ok | OK |
+
+## Находки
+### [WARN] [Полнота] Нет теста для REQ-2
+- Где: REQ-2
+
+<!-- SDX-MANDATE-SCOPE:BEGIN -->
+## Область мандата (детерминированная проверка)
+- Мандат: executor=ex1, digest=123456789012; файлов в диффе: 3
+- Итог по области: PASS
+<!-- SDX-MANDATE-SCOPE:END -->
+MD
+cat > "$S8/SPEC.md" <<'MD'
+# Спецификация
+Используется Delta-формат: [ADDED], [MODIFIED], [REMOVED] — это проза, не дельта.
+
+## Дельта
+- [ADDED] **REQ-PKG-1** — первое требование
+- [MODIFIED] **REQ-PKG-2** — второе
+- [ADDED] **REQ-PKG-1** — повтор того же
+### [REMOVED] Старое поведение без идентификатора требования, и очень длинное описание, которое точно длиннее восьмидесяти знаков
+MD
+printf '# Change note\n\n- [ADDED] REQ-NOTE-9 — not used when SPEC.md exists\n' > "$S8/change_note.md"
+cat > "$S8/PLAN.md" <<'MD'
+# Plan
+- [x] **T01** первая задача
+- [ ] **T02** не сделана
+- [X] **T03** третья задача с очень длинным описанием, которое должно быть обрезано до ста двадцати знаков, потому что так написано в схеме экспорта протокола сессии
+MD
+px "$PXP"
+eq "[X8] rc 0" "$RC" "0"
+if [ "$HAVE_YAML" = 1 ]; then
+  oracle "$OUT"
+  eq "[X8] the schema oracle accepts the output" "$(pj '.errors|length')" "0"
+  eq "[X8] verified: the Сводка bullets, the matrix counts, the scope verdict" "$(pj '.data.verified|join("|")')" "Объём: полный, no_code: нет|Итог: PASS|Находки: FAIL: 0, WARN: 1|Матрица: OK 2, WARN 1, FAIL 0|Итог по области: PASS"
+  eq "[X8] deltas: from SPEC.md, ids, duplicates dropped, order kept" "$(pj '.data.deltas[0:2]|join("|")')" "[ADDED] REQ-PKG-1|[MODIFIED] REQ-PKG-2"
+  eq "[X8] deltas: a delta without an id keeps the first 80 characters of its text" "$(pj '.data.deltas|length') $(pj '.data.deltas[2]|startswith("[REMOVED] Старое поведение") and (length <= 90)')" "3 true"
+  eq "[X8] done: only the checked tasks, each at most 120 characters" "$(pj '.data.done|length') $(pj '.data.done[0]') $(pj '.data.done[1]|length <= 120')" "2 **T01** первая задача true"
+  # sources and their order
+  rm "$S8/SPEC.md"; px "$PXP"; oracle "$OUT"
+  eq "[X8] without SPEC.md the deltas come from change_note.md" "$(pj '.data.deltas|join("|")')" "[ADDED] REQ-NOTE-9"
+  rm "$S8/PLAN.md"; mkdir -p "$PXP/docs/history/plans"; printf -- '- [x] **H1** from the archive\n' > "$PXP/docs/history/plans/$PXSID.md"
+  px "$PXP"; oracle "$OUT"
+  eq "[X8] without PLAN.md done comes from docs/history/plans/<sid>.md" "$(pj '.data.done|join("|")')" "**H1** from the archive"
+  rm "$PXP/docs/history/plans/$PXSID.md"; px "$PXP"; oracle "$OUT"
+  eq "[X8] without a plan at all: one entry from change_note.md (a folded delta)" "$(pj '.data.done|join("|")')" "change_note.md: Change note"
+  rm "$S8/change_note.md" "$S8/verification_report.md"; px "$PXP"; oracle "$OUT"
+  eq "[X8] without the other sources: verified, deltas and done are empty, rc 0" "$RC $(pj '[.data.verified,.data.deltas,.data.done]|map(length)|join(",")')" "0 0,0,0"
+else
+  info "[X8] python3/PyYAML absent: the content checks are skipped (not a PASS)"
+fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [X9]
+if want X9; then
+echo "[X9] --from-rev <parent of the Closeout step-5 commit> gives the same file as a run before step 5"
+G9="$TMP/x9"; rm -rf "$G9"; mkdir -p "$G9/.claude/sessions/$PXSID"
+git -C "$G9" init -q -b dev 2>/dev/null || git -C "$G9" init -q
+gc() { git -C "$G9" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
+printf '%s' "$LOG_A" > "$G9/.claude/sessions/$PXSID/decisions_log.md"
+printf '# Report\n\n## Сводка\n- Итог: PASS\n' > "$G9/.claude/sessions/$PXSID/verification_report.md"
+printf -- '- [x] **T01** done\n' > "$G9/.claude/sessions/$PXSID/PLAN.md"
+gc add -A && gc commit -q -m "session"
+REV9="$(git -C "$G9" rev-parse HEAD)"
+bash "$SCRIPT" --sid "$PXSID" --proj "$G9" --out - > "$TMP/x9.before" 2>/dev/null
+gc rm -r -q ".claude/sessions/$PXSID" && gc commit -q -m "step 5: git rm session"
+bash "$SCRIPT" --sid "$PXSID" --proj "$G9" --from-rev "$REV9" > "$TMP/x9.rev" 2> "$TMP/x9.err"; rc=$?
+if [ "$rc" -eq 0 ] && [ -s "$TMP/x9.before" ] && cmp -s "$TMP/x9.before" "$TMP/x9.rev"; then pass "[X9] --from-rev <parent of the step-5 commit> equals the run before step 5 (stdout)"; else fail "[X9] --from-rev" "rc=$rc $(diff "$TMP/x9.before" "$TMP/x9.rev" | head -4)"; fi
+if [ ! -e "$G9/.claude/sessions/$PXSID" ]; then pass "[X9] --from-rev writes nothing into the working tree"; else fail "[X9] working tree" "the session directory came back"; fi
+bash "$SCRIPT" --sid "$PXSID" --proj "$G9" --out - >/dev/null 2>&1; rc=$?
+eq "[X9] the same run on the working tree after step 5: rc 1 (no sources, no directory)" "$rc" "1"
+bash "$SCRIPT" --sid "$PXSID" --proj "$G9" --from-rev "$(git -C "$G9" rev-parse HEAD)" >/dev/null 2>&1; rc=$?
+eq "[X9] --from-rev at the commit that already removed the directory: rc 1" "$rc" "1"
+for bad in "--output=x" "-x" "no-such-rev-here" ""; do
+  bash "$SCRIPT" --sid "$PXSID" --proj "$G9" --from-rev "$bad" >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 2 ]; then pass "[X9] a malformed or unknown revision [$bad] is refused (rc 2)"; else fail "[X9] revision [$bad]" "rc=$rc"; fi
+done
+fi
+
 #@@SECTIONS-END@@
 
 echo ""

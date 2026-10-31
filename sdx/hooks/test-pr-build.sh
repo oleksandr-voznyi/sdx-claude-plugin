@@ -60,7 +60,7 @@ newfx() {   # -> WC: a fresh copy of the template (sdx/s1 checked out)
 }
 run_build() {   # <wc> [args] -> BOUT BERR BRC
   local wc="$1"; shift
-  BOUT="$(bash "$SUT" --sid s1 --proj "$wc" "$@" 2>"$TMP/stderr")"; BRC=$?
+  BOUT="$(bash "${SUTX:-$SUT}" --sid s1 --proj "$wc" "$@" 2>"$TMP/stderr")"; BRC=$?
   BERR="$(cat "$TMP/stderr")"
 }
 jv() { printf '%s' "$BOUT" | jq -r "$1" 2>/dev/null; }
@@ -354,6 +354,116 @@ newfx && {
   eq "B11 no .claude/sessions/ in the tip tree" "$(printf '%s\n' "$lst" | grep -c '^\.claude/sessions/')" "0"
   eq "B11 no protocol.yaml anywhere in the tip tree" "$(printf '%s\n' "$lst" | grep -cE '(^|/)protocol\.yaml$')" "0"
   eq "B11 tip tree has CHANGE.yaml at the root" "$(printf '%s\n' "$lst" | grep -cx 'CHANGE.yaml')" "1"
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B6]
+yaml_json() {   # <file> -> JSON of yaml.safe_load on stdout; rc 77 without python3/PyYAML (the oracle)
+  command -v python3 >/dev/null 2>&1 || return 77
+  python3 -I -B -c 'import sys, json
+try:
+    import yaml
+except ImportError:
+    sys.exit(77)
+print(json.dumps(yaml.safe_load(open(sys.argv[1], encoding="utf-8")), ensure_ascii=False))' "$1"
+}
+if want B6; then
+echo "[B6] escaping: hostile values survive the round trip through miniyaml and yaml.safe_load"
+HOSTILE_NOTES=$'Say "hi" \\ back: colon # hash \'q\' {} - dash [x] Привет\nsecond line'
+HOSTILE_PATH="src/mod1/q\"b\\c: d #e 'f' {g} - h Привет.js"
+newfx && {
+  fx_commit "$WC" "$HOSTILE_PATH" "x" "hostile path"
+  run_build "$WC" --title $'Say "hi" \\ back: colon # hash\nsecond' --notes "$HOSTILE_NOTES"
+  eq "B6 rc 0 with hostile title, notes and path" "$BRC" "0"
+  tip="$(jv .tip)"
+  eq "B6 the commit subject is the title with the newline folded to a space" "$(gw log -n1 --format=%s "$(jv .head)")" 'C-ACME-001: Say "hi" \ back: colon # hash second'
+  mf_load "$WC" "$tip"
+  eq "B6 miniyaml reads the notes (newline folded to a space)" "$(mf notes)" 'Say "hi" \ back: colon # hash '"'q'"' {} - dash [x] Привет second line'
+  eq "B6 miniyaml reads the hostile path back unchanged" "$(mfl scope_touched | grep -cxF -- "$HOSTILE_PATH")" "1"
+  eq "B6 mandate_digest of digits stays a string for miniyaml" "$(mf mandate_digest)" "123456789012"
+  gw show "$tip:CHANGE.yaml" > "$TMP/hostile.yaml"
+  yaml_json "$TMP/hostile.yaml" > "$TMP/hostile.json" 2>/dev/null; yrc=$?
+  if [ "$yrc" = 77 ]; then info "yaml.safe_load oracle skipped: python3 with PyYAML is absent (NOT passed, only skipped)"
+  else
+    eq "B6 yaml.safe_load: notes equal the miniyaml value" "$(jq -r .change.notes "$TMP/hostile.json")" "$(mf notes)"
+    eq "B6 yaml.safe_load: the hostile path is intact" "$(jq -r --arg p "$HOSTILE_PATH" '[.change.scope_touched[] | select(. == $p)] | length' "$TMP/hostile.json")" "1"
+    eq "B6 yaml.safe_load: mandate_digest is a string, not a number" "$(jq -r '.change.mandate_digest | type' "$TMP/hostile.json")" "string"
+    eq "B6 yaml.safe_load: touches_shared is a boolean" "$(jq -r '.change.touches_shared | type' "$TMP/hostile.json")" "boolean"
+    eq "B6 yaml.safe_load: format is the number 1" "$(jq -r '.change.format' "$TMP/hostile.json")" "1"
+  fi
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B10]
+mk_plugin() {   # <dir>: a copy of the script under test with its lib/ and the vendored template -> SUTX
+  mkdir -p "$1/hooks" "$1/mo" && cp -Rp "$(dirname "$SUT")/lib" "$1/hooks/lib" && cp "$SUT" "$1/hooks/pr-build.sh" \
+    && cp "$ROOT/sdx/mo/CHANGE.template.yaml" "$1/mo/CHANGE.template.yaml"
+}
+if want B10; then
+echo "[B10] template-driven generation"
+tpl_keys() { grep -E '^  [a-z0-9_]+:' "$1" | sed 's/^  \([a-z0-9_]*\):.*/\1/' | tr '\n' ' '; }
+newfx && {
+  run_build "$WC"
+  eq "B10 keys and order of the manifest = keys of the vendored template" "$(gw show "$(jv .tip):CHANGE.yaml" > "$TMP/man10.yaml"; tpl_keys "$TMP/man10.yaml")" "$(tpl_keys "$ROOT/sdx/mo/CHANGE.template.yaml")"
+  eq "B10 first line says format 1" "$(head -n1 "$TMP/man10.yaml" | grep -c 'format 1')" "1"
+  eq "B10 the root key is 'change:'" "$(sed -n '2p' "$TMP/man10.yaml")" "change:"
+  eq "B10 every string value is double-quoted (digest included)" "$(grep -cE '^  (commitment|executor|mandate_digest|base|head|archive_sha256|history_ref|notes|spec): "' "$TMP/man10.yaml")" "9"
+}
+newfx && {
+  mk_plugin "$TMP/plug10a" && printf '  extra_field: x\n' >> "$TMP/plug10a/mo/CHANGE.template.yaml"
+  SUTX="$TMP/plug10a/hooks/pr-build.sh" run_build "$WC"
+  eq "B10 template with an unknown key: rc 1" "$BRC" "1"
+  has "B10 ... 'обновите плагин' and the key named" "$BERR" "extra_field"
+  has "B10 ... tells to update the plugin" "$BERR" "обновите плагин"
+  eq "B10 ... nothing created" "$(gw for-each-ref --format='%(refname)' 'refs/heads/change/*')" ""
+}
+newfx && {
+  mk_plugin "$TMP/plug10b" && grep -v '^  adr:' "$TMP/plug10b/mo/CHANGE.template.yaml" > "$TMP/plug10b/t.new" && mv "$TMP/plug10b/t.new" "$TMP/plug10b/mo/CHANGE.template.yaml"
+  SUTX="$TMP/plug10b/hooks/pr-build.sh" run_build "$WC"
+  eq "B10 template without 'adr': rc 0" "$BRC" "0"
+  eq "B10 ... the manifest has no adr key" "$(gw show "$(jv .tip):CHANGE.yaml" 2>/dev/null | grep -c '^  adr:')" "0"
+  eq "B10 ... and keeps the other keys" "$(gw show "$(jv .tip):CHANGE.yaml" 2>/dev/null | grep -c '^  docs:')" "1"
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B12]
+if want B12; then
+echo "[B12] the manifest commit sits on head"
+newfx && {
+  run_build "$WC"
+  head="$(jv .head)"; tip="$(jv .tip)"
+  eq "B12 the tip's only parent is head (not base)" "$(gw rev-list --parents -n1 "$tip" | cut -d' ' -f2-)" "$head"
+  eq "B12 ... which is not the base" "$([ "$head" != "$(jv .base)" ] && echo differs)" "differs"
+  eq "B12 the manifest commit changes exactly one file: CHANGE.yaml" "$(gw diff-tree -r --name-only "$head" "$tip")" "CHANGE.yaml"
+  eq "B12 its subject" "$(gw log -n1 --format=%s "$tip")" "SDX: CHANGE.yaml (C-ACME-001)"
+  eq "B12 the manifest names the head" "$(mf_load "$WC" "$tip"; mf head)" "$head"
+}
+fi
+
+# ---------------------------------------------------------------------------------------------------- [B8]
+if want B8; then
+echo "[B8] race on the package ref (compare-and-swap)"
+mk_shim() {   # <dir> <wc> <target-sha>: a fake git that creates the ref behind pr-build's back at the manifest commit
+  mkdir -p "$1"
+  {
+    printf '#!/usr/bin/env bash\nreal=%s\n' "$(command -v git)"
+    printf 'case " $* " in *" commit-tree "*)\n  n=$(cat "%s/n" 2>/dev/null || echo 0); n=$((n + 1)); echo $n > "%s/n"\n' "$1" "$1"
+    printf '  [ "$n" = 2 ] && "$real" -C "%s" update-ref refs/heads/%s "%s" ;;\nesac\nexec "$real" "$@"\n' "$2" "$BR" "$3"
+  } > "$1/git"
+  chmod +x "$1/git"
+}
+newfx && {
+  dev="$(gw rev-parse refs/heads/dev)"; mk_shim "$TMP/shim1" "$WC" "$dev"
+  OLDPATH="$PATH"; PATH="$TMP/shim1:$PATH"; run_build "$WC"; PATH="$OLDPATH"
+  eq "B8 a ref created in between: rc 1" "$BRC" "1"
+  has "B8 ... the message names the compare-and-swap" "$BERR" "CAS"
+  eq "B8 ... the foreign value is not overwritten" "$(gw rev-parse "refs/heads/$BR")" "$dev"
+}
+newfx && {
+  pkg_craft_good "$WC" "$BR" >/dev/null 2>&1; old="$PKG_TIP"; dev="$(gw rev-parse refs/heads/dev)"; mk_shim "$TMP/shim2" "$WC" "$dev"
+  OLDPATH="$PATH"; PATH="$TMP/shim2:$PATH"; run_build "$WC" --resubmit; PATH="$OLDPATH"
+  eq "B8 re-submission raced: rc 1" "$BRC" "1"
+  eq "B8 ... the ref keeps the foreign value" "$(gw rev-parse "refs/heads/$BR")" "$dev"
 }
 fi
 

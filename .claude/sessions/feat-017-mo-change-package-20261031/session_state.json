@@ -1,7 +1,7 @@
 {
   "session_id": "feat-017-mo-change-package-20261031",
   "type": "feature",
-  "stage": "Verification",
+  "stage": "Deployment",
   "gate_mode": "interactive",
   "git_branch": "sdx/feat-017-mo-change-package-20261031",
   "no_code": false,

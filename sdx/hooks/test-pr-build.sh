@@ -21,9 +21,10 @@
 #  [B10] template-driven generation: keys and order of the manifest = keys of sdx/mo/CHANGE.template.yaml
 #  [B11] the package tree has no .claude/sessions/ and no protocol.yaml
 #  [B12] the manifest commit's parent is head (not base) and it changes exactly one file
+#  [Port] portability of pr-build.sh (BUG-010) + red side; no python/eval/checkout/worktree
 #  [Mut] mutation runs (copies of pr-build.sh + lib/ in a temp dir, anchors "# PKG-*")
 # Env: PR_BUILD_ONLY="B7 B9" selects blocks; PR_BUILD_UNDER_TEST=<script> (mutants); PR_BUILD_NESTED=1 (no mutation
-# section); SCEN_MIN=1 (mutation runs: only the distinguishing block, set by the parent).
+# section); PR_BUILD_B7="chg empty" (mutation runs: only these B7 cases).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,6 +113,7 @@ oracle_expect() {   # <label> <wc> <branch> <expected>
 # ---------------------------------------------------------------------------------------------------- [B7]
 if want B7; then
 echo "[B7] refusals"
+b7on() { [ -z "${PR_BUILD_B7:-}" ] && return 0; case " $PR_BUILD_B7 " in *" $1 "*) return 0 ;; esac; return 1; }   # PR_BUILD_B7="chg empty": only these cases (mutation runs)
 refuse() {   # <label> <expected rc> <expected stderr fragment> [args]
   local label="$1" erc="$2" frag="$3"; shift 3
   run_build "$WC" "$@"
@@ -119,43 +121,43 @@ refuse() {   # <label> <expected rc> <expected stderr fragment> [args]
   has "B7 $label: stderr names the reason" "$BERR" "$frag"
   eq "B7 $label: no change/* branch created" "$(gw for-each-ref --format='%(refname)' 'refs/heads/change/*')" ""
 }
-newfx && {
+b7on exec && newfx && {
   mand_edit 's/^  executor: .*/  executor: client-harness:kitgroup/'
   refuse "executor with ':'" 1 "executor: недопустимые символы ':'"
 }
-newfx && {
+b7on commit && newfx && {
   fx_set_order "$WC" none
   bad65="$(printf 'a%.0s' $(seq 1 65))"
   for c in "a..b" "-lead" "has space" "$bad65"; do
     refuse "commitment '${c:0:12}'" 1 "commitment:" --commitment "$c" --title T --base-name dev
   done
 }
-newfx && refuse "secret in the title" 1 "title: похоже на секрет" --title 'password: hunter2'
-newfx && {
+b7on secret && newfx && refuse "secret in the title" 1 "title: похоже на секрет" --title 'password: hunter2'
+b7on ctl && newfx && {
   fx_commit "$WC" "src/mod1/$(printf 'x\ty')" "ctl"
   refuse "control character in a path" 1 "files:"
 }
-newfx && {
+b7on chg && newfx && {
   fx_commit "$WC" CHANGE.yaml "stray"
   refuse "CHANGE.yaml in the code" 1 "CHANGE.yaml"
 }
-newfx && {
+b7on empty && newfx && {
   t="$(printf 'revert\n' | gw commit-tree "refs/heads/dev^{tree}" -p refs/heads/sdx/s1)"; gw reset -q --hard "$t"
   refuse "empty diff" 1 "пуст"
 }
-newfx && {
+b7on sess && newfx && {
   gw checkout -q refs/heads/sdx/s1~1 -- .claude/sessions/s1 && gw commit -q -m "session dir back"
   refuse "session directory in the tree" 1 "каталог сессии"
 }
-newfx && { rm -f "$WC/.mesh/mandate.yaml" "$WC/.mesh/endpoint.yaml"; refuse "no mandate" 1 "мандат"; }
-newfx && { rm -f "$WC/.mesh/endpoint.yaml"; refuse "mandate without endpoint.yaml" 1 "endpoint.yaml"; }
-newfx && { gw checkout -q dev; refuse "wrong branch" 1 "текущая ветка"; }
-newfx && {
+b7on nomandate && newfx && { rm -f "$WC/.mesh/mandate.yaml" "$WC/.mesh/endpoint.yaml"; refuse "no mandate" 1 "мандат"; }
+b7on noendpoint && newfx && { rm -f "$WC/.mesh/endpoint.yaml"; refuse "mandate without endpoint.yaml" 1 "endpoint.yaml"; }
+b7on branch && newfx && { gw checkout -q dev; refuse "wrong branch" 1 "текущая ветка"; }
+b7on ident && newfx && {
   gw config --local --unset user.name; gw config --local --unset user.email; gw config --local user.useConfigOnly true
   refuse "no user.name/user.email" 2 "user."
 }
-newfx && { BOUT="$(bash "$SUT" --proj "$WC" 2>&1)"; BRC=$?; eq "B7 no --sid: rc 2 (usage)" "$BRC" "2"; }
-newfx && { BOUT="$(bash "$SUT" --sid s1 --proj "$WC" --bogus 2>&1)"; BRC=$?; eq "B7 unknown flag: rc 2 (usage)" "$BRC" "2"; }
+b7on usage1 && newfx && { BOUT="$(bash "$SUT" --proj "$WC" 2>&1)"; BRC=$?; eq "B7 no --sid: rc 2 (usage)" "$BRC" "2"; }
+b7on usage2 && newfx && { BOUT="$(bash "$SUT" --sid s1 --proj "$WC" --bogus 2>&1)"; BRC=$?; eq "B7 unknown flag: rc 2 (usage)" "$BRC" "2"; }
 fi
 
 # ---------------------------------------------------------------------------------------------------- [B9]
@@ -467,7 +469,57 @@ newfx && {
 }
 fi
 
+# ---------------------------------------------------------------------------------------------------- [Port]
+if want Port; then
+echo "[Port] portability (BUG-010) and the absence of forbidden constructs in pr-build.sh"
+FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path|[A-Za-z_]=\(|\[@\]'
+if grep -nE "$FORBID" "$SUT" >/dev/null 2>&1; then fail "pr-build.sh portability" "forbidden: $(grep -nE "$FORBID" "$SUT" | head -3)"; else pass "pr-build.sh has no bash-4-only construct, no arrays, no GNU-only calls"; fi
+sed 's/^here=/mapfile -t x < \/dev\/null; here=/' "$SUT" > "$TMP/port-mut.sh"
+if ! cmp -s "$SUT" "$TMP/port-mut.sh" && grep -qE "$FORBID" "$TMP/port-mut.sh"; then pass "red side: the same grep flags a mutant with a bash-4 construct"; else fail "red side of the portability grep" "mutant not flagged"; fi
+if grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" >/dev/null 2>&1; then fail "pr-build.sh forbidden words" "$(grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" | head -3)"; else pass "no python / eval / checkout / worktree in pr-build.sh"; fi
+fi
+
 # @@TAIL@@
+# ---------------------------------------------------------------------------------------------------- [Mut]
+if [ -z "${PR_BUILD_NESTED:-}" ] && want Mut; then
+echo "[Mut] mutation runs: each mutant (a copy of pr-build.sh + lib/ + the template in a temp dir) must differ from the original and turn its block red"
+MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
+OWNED="sdx/hooks/pr-build.sh sdx/hooks/lib sdx/mo"
+ST_BEFORE="$(git -C "$ROOT" status --porcelain -- $OWNED)"
+MUT_NAMES=""
+# mutate <name> <sed expr> <blocks> [b7 cases]: start a nested run of this suite against the mutated script (in the background)
+mutate() {
+  local name="$1" expr="$2" only="$3" b7="${4:-}" d="$MUTDIR/$1"
+  mk_plugin "$d" || { fail "[Mut] $name" "cannot copy the script under test"; return; }
+  sed "$expr" "$SUT" > "$d/hooks/pr-build.sh"
+  if cmp -s "$SUT" "$d/hooks/pr-build.sh"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  MUT_NAMES="$MUT_NAMES $name"
+  ( PR_BUILD_NESTED=1 PR_BUILD_ONLY="$only" PR_BUILD_B7="$b7" SCEN_MIN=1 PR_BUILD_UNDER_TEST="$d/hooks/pr-build.sh" bash "${BASH_SOURCE[0]}" > "$d/out.txt" 2>&1 ) &
+}
+mutate PKG-PLUMB          's|   # PKG-PLUMB|; printf "%s\\n" "$manifest" > "$proj/CHANGE.yaml"   # PKG-PLUMB|' "B2"
+mutate PKG-ARCHIVE        '/# PKG-ARCHIVE/s/"\$head" | pr_sha256/"$srcsha" | pr_sha256/' "B3"
+mutate PKG-SCOPE-TOUCHED  's|^scope_files="\$PR_FILES"|scope_files="$(printf "%s\\n" "$PR_FILES" \| grep -v lock)"|' "B4"
+mutate PKG-SHARED         '/# PKG-SHARED/s/ts=true/ts=false/' "B4"
+mutate PKG-QUOTE          's|def q: tojson;|def q: "\\"" + . + "\\"";|' "B6"
+mutate PKG-NOCHANGEYAML   '/# PKG-NOCHANGEYAML/s/&& die 1 "[^"]*"/\&\& true/' "B7" "chg"
+mutate PKG-EMPTY          '/# PKG-EMPTY/s/|| die 1 "[^"]*"/|| true/' "B7" "empty"
+mutate PKG-CAS            '/# PKG-CAS/s/"\$tip" "\$zero"/"$tip"/' "B8"
+mutate PKG-ANCESTOR       '/# PKG-ANCESTOR/s/if git -C "\$proj" merge-base --is-ancestor "\$PR_BASE_SHA" "\$srcsha"; then/if true; then/' "B9"
+mutate PKG-TEMPLATE-KEYS  '/# PKG-TEMPLATE-KEYS/s/\*) die 1 "[^"]*" ;;/*) : ;;/' "B10"
+mutate PKG-TIPPARENT      '/# PKG-TIPPARENT/s/-p "\$head"/-p "$PR_BASE_SHA"/' "B12"
+wait
+for name in $MUT_NAMES; do
+  out="$(cat "$MUTDIR/$name/out.txt" 2>/dev/null)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-110)"
+    pass "[Mut] мутант $name → красный (ожидаемо): ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "the distinguishing block stayed green on the mutant (the check proves nothing)"
+  fi
+done
+eq "[Mut] the checkout (pr-build.sh, lib/, sdx/mo) is untouched by the mutation runs" "$(git -C "$ROOT" status --porcelain -- $OWNED)" "$ST_BEFORE"
+fi
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 [ "$FAIL_COUNT" -eq 0 ]

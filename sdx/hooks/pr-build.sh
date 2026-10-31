@@ -190,8 +190,7 @@ GIT_INDEX_FILE="$idx" git -C "$proj" read-tree "$head" || die 2 "git read-tree (
 GIT_INDEX_FILE="$idx" git -C "$proj" update-index --add --cacheinfo "100644,$blob,CHANGE.yaml" || die 2 "git update-index не удался"
 mtree="$(GIT_INDEX_FILE="$idx" git -C "$proj" write-tree)" || die 2 "git write-tree не удался"
 tip="$(printf 'SDX: CHANGE.yaml (%s)\n' "$PR_C" | git -C "$proj" commit-tree "$mtree" -p "$head")" || die 2 "git commit-tree (манифест) не удался"   # PKG-TIPPARENT
-git -C "$proj" update-ref -m "sdx pr-build $sid" "refs/heads/$PR_BRANCH" "$tip" "$zero" \
-  || die 1 "ветка $PR_BRANCH изменилась параллельно (CAS): сборка отменена, повторите /sdx:pr"   # PKG-CAS
+git -C "$proj" update-ref -m "sdx pr-build $sid" "refs/heads/$PR_BRANCH" "$tip" "$zero" || die 1 "ветка $PR_BRANCH изменилась параллельно (CAS): сборка отменена, повторите /sdx:pr"   # PKG-CAS
 
 # ---- result ----
 warn=""

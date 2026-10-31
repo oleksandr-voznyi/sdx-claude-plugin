@@ -76,7 +76,7 @@ if [ -n "$old" ]; then
   [ "$resubmit" = 1 ] || { echo "NEED resubmit: ветка $PR_BRANCH уже есть (повторная сдача поверх прежней вершины)" >&2; exit 3; }
   parent="$old"; zero="$old"
 else
-  parent="$PR_BASE_SHA"; zero=0000000000000000000000000000000000000000   # PKG-CAS
+  parent="$PR_BASE_SHA"; zero=0000000000000000000000000000000000000000   # creation: the ref must not exist
 fi
 git -C "$proj" cat-file -e "$tree:CHANGE.yaml" 2>/dev/null && die 1 "в коде уже есть корневой CHANGE.yaml (код пакета манифеста не содержит)"   # PKG-NOCHANGEYAML
 head="$(printf '%s: %s\n' "$PR_C" "$PR_TITLE" | git -C "$proj" commit-tree "$tree" -p "$parent")" || die 2 "git commit-tree не удался (нет user.name/user.email?)"
@@ -182,6 +182,30 @@ def emit($k): $v[$k] as $x
 manifest="$(jq -n -r --argjson v "$vals" --arg keys "$keys" "$RENDER_CHANGE")" || die 2 "jq не смог отрисовать CHANGE.yaml"
 [ -n "$manifest" ] || die 2 "пустой CHANGE.yaml"
 
-# ---- TASK-T44 partial output (replaced in the next step) ----
-jq -n --arg head "$head" '{head:$head}'
+# ---- the manifest commit (D-2): plumbing only — neither the working tree nor the real index is touched ----
+blob="$(printf '%s\n' "$manifest" | git -C "$proj" hash-object -w --stdin)" || die 2 "git hash-object не удался"   # PKG-PLUMB
+idx="$(mktemp -u "${TMPDIR:-/tmp}/sdx-pr-idx.XXXXXX")"
+trap 'rm -f "$idx"' EXIT
+GIT_INDEX_FILE="$idx" git -C "$proj" read-tree "$head" || die 2 "git read-tree (временный индекс) не удался"
+GIT_INDEX_FILE="$idx" git -C "$proj" update-index --add --cacheinfo "100644,$blob,CHANGE.yaml" || die 2 "git update-index не удался"
+mtree="$(GIT_INDEX_FILE="$idx" git -C "$proj" write-tree)" || die 2 "git write-tree не удался"
+tip="$(printf 'SDX: CHANGE.yaml (%s)\n' "$PR_C" | git -C "$proj" commit-tree "$mtree" -p "$head")" || die 2 "git commit-tree (манифест) не удался"   # PKG-TIPPARENT
+git -C "$proj" update-ref -m "sdx pr-build $sid" "refs/heads/$PR_BRANCH" "$tip" "$zero" \
+  || die 1 "ветка $PR_BRANCH изменилась параллельно (CAS): сборка отменена, повторите /sdx:pr"   # PKG-CAS
+
+# ---- result ----
+warn=""
+addw() { warn="$warn${warn:+$'\n'}$1"; }
+if [ "$PR_BASE_DRIFT" = 1 ]; then addw "base.remote-drift: локальная $PR_BASE_NAME отличается от remote-tracking (пакет построен от локальной)"; fi
+if [ "$PR_DIGEST_DRIFT" = 1 ]; then addw "mandate.digest: digest в заказе отличается от действующего мандата (в манифест идёт digest мандата)"; fi
+[ -z "$reg_note" ] || addw "adr: $reg_note"
+if [ "$spec_n" -gt 1 ]; then addw "spec: в пакете $spec_n спецификаций, указана последняя"; fi
+if [ -n "$old" ]; then rs=true; else rs=false; fi
+ndocs="$(printf '%s\n' "$PR_DOCSF" | grep -c .)"
+jq -n -c --arg branch "$PR_BRANCH" --arg c "$PR_C" --arg e "$PR_EXEC" --arg base "$mbase" --arg head "$head" --arg tip "$tip" \
+  --arg bref "$PR_BASE_REF" --arg asha "$asha" --argjson nf "$nfiles" --argjson ts "$ts" --arg adr "$adr_list" --argjson nd "$ndocs" \
+  --argjson rs "$rs" --argjson dv "$diverged" --arg w "$warn" '
+  def lines: split("\n") | map(select(length > 0));
+  {branch: $branch, commitment: $c, executor: $e, base: $base, head: $head, tip: $tip, base_ref: $bref, archive_sha256: $asha,
+   scope_touched: $nf, touches_shared: $ts, adr: ($adr | lines), docs: $nd, resubmit: $rs, diverged: $dv, warnings: ($w | lines)}'
 exit 0

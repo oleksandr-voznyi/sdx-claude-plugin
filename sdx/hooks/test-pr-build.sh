@@ -171,7 +171,7 @@ newfx && {
   eq "B9 with --allow-diverged: rc 0" "$BRC" "0"
   head="$(jv .head)"
   eq "B9 head's parent is the CURRENT dev" "$(gw rev-parse "$head^" 2>/dev/null)" "$(gw rev-parse refs/heads/dev)"
-  eq "B9 base..head is only the session's change (no foreign file)" "$(gw diff --name-only "$(gw rev-parse refs/heads/dev)" "$head" 2>/dev/null | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md package-lock.json src/mod1/a.js "
+  eq "B9 base..head is only the session's change (no foreign file)" "$(gw diff --name-only "$(gw rev-parse refs/heads/dev)" "$head" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')" "docs/DECISIONS.md docs/specs/mod1.md package-lock.json src/mod1/a.js"
   has "B9 head's tree carries dev's own advance" "$(gw show "$head:src/core/b.js" 2>/dev/null)" "b=2"
 }
 newfx && {
@@ -279,7 +279,7 @@ echo "[B4] scope_touched (generated files included) and touches_shared"
 newfx && {
   run_build "$WC"
   mf_load "$WC" "$(jv .tip)"
-  eq "B4 scope_touched = all changed paths incl. package-lock.json" "$(mfl scope_touched | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md package-lock.json src/mod1/a.js "
+  eq "B4 scope_touched = all changed paths incl. package-lock.json" "$(mfl scope_touched | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md package-lock.json src/mod1/a.js"
   eq "B4 JSON scope_touched is the count" "$(jv .scope_touched)" "4"
   eq "B4 touches_shared true (package-lock.json is a shared path)" "$(mf touches_shared)" "true"
   eq "B4 JSON touches_shared" "$(jv .touches_shared)" "true"
@@ -305,7 +305,7 @@ newfx && {
   eq "B5 the spec sha is a commit of sdx/s1" "$(gw cat-file -t "$(mf spec | sed 's/.*@//')" 2>/dev/null)" "commit"
   eq "B5 verify.tests pass (verification_report.md says 'Итог: PASS')" "$(mf_load "$WC" "$(jv .tip)"; _my_scalar change.verify.tests; printf '%s' "$MY_S")" "pass"
   eq "B5 verify.report points into the branch history" "$(_my_scalar change.verify.report; printf '%s' "$MY_S" | sed 's/@[0-9a-f]*:/@R:/')" "sdx/s1@R:.claude/sessions/s1/verification_report.md"
-  eq "B5 docs = changed files under docs_paths" "$(mfl docs | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md "
+  eq "B5 docs = changed files under docs_paths" "$(mfl docs | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md"
   eq "B5 history_ref" "$(mf history_ref)" "executor:sdx/s1"
   has "B5 notes name the session" "$(mf notes)" "s1"
   eq "B5 JSON docs is the count" "$(jv .docs)" "2"
@@ -316,7 +316,7 @@ newfx && {   # registry not changed by the session
   mf_load "$WC" "$(jv .tip)"
   eq "B5 registry not changed -> adr: []" "$(mfl adr)" ""
   eq "B5 ... and the manifest notes say so" "$(printf '%s' "$(mf notes)" | grep -c 'реестр')" "1"
-  eq "B5 ... docs no longer lists the registry" "$(mfl docs | tr '\n' ' ')" "docs/specs/mod1.md "
+  eq "B5 ... docs no longer lists the registry" "$(mfl docs | tr '\n' ' ')" "docs/specs/mod1.md"
 }
 newfx && {   # docs_in_repo: none
   sed 's/^  docs_in_repo: .*/  docs_in_repo: none/' "$WC/.mesh/mandate.yaml" > "$WC/.mesh/m.new" && mv "$WC/.mesh/m.new" "$WC/.mesh/mandate.yaml"

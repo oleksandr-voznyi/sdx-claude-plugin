@@ -648,6 +648,14 @@ if [ "$ec" -eq 1 ] && [ "$before_sum" = "$after_sum" ] \
 else
   fail "Expected --to rejection of excluded target under no_code" "ec=$ec out='$out'"
 fi
+# Regression (DEBT-046, found 2026-10-31): the refusal text used to carry backticks inside double quotes —
+# a command substitution with a redirect that silently created an empty file named 'false' in the cwd.
+if [ ! -e "$PWD/false" ] && ! printf '%s' "$out" | grep -q '[`]'; then
+  pass "the no_code refusal writes no stray file in the cwd and carries no backticks (DEBT-046)"
+else
+  fail "no_code refusal side effect" "stray file: $([ -e "$PWD/false" ] && echo yes || echo no); backtick in text: $(printf '%s' "$out" | grep -c '[`]')"
+fi
+rm -f "$PWD/false"
 cleanup
 
 # ---- Scenario 31 (T02, REQ-STATE-1/2, DEBT-038): cmd_init no longer writes artifacts/history ----
@@ -1118,3 +1126,4 @@ if [ "$FAIL_COUNT" -eq 0 ]; then
 else
   exit 1
 fi
+smut STRAY-FALSE sdx-stage.sh 's|(no_code: true -> false в|(`no_code: true -> false` в|' "30"

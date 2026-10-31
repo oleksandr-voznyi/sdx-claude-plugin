@@ -191,70 +191,70 @@
 
 #### A-1. `order-import.sh` (DESIGN T3)
 
-- [ ] **T22** `[TEST]` `test-order-import.sh`: каркас, O1 (golden файла), O2 (паритет и отказы), красные
+- [x] **T22** `[TEST]` `test-order-import.sh`: каркас, O1 (golden файла), O2 (паритет и отказы), красные
   - Зависит от: T21
   - Файлы: `sdx/hooks/test-order-import.sh` (новый)
   - Что: каркас (`ORDER_IMPORT_ONLY`, фикстура из `pkg-fixture.sh`); O1 — статический golden: заказ в виде `yaml.safe_dump`-текста с переносами (одинарные кавычки, продолжение строк, список с переносом) → `commitment`, `title`, `requirements`, `repo.base/url`, `deliver.branch` совпадают с ожидаемыми; O2 — паритет `order-unfold`+`miniyaml` с `yaml.safe_load` на ~25 сгенерированных дампах (python/PyYAML, INFO-skip); отказы с причиной: двойные кавычки с переносом, блочный скаляр `|`/`>`, пустая строка внутри значения, якорь, список словарей, flow-словарь, файл > 64 КиБ.
   - DoD: `bash sdx/hooks/test-order-import.sh; echo $?` != 0 (нет скрипта); `bash -n`; перечень красных строк приложен.
   - Закрывает: REQ-PKG-23; A10 (тестовая часть).
 
-- [ ] **T23** `[CODE]` `order-import.sh`: каркас, `order-unfold` (awk), `from-file` (`# PKG-O-UNFOLD`)
+- [x] **T23** `[CODE]` `order-import.sh`: каркас, `order-unfold` (awk), `from-file` (`# PKG-O-UNFOLD`)
   - Зависит от: T22
   - Файлы: `sdx/hooks/order-import.sh` (новый)
   - Что: диспетчер подкоманд; `from-file`: первый непробельный символ `{` → JSON (`jq`), иначе `LC_ALL=C tr -d '\r'` → `order-unfold` → `my_load`; `order-unfold` по DESIGN (склейка продолжений с отступом больше ключа одним пробелом; маркер `#UNFOLD-ERR` для двойной кавычки с переносом и пустой строки внутри значения); граница названа в комментарии скрипта; лимит 64 КиБ.
   - DoD: `bash sdx/hooks/test-order-import.sh` — O1, O2 зелёные (оракульная часть PASS либо INFO-skip).
   - Закрывает: REQ-PKG-23; A10.
 
-- [ ] **T24** `[CODE]` `order-import.sh`: нормализация, проверки идентификаторов, flat-JSON (`# PKG-O-ID`)
+- [x] **T24** `[CODE]` `order-import.sh`: нормализация, проверки идентификаторов, flat-JSON (`# PKG-O-ID`)
   - Зависит от: T23
   - Файлы: `sdx/hooks/order-import.sh`
   - Что: порядок проверок DESIGN: `action == work.order`, `format == 1`; `pr_valid_id` на `commitment.id`/`executor` (поле называется); `pr_clean` на `title`/`requirements` (≤4000); `due`; `repo.base` через `check-ref-format --branch`; `repo.url` через `pr_url_ok`; `pr_has_secret` на `title`/`requirements`; вывод flat-JSON (`jq`); `sid_infix` (≤40 знаков); коды 0/1/2.
   - DoD: `bash sdx/hooks/test-order-import.sh` — O1, O2 зелёные; ручная проверка: заказ с `C` = `a/b` → rc 1, имя поля в stderr.
   - Закрывает: REQ-PKG-10, 23, 25; A10.
 
-- [ ] **T25** `[TEST]` `test-order-import.sh`: O3 (конверт, `list`), O4 (issue), O6 (враждебные значения) — красные
+- [x] **T25** `[TEST]` `test-order-import.sh`: O3 (конверт, `list`), O4 (issue), O6 (враждебные значения) — красные
   - Зависит от: T24
   - Файлы: `sdx/hooks/test-order-import.sh`
   - Что: O3 — `--inbox-json` со строками конвертов (`directive`/`work.order`, посторонний `kind`, два заказа) → выбор по `msg_id`; `list`; неизвестный `msg_id` и `msg_id` вне `^[A-Za-z0-9._:-]{1,80}$` → rc 1; O4 — `gh`-стаб (в `PATH`) отдаёт `{"body": …}` с несколькими fenced-блоками (первый — не заказ) → берётся первый yaml-блок с `action: work.order`; без `gh` → rc 1 с подсказкой `--from-order <файл>`; O6 — `C` с `/`, `..`, пробелом; `title` с переводом строки, `` ` ``, `$(…)`, ESC, 5000 знаков; `repo.url` с `ext::`; секрет в `requirements` → rc 1 либо сведено без побочных эффектов (файл-маркер не создан).
   - DoD: `bash sdx/hooks/test-order-import.sh` — O1, O2 зелёные, O3, O4, O6 красные (перечень приложен).
   - Закрывает: REQ-PKG-10, 23, 24; A10.
 
-- [ ] **T26** `[CODE]` `order-import.sh`: `from-msg`, `list`
+- [x] **T26** `[CODE]` `order-import.sh`: `from-msg`, `list`
   - Зависит от: T25
   - Файлы: `sdx/hooks/order-import.sh`
   - Что: `jq -c 'select(.kind=="directive" and .body.action=="work.order" and .msg_id==$id) | .body'`; без `--inbox-json` — `PYTHONDONTWRITEBYTECODE=1 MESH_ENDPOINT_DIR="$proj" python3 "$here/../mo/mesh_endpoint.py" pull` затем `inbox --json` (нет python3/PyYAML — отказ с подсказкой `--inbox-json`/`from-file`); `list` — `msg_id / C / название`; угадывания «последнего» нет.
   - DoD: `bash sdx/hooks/test-order-import.sh` — O3 зелёный, O6 — часть про конверт зелёная.
   - Закрывает: REQ-PKG-23; A10.
 
-- [ ] **T27** `[CODE]` `order-import.sh`: `from-issue` (`# PKG-O-FENCE`)
+- [x] **T27** `[CODE]` `order-import.sh`: `from-issue` (`# PKG-O-FENCE`)
   - Зависит от: T26
   - Файлы: `sdx/hooks/order-import.sh`
   - Что: `gh issue view <N> [--repo] --json body`; нет `gh` → rc 1 с подсказкой; первый fenced-блок ```` ```yaml ````/`yml` с `action: work.order` на нулевом отступе (≤64 КиБ), далее как YAML-файл; формат обёртки — допущение SDX (Q-10), пометить в шапке.
   - DoD: `bash sdx/hooks/test-order-import.sh` — O4, O6 целиком зелёные.
   - Закрывает: REQ-PKG-24; A10.
 
-- [ ] **T28** `[TEST]` `test-order-import.sh` O5, O7 и `test-sdx-stage.sh [42]` — красные
+- [x] **T28** `[TEST]` `test-order-import.sh` O5, O7 и `test-sdx-stage.sh [42]` — красные
   - Зависит от: T27
   - Файлы: `sdx/hooks/test-order-import.sh`, `sdx/hooks/test-sdx-stage.sh` (только добавление секции `[42]`; `[1]–[41]`/`[M30]–[M41]` не правятся)
   - Что: O5 — `mandate_digest`/`executor`/`deliver.branch` не совпали с локальным мандатом → rc 3, **все** `MISMATCH`-строки сразу, значения через `pr_clean`; O7 — `--out` пишет `order.yaml` в нашем формате, `pr_order_load` читает те же значения (круговая сверка с `lib/pr-lib.sh`), `stamp-state` добавляет `commitment`, не трогает остальные ключи, идемпотентен, отказывает на другом значении и невалидном `C`; `[42]` — характеризационный: поле `commitment` переживает `next` и `next --to`, `init` пишет прежние семь ключей без него (проходит и без нового кода; красная сторона — мутант `write_stage`, теряющий поле, в T31).
   - DoD: `bash sdx/hooks/test-order-import.sh` — O5, O7 красные (перечень приложен); `bash sdx/hooks/test-sdx-stage.sh` — `[42]` зелёный (характеризационный), остальное без изменений.
   - Закрывает: REQ-PKG-23, 25; A10.
 
-- [ ] **T29** `[CODE]` `order-import.sh`: сверка с мандатом и снимок `--out` (`# PKG-O-DIGEST`, `# PKG-O-EXEC`, `# PKG-O-BRANCH`)
+- [x] **T29** `[CODE]` `order-import.sh`: сверка с мандатом и снимок `--out` (`# PKG-O-DIGEST`, `# PKG-O-EXEC`, `# PKG-O-BRANCH`)
   - Зависит от: T28
   - Файлы: `sdx/hooks/order-import.sh`
   - Что: сверка после нормализации (`mandate_load`; rc 3 + строки `MISMATCH <поле> order=<..> local=<..>`); снимок `--out` рендерится `jq` в формате «Схема данных» DESIGN (все скаляры одной строкой в кавычках; `hosting` только если есть в заказе; мандат целиком не копируется).
   - DoD: `bash sdx/hooks/test-order-import.sh` — O5 зелёный; O7 — части про снимок зелёные.
   - Закрывает: REQ-PKG-23, 25; A10.
 
-- [ ] **T30** `[CODE]` `order-import.sh`: `stamp-state` (`# PKG-O-STAMP`)
+- [x] **T30** `[CODE]` `order-import.sh`: `stamp-state` (`# PKG-O-STAMP`)
   - Зависит от: T29
   - Файлы: `sdx/hooks/order-import.sh`
   - Что: `jq --arg c "$C" '. + {commitment:$c}'` во временный файл рядом + `mv` (как `write_stage`); отказ, если состояния нет, `C` невалиден или поле уже стоит с другим значением; идемпотентен.
   - DoD: `bash sdx/hooks/test-order-import.sh` целиком зелёный; `bash sdx/hooks/test-sdx-stage.sh` зелёный; `git diff --stat main -- sdx/hooks/sdx-stage.sh` пуст.
   - Закрывает: REQ-PKG-25; A10.
 
-- [ ] **T31** `[TEST]` `test-order-import.sh`: мутанты `PKG-O-*`; мутант для `[42]`
+- [x] **T31** `[TEST]` `test-order-import.sh`: мутанты `PKG-O-*`; мутант для `[42]`
   - Зависит от: T30
   - Файлы: `sdx/hooks/test-order-import.sh`, `sdx/hooks/test-sdx-stage.sh`
   - Что: мутанты: `PKG-O-UNFOLD` (без склейки → O1), `PKG-O-FENCE` (берёт первый fenced-блок любого типа → O4), `PKG-O-DIGEST`/`PKG-O-EXEC`/`PKG-O-BRANCH` (сверка не срабатывает → O5), `PKG-O-ID` (без `pr_valid_id` → O6), `PKG-O-STAMP` (перезапись чужого значения → O7); в `test-sdx-stage.sh` `[42]` — мутант копии `sdx-stage.sh`, у которой `write_stage` теряет `commitment` (`jq` оставляет только `.stage`), краснит `[42]` (мутант не меняет чекаут).
@@ -263,49 +263,49 @@
 
 #### A-2. `protocol-export.sh` (DESIGN T4)
 
-- [ ] **T32** `[TEST]` `test-protocol-export.sh`: X1–X4, X6 — красные
+- [x] **T32** `[TEST]` `test-protocol-export.sh`: X1–X4, X6 — красные
   - Зависит от: T21
   - Файлы: `sdx/hooks/test-protocol-export.sh` (новый)
   - Что: каркас (`PROTOCOL_EXPORT_ONLY`); оракул схемы — `python3 -I` + `yaml.safe_load` с логикой `protocol_check()` (`DEV:577–593`: пять ключей-списков, `decisions[i].{id,what,why}` непусты; INFO-skip без PyYAML, проверки через `jq` на JSON-форме остаются); X1 — формат A (`### Развилка`, `Вариант`/`Обоснование`, многострочное продолжение, `Варианты`) → `decisions`, `alternatives`, `tag`, `stage`; встроенный негатив: оракул на файле без одного раздела краснеет; X2 — **буквальная golden-копия `decisions_log.md` этой сессии** (вставляется в сьют как heredoc; формат B `- <дата> [тег] текст`) → `what`/`why` непусты, тег, `D-1…`; X3 — смесь A+B, порядок сохранён; X4 — нет файлов / пустой каталог / пустой `decisions_log.md` → пять пустых списков, rc 0; нет каталога и нет источников → rc 1; X6 — `id` `D-1…D-n`, уникальны.
   - DoD: `bash sdx/hooks/test-protocol-export.sh; echo $?` != 0 (нет скрипта); перечень красных строк приложен.
   - Закрывает: REQ-PKG-19, 20, 21; A6 (тестовая часть).
 
-- [ ] **T33** `[CODE]` `protocol-export.sh`: разбор `decisions_log.md` (awk → TSV, форматы A и B; `# PKG-X-FMTB`, `# PKG-X-ADR`)
+- [x] **T33** `[CODE]` `protocol-export.sh`: разбор `decisions_log.md` (awk → TSV, форматы A и B; `# PKG-X-FMTB`, `# PKG-X-ADR`)
   - Зависит от: T32
   - Файлы: `sdx/hooks/protocol-export.sh` (новый)
   - Что: awk-ядро из DESIGN (блок `### Развилка:` и строка `- <дата> [тег] текст`; формат B: `what` — первое предложение ≤200 знаков, `why` — вся запись); `adr` = запись содержит `ADR-[0-9]+`; запись без `what` и `why` пропускается со строкой в stderr; аргументы `--sid`, `--proj`.
   - DoD: `bash sdx/hooks/test-protocol-export.sh` — X1–X3 (по частям `decisions`) зелёные.
   - Закрывает: REQ-PKG-20; A6, A7.
 
-- [ ] **T34** `[CODE]` `protocol-export.sh`: рендер `jq`, скелет из пяти списков, `rc` (`# PKG-X-ID`, `# PKG-X-EMPTY`)
+- [x] **T34** `[CODE]` `protocol-export.sh`: рендер `jq`, скелет из пяти списков, `rc` (`# PKG-X-ID`, `# PKG-X-EMPTY`)
   - Зависит от: T33
   - Файлы: `sdx/hooks/protocol-export.sh`
   - Что: рендер одним `jq` (`tojson`; `D-<n>` по порядку; `questions[]` = `"[<тег>] <название>"`); пустые источники → `done: []` и т. д., все пять ключей присутствуют всегда; rc 1 только если нет ни одного читаемого источника и каталога сессии; запись в `.claude/sessions/<sid>/protocol.yaml` (по умолчанию) либо `--out`.
   - DoD: `bash sdx/hooks/test-protocol-export.sh` — X1–X4, X6 зелёные (оракул схемы PASS либо INFO-skip).
   - Закрывает: REQ-PKG-19, 20, 21; A6.
 
-- [ ] **T35** `[TEST]` `test-protocol-export.sh`: X5, X7, X8, X9 — красные
+- [x] **T35** `[TEST]` `test-protocol-export.sh`: X5, X7, X8, X9 — красные
   - Зависит от: T34
   - Файлы: `sdx/hooks/test-protocol-export.sh`
   - Что: X5 — запись с `ADR-021` → `adr: true`, без → `false`; X7 — враждебные значения (`"`, `\`, `---`, `: `, табуляция, 5000 знаков, U+2028) → roundtrip через `safe_load`; X8 — `verified` (строки `- …` раздела `## Сводка`, `Матрица: OK a, WARN b, FAIL c` по последнему столбцу таблицы, `Итог по области: …` из блока `SDX-MANDATE-SCOPE`), `deltas` (`"[ADDED|MODIFIED|REMOVED] REQ-…"` из `SPEC.md`, иначе `change_note.md`; дубликаты убраны), `done` (`PLAN.md` сессии, иначе `docs/history/plans/<sid>.md`, иначе `change_note.md`) ; X9 — `--from-rev <родитель коммита шага 5>` даёт тот же файл, что запуск до шага 5.
   - DoD: `bash sdx/hooks/test-protocol-export.sh` — X8, X9 красные, X5/X7 — по состоянию кода (перечень приложен).
   - Закрывает: REQ-PKG-19–21; A6, A7.
 
-- [ ] **T36** `[CODE]` `protocol-export.sh`: `verified`, `deltas`, `done`
+- [x] **T36** `[CODE]` `protocol-export.sh`: `verified`, `deltas`, `done`
   - Зависит от: T35
   - Файлы: `sdx/hooks/protocol-export.sh`
   - Что: извлечение по таблице источников DESIGN («Источники и правила»); число кругов не экспортируется (К-5); `done` ≤120 знаков на запись, для свёрнутой дельты — одна запись `change_note.md: <первый заголовок или строка>`.
   - DoD: `bash sdx/hooks/test-protocol-export.sh` — X8 зелёный.
   - Закрывает: REQ-PKG-21; A6.
 
-- [ ] **T37** `[CODE]` `protocol-export.sh`: `--from-rev`, `--out`, сводка stderr (`# PKG-X-REV`)
+- [x] **T37** `[CODE]` `protocol-export.sh`: `--from-rev`, `--out`, сводка stderr (`# PKG-X-REV`)
   - Зависит от: T36
   - Файлы: `sdx/hooks/protocol-export.sh`
   - Что: `--from-rev REV` читает `git show REV:.claude/sessions/<sid>/…`, вывод в stdout; сводка `protocol: done N decisions M (adr K) questions Q verified V deltas D`; коды 0/1/2.
   - DoD: `bash sdx/hooks/test-protocol-export.sh` целиком зелёный; `grep -nE 'python|eval' sdx/hooks/protocol-export.sh` пусто.
   - Закрывает: REQ-PKG-4, 19; A6.
 
-- [ ] **T38** `[TEST]` `test-protocol-export.sh`: мутанты `PKG-X-FMTB`, `PKG-X-EMPTY`, `PKG-X-ADR`, `PKG-X-ID`, `PKG-X-REV`; портируемость
+- [x] **T38** `[TEST]` `test-protocol-export.sh`: мутанты `PKG-X-FMTB`, `PKG-X-EMPTY`, `PKG-X-ADR`, `PKG-X-ID`, `PKG-X-REV`; портируемость
   - Зависит от: T37
   - Файлы: `sdx/hooks/test-protocol-export.sh`
   - Что: `PKG-X-FMTB` (не читает формат B → X2), `PKG-X-EMPTY` (опускает пустой раздел → X4), `PKG-X-ADR` (всегда `false` → X5), `PKG-X-ID` (дубликат id → X6), `PKG-X-REV` (читает рабочее дерево вместо `REV` → X9); `FORBID`.
@@ -316,56 +316,56 @@
 
 #### B-1. `pr-build.sh` (DESIGN T5)
 
-- [ ] **T39** `[TEST]` `test-pr-build.sh`: B7 (отказы), B9 (расходящийся `base`), B8a (повторная сдача до манифеста) — красные
+- [x] **T39** `[TEST]` `test-pr-build.sh`: B7 (отказы), B9 (расходящийся `base`), B8a (повторная сдача до манифеста) — красные
   - Зависит от: T21
   - Файлы: `sdx/hooks/test-pr-build.sh` (новый)
   - Что: каркас (`PR_BUILD_ONLY`, `pkg_fixture_copy`); B7: `executor` с `:` (`pr-build: executor: …`), `C` с `..`/ведущим `-`/пробелом/65 знаками, секрет в заголовке, путь с управляющим символом, `CHANGE.yaml` в коде, пустой дифф, каталог сессии в дереве `sdx/<sid>`, нет мандата, мандат без `endpoint.yaml`, не та ветка, нет `user.name/email` → rc 2; B9: `dev` ушёл вперёд после выреза — rc 3 `NEED allow-diverged`; с флагом дифф `base..head` только изменения сессии; конфликт слияния → rc 1; B8a: существующая `change/*` без флага → rc 3 `NEED resubmit`; с флагом `parent` нового `head` = прежняя вершина; не-пакетная `change/*` (нет `CHANGE.yaml`) → rc 1.
   - DoD: `bash sdx/hooks/test-pr-build.sh; echo $?` != 0 (нет скрипта); перечень красных строк приложен.
   - Закрывает: REQ-PKG-5, 6, 7, 10, 18; A3, A8 (тестовая часть).
 
-- [ ] **T40** `[CODE]` `pr-build.sh`, часть 1: аргументы, отказы, дерево, родитель, `head` (`# PKG-ANCESTOR`, `# PKG-CAS`, `# PKG-NOCHANGEYAML`)
+- [x] **T40** `[CODE]` `pr-build.sh`, часть 1: аргументы, отказы, дерево, родитель, `head` (`# PKG-ANCESTOR`, `# PKG-CAS`, `# PKG-NOCHANGEYAML`)
   - Зависит от: T39
   - Файлы: `sdx/hooks/pr-build.sh` (новый; `set -uo pipefail`, bash 3.2, `die rc msg`)
   - Что: по DESIGN «`pr-build.sh`», алгоритм до `head`: режим мандата, `pr_resolve`, `refs/heads/sdx/$sid`, текущая ветка = `sdx/<sid>`, дерево (предок `base` → дерево вершины; иначе `--allow-diverged` + `git merge-tree --write-tree`), родитель (`base` либо прежняя вершина с `--resubmit` и проверкой `CHANGE.yaml` на ней), отказы «каталог сессии в дереве», `check-ref-format`, `pr_has_secret` на заголовке/путях, `CHANGE.yaml` в дереве; `head=$(… | git commit-tree "$tree" -p "$parent")`; ничего не пишет в рабочее дерево.
   - DoD: `PR_BUILD_ONLY="B7 B9 B8a" bash sdx/hooks/test-pr-build.sh` зелёный; `grep -nE 'python|eval|checkout|worktree' sdx/hooks/pr-build.sh` пусто.
   - Закрывает: REQ-PKG-5, 6, 7, 10, 18; A3.
 
-- [ ] **T41** `[TEST]` `test-pr-build.sh`: B1–B5, B11 — красные
+- [x] **T41** `[TEST]` `test-pr-build.sh`: B1–B5, B11 — красные
   - Зависит от: T40
   - Файлы: `sdx/hooks/test-pr-build.sh`
   - Что: B1 — золотой путь: rc 0, JSON, `tip^ == head`, родитель `head` = `base`, `base..head` — ровно один коммит с темой `C: заголовок`, python-оракул `pkg_oracle` → `approve`; встроенный негатив: оракул на повреждённом пакете ≠ `approve`; B2 — plumbing: до/после совпадают `HEAD`, имя ветки, `git status --porcelain`, `git ls-files -s`; `CHANGE.yaml` на диске нет (`find`); дерево `tip` = дерево `head` + один блоб; B3 — `archive_sha256` = пересчёт в независимом клоне (`git clone` + `git archive`) и в фикстуре; B4 — `scope_touched` включает `package-lock.json`, `touches_shared` оба исхода; B5 — `adr` (реестр менялся → `["docs/DECISIONS.md#ADR-099"]`; не менялся → `[]` + `notes`; `docs_in_repo: none` → `[]`), `spec` есть/нет (ключ опущен), `verify.tests` `pass`/`unknown`; B11 — в `git ls-tree -r tip` нет `.claude/sessions/` и `protocol.yaml`.
   - DoD: `bash sdx/hooks/test-pr-build.sh` — B7, B9, B8a зелёные, B1–B5, B11 красные (перечень приложен).
   - Закрывает: REQ-PKG-6, 8, 9, 12, 19; A1, A3, A4, A5, A7, A11.
 
-- [ ] **T42** `[CODE]` `pr-build.sh`, часть 2: значения манифеста (`# PKG-SCOPE-TOUCHED`, `# PKG-SHARED`, `# PKG-ARCHIVE`, `# PKG-EMPTY`)
+- [x] **T42** `[CODE]` `pr-build.sh`, часть 2: значения манифеста (`# PKG-SCOPE-TOUCHED`, `# PKG-SHARED`, `# PKG-ARCHIVE`, `# PKG-EMPTY`)
   - Зависит от: T41
   - Файлы: `sdx/hooks/pr-build.sh`
   - Что: `mbase=merge-base(head, base)`; `PR_FILES` (включая сгенерированное); пустой дифф → отказ; `pr_scope_eval` → `touches_shared`; `asha = git -c tar.umask=0002 archive --format=tar "$head" | pr_sha256` (от `head`, не от `tip`); `spec` (позднее всего менявшийся `docs/specs/*.md@<sha>`; нет — ключ опускается); `verify.tests` (`Итог: PASS` в `verification_report.md` на `PR_SESS_REV` → `pass`, иначе `unknown`), `verify.report`; `adr` через `pr_registry` (при `docs_in_repo: none` → `[]`); `docs` = `PR_DOCSF`; `history_ref: executor:sdx/<sid>`; `notes` (`--notes` либо `SDX <версия плагина>: сессия <sid>` + пометки реестра); значения собираются в JSON `$vals` (`jq -n`).
   - DoD: `PR_BUILD_ONLY="B7 B9 B8a" bash sdx/hooks/test-pr-build.sh` по-прежнему зелёный; ручной прогон на копии фикстуры печатает в stderr строки `pr-build: base=… head=… files=N shared=bool` (отладочный вывод остаётся, это часть stderr-контракта «человекочитаемые строки»).
   - Закрывает: REQ-PKG-9, 12, 26; A4, A5, A7, A11.
 
-- [ ] **T43** `[TEST]` `test-pr-build.sh`: B6 (экранирование), B10 (шаблон), B12 (`tip`-родитель) — красные
+- [x] **T43** `[TEST]` `test-pr-build.sh`: B6 (экранирование), B10 (шаблон), B12 (`tip`-родитель) — красные
   - Зависит от: T42
   - Файлы: `sdx/hooks/test-pr-build.sh`
   - Что: B6 — заголовок с `"`, `\`, `: `, `#`, `'`, `{}`, ` - `, юникодом, переводом строки (сведён к пробелу); манифест разобран `miniyaml` и `yaml.safe_load` (оракул) с одинаковыми значениями; `mandate_digest` из цифр остаётся строкой; B10 — ключи и порядок манифеста = ключам шаблона `sdx/mo/CHANGE.template.yaml`; копия шаблона с лишним ключом → rc 1 «обновите плагин»; копия без ключа `adr` → манифест без `adr`; B12 — родитель вершины = `head` (не `base`); манифест-коммит меняет ровно один файл.
   - DoD: `bash sdx/hooks/test-pr-build.sh` — B6, B10, B12 красные (вместе с B1–B5, B11); перечень приложен.
   - Закрывает: REQ-PKG-8, 9, 10; A1, A3.
 
-- [ ] **T44** `[CODE]` `pr-build.sh`, часть 3: обход шаблона и рендер `jq` (`# PKG-TEMPLATE-KEYS`, `# PKG-QUOTE`)
+- [x] **T44** `[CODE]` `pr-build.sh`, часть 3: обход шаблона и рендер `jq` (`# PKG-TEMPLATE-KEYS`, `# PKG-QUOTE`)
   - Зависит от: T43
   - Файлы: `sdx/hooks/pr-build.sh`
   - Что: ключи шаблона (`$here/../mo/CHANGE.template.yaml`) в порядке файла; неизвестный ключ → rc 1 «шаблон sim-kit содержит поле '<k>', неизвестное pr-build — обновите плагин»; `RENDER_CHANGE` — jq-программа DESIGN (`sc`: `tojson`, U+2028/2029/0085 → пробел, `null` → `""`; `lst`; `emit`; `verify` вложенным отображением); все строки в кавычках; необязательные ключи (`module`, `contracts_changed`, `migrations`, `layer`) не заполняются.
   - DoD: `PR_BUILD_ONLY="B6 B10 B7 B9 B8a" bash sdx/hooks/test-pr-build.sh` зелёный (оракул `safe_load` PASS или INFO-skip).
   - Закрывает: REQ-PKG-8, 9, 10; A1.
 
-- [ ] **T45** `[CODE]` `pr-build.sh`, часть 4: коммит манифеста plumbing'ом, `update-ref` CAS, JSON-выход (`# PKG-PLUMB`, `# PKG-TIPPARENT`)
+- [x] **T45** `[CODE]` `pr-build.sh`, часть 4: коммит манифеста plumbing'ом, `update-ref` CAS, JSON-выход (`# PKG-PLUMB`, `# PKG-TIPPARENT`)
   - Зависит от: T44
   - Файлы: `sdx/hooks/pr-build.sh`
   - Что: `git hash-object -w --stdin` → временный индекс (`GIT_INDEX_FILE`, `trap rm`) → `read-tree head` → `update-index --add --cacheinfo 100644,<blob>,CHANGE.yaml` → `write-tree` → `commit-tree -p "$head"` (тема `SDX: CHANGE.yaml (<C>)`) → `update-ref refs/heads/$PR_BRANCH "$tip" "$zero"` (создание — нули; повтор — прежняя вершина); JSON-выход по «JSON-выходы» DESIGN; `warnings[]`.
   - DoD: `bash sdx/hooks/test-pr-build.sh` целиком зелёный (B1–B12; оракул `approve` при PyYAML); время сьюта ≤ 6 с без мутантов.
   - Закрывает: REQ-PKG-8, 9, 18; A1, A3, A4, A5.
 
-- [ ] **T46** `[TEST]` `test-pr-build.sh`: мутанты `PKG-*` (11)
+- [x] **T46** `[TEST]` `test-pr-build.sh`: мутанты `PKG-*` (11)
   - Зависит от: T45
   - Файлы: `sdx/hooks/test-pr-build.sh`
   - Что: `PKG-PLUMB` (запись `CHANGE.yaml` в рабочее дерево → B2), `PKG-ARCHIVE` (хеш от `tip` → B3), `PKG-SCOPE-TOUCHED` (без сгенерированных → B4), `PKG-SHARED` (всегда `false` → B4), `PKG-QUOTE` (рендер без `tojson` → B6), `PKG-NOCHANGEYAML` (нет отказа → B7), `PKG-EMPTY` (пустой дифф допускается → B7), `PKG-CAS` (нулевое «старое значение» заменено на пустое → B8), `PKG-ANCESTOR` (без ветви расхождения → B9), `PKG-TEMPLATE-KEYS` (неизвестные ключи молча пропускаются → B10), `PKG-TIPPARENT` (`-p base` → B12).
@@ -374,56 +374,56 @@
 
 #### B-2. `pr-check.sh` (DESIGN T6; после T46)
 
-- [ ] **T47** `[TEST]` `test-pr-check.sh`: C1–C3 (фаза `pre`) — красные
+- [x] **T47** `[TEST]` `test-pr-check.sh`: C1–C3 (фаза `pre`) — красные
   - Зависит от: T46
   - Файлы: `sdx/hooks/test-pr-check.sh` (новый)
   - Что: каркас (`PR_CHECK_ONLY`); C1 — `pre` зелёный: rc 0, `PR-CHECK PASS`, тест-стаб `exit 0`; C2 — rc 1, каждый свой `FAIL <id>`: грязное дерево, каталог сессии в `HEAD`, не та ветка, недопустимый `executor`, имя вне `scope.branches` (`branches: [feat/*]`), истёкший мандат (`SDX_MANDATE_TODAY`), файл вне области, документ вне `docs_paths` при `final`, пустой дифф, красный тест-стаб (`exit 1`, хвост в stderr), `repo.url` вида `ext::…`, нет `digest`; C3 — rc 3, `WARN <id>`: расходящийся `base`, ветка уже есть, реестр ADR не менялся (`final`), реестр вне `docs_paths`, дрейф remote-tracking, `export-ignore` в `info/attributes`, `history: executor` + `docs_in_repo: none`; при `docs_in_repo: none` реестр не проверяется.
   - DoD: `bash sdx/hooks/test-pr-check.sh; echo $?` != 0 (нет скрипта); перечень красных строк приложен.
   - Закрывает: REQ-PKG-11, 12, 26, 27; A2, A11 (тестовая часть).
 
-- [ ] **T48** `[CODE]` `pr-check.sh`, `pre`, часть 1: каркас, closeout/ID/ветка/срок/мандат/`base` (`# PKG-C-TREE`, `# PKG-C-SESSION`, `# PKG-C-BRANCH`, `# PKG-C-EXPIRED`)
+- [x] **T48** `[CODE]` `pr-check.sh`, `pre`, часть 1: каркас, closeout/ID/ветка/срок/мандат/`base` (`# PKG-C-TREE`, `# PKG-C-SESSION`, `# PKG-C-BRANCH`, `# PKG-C-EXPIRED`)
   - Зависит от: T47
   - Файлы: `sdx/hooks/pr-check.sh` (новый)
   - Что: формат строк `OK|FAIL|WARN|NOTE <id>: <текст>` и итог `PR-CHECK PASS|WARN n|FAIL n`, rc 0/3/1/2; значения мандата/заказа в выводе через `pr_clean`; проверки: `closeout.branch/tree/session` (прокси `mandate-info.sh closeout-check <sid>`), `id.commitment/executor`, `branch.name` (`check-ref-format`), `branch.scope` (`mandate_fnmatch`, `scope.branches` непуст), `mandate.valid` (`mandate_expired`), `mandate.digest`, `mandate.lint`, `base.ref`, `base.ancestor`, `base.remote-drift`, `branch.exists`.
   - DoD: `PR_CHECK_ONLY=C1 bash sdx/hooks/test-pr-check.sh` и часть C2 (строки tree/session/branch/executor/expired/digest) и C3 (ancestor/exists/drift/lint) зелёные.
   - Закрывает: REQ-PKG-11 (а, г, е, ж), 5; A2.
 
-- [ ] **T49** `[CODE]` `pr-check.sh`, `pre`, часть 2: дифф, `docs.final`, реестр, URL, `attrs`, `shared.note` (`# PKG-C-SCOPE`, `# PKG-C-DOCS-FINAL`, `# PKG-C-ADR`)
+- [x] **T49** `[CODE]` `pr-check.sh`, `pre`, часть 2: дифф, `docs.final`, реестр, URL, `attrs`, `shared.note` (`# PKG-C-SCOPE`, `# PKG-C-DOCS-FINAL`, `# PKG-C-ADR`)
   - Зависит от: T48
   - Файлы: `sdx/hooks/pr-check.sh`
   - Что: предсказанный дифф (`git diff --name-only base_sha sdx/<sid>`; при расхождении — по дереву `merge-tree --write-tree`); `diff.nonempty`, `diff.scope` (`mandate_in_union`), `diff.session`, `docs.final` (путь под `docs/` вне `docs_paths`, К-12), `adr.registry` (WARN: не менялся/неоднозначен/вне `docs_paths`; при `none` не проверяется), `shared.note`, `attrs.export`, `url.scheme` (`pr_url_ok`), `url.origin-drift`.
   - DoD: `bash sdx/hooks/test-pr-check.sh` — C1–C3 зелёные, кроме строки красного теста-стаба.
   - Закрывает: REQ-PKG-11 (в, г), 12, 26, 27; A2, A11.
 
-- [ ] **T50** `[CODE]` `pr-check.sh`, `pre`, часть 3: проверка `tests` и `--no-tests` (`# PKG-C-TESTS`)
+- [x] **T50** `[CODE]` `pr-check.sh`, `pre`, часть 3: проверка `tests` и `--no-tests` (`# PKG-C-TESTS`)
   - Зависит от: T49
   - Файлы: `sdx/hooks/pr-check.sh`
   - Что: повторный прогон `test_cmd_resolve` из корня под `timeout`/`gtimeout ${SDX_VERIFY_TIMEOUT:-180}` (нет утилиты — без лимита и `NOTE tests: нет timeout`); нет команды — `NOTE`; `--no-tests` — `NOTE`; `base.ancestor` WARN → `WARN tests: прогон не относится к пакету`; запуск последним и только без `FAIL` выше; хвост красного вывода в stderr.
   - DoD: `bash sdx/hooks/test-pr-check.sh` — C1–C3 целиком зелёные.
   - Закрывает: REQ-PKG-11 (з); A2.
 
-- [ ] **T51** `[TEST]` `test-pr-check.sh`: C4–C7 (фаза `post`, паритет с оракулом) — красные
+- [x] **T51** `[TEST]` `test-pr-check.sh`: C4–C7 (фаза `post`, паритет с оракулом) — красные
   - Зависит от: T50
   - Файлы: `sdx/hooks/test-pr-check.sh`
   - Что: C4 — `post` зелёный на пакете из `pr-build` + оракул `approve`; C5 — красные пакеты `pkg_craft_*`: лишний коммит между `head` и вершиной, посторонний файл в манифест-коммите, неверный `archive_sha256`, файл вне области, `touches_shared` не объявлен, каталог сессии в пакете, `format: 2`, манифест внутри головы, фальшивый `scope_touched`, секрет в `notes`, чужие `commitment`/`executor`/`digest`; C6 — паритет: `оракул ≠ approve ⇔ pr-check post ≠ PASS` по проверкам, которые оракул покрывает, таблица «пакет → ожидаемые id провала»; встроенный негатив: подмена вердикта оракула краснит сверку; C7 — `all` = `pre` затем `post` (только если `pre` без `FAIL`); `--no-tests` пропускает только тесты; враждебный `executor` (ESC/перевод строки) в выводе через `pr_clean`.
   - DoD: `bash sdx/hooks/test-pr-check.sh` — C1–C3 зелёные, C4–C7 красные (перечень приложен).
   - Закрывает: REQ-PKG-8, 11, 12; A1, A2, A5.
 
-- [ ] **T52** `[CODE]` `pr-check.sh`, `post`, часть 1: манифест и коммит (`# PKG-C-TIPCOMMIT`)
+- [x] **T52** `[CODE]` `pr-check.sh`, `post`, часть 1: манифест и коммит (`# PKG-C-TIPCOMMIT`)
   - Зависит от: T51
   - Файлы: `sdx/hooks/pr-check.sh`
   - Что: `manifest.parse` (`miniyaml`), `manifest.format` (`change.format == 1`), `manifest.commit` (один родитель `== change.head`, `git diff --name-only head tip` = `CHANGE.yaml`), `manifest.headtree`, `manifest.identity` (`commitment`/`executor`/`mandate_digest` против заказа/мандата, имя ветки).
   - DoD: `bash sdx/hooks/test-pr-check.sh` — C4 и строки C5 про `format`, лишний коммит, посторонний файл, манифест внутри головы, чужие идентификаторы зелёные.
   - Закрывает: REQ-PKG-8, 11 (б); A1, A2.
 
-- [ ] **T53** `[CODE]` `pr-check.sh`, `post`, часть 2: `archive`, `scope`, `shared`, `adr`, `secret`, `pkg.*`, повтор, фаза `all` (`# PKG-C-ARCHIVE`, `# PKG-C-SHARED`)
+- [x] **T53** `[CODE]` `pr-check.sh`, `post`, часть 2: `archive`, `scope`, `shared`, `adr`, `secret`, `pkg.*`, повтор, фаза `all` (`# PKG-C-ARCHIVE`, `# PKG-C-SHARED`)
   - Зависит от: T52
   - Файлы: `sdx/hooks/pr-check.sh`
   - Что: `manifest.archive` (пересчёт от `head`), `manifest.scope` (множество = `git diff --name-only mbase head`), `manifest.shared` (вычисленное `true`, в манифесте не `true` → FAIL; обратное — NOTE), `manifest.adr` (при `final`; каждый путь до `#` в `PR_FILES`), `manifest.secret`, `pkg.session/scope/nonempty` (по `base..tip` без `CHANGE.yaml`), повтор `branch.scope`/`mandate.valid`/`closeout.*`; `--phase all`.
   - DoD: `bash sdx/hooks/test-pr-check.sh` целиком зелёный (C1–C7; сверка с оракулом PASS либо INFO-skip).
   - Закрывает: REQ-PKG-9, 11 (б, в, г, д, е, ж, и), 12, 26; A1, A2, A5, A11.
 
-- [ ] **T54** `[TEST]` `test-pr-check.sh`: мутанты `PKG-C-*`; портируемость
+- [x] **T54** `[TEST]` `test-pr-check.sh`: мутанты `PKG-C-*`; портируемость
   - Зависит от: T53
   - Файлы: `sdx/hooks/test-pr-check.sh`
   - Что: `PKG-C-TREE`, `PKG-C-SESSION`, `PKG-C-BRANCH`, `PKG-C-EXPIRED`, `PKG-C-SCOPE`, `PKG-C-DOCS-FINAL`, `PKG-C-ADR`, `PKG-C-TESTS`, `PKG-C-TIPCOMMIT`, `PKG-C-ARCHIVE`, `PKG-C-SHARED` — каждый краснит свой сценарий C2/C3/C5; `FORBID` по `pr-check.sh`.
@@ -432,35 +432,35 @@
 
 #### B-3. `pr-publish.sh` (DESIGN T7; зависит от T46, не от `pr-check`)
 
-- [ ] **T55** `[TEST]` `test-pr-publish.sh`: P1–P4, P6, P7 — красные
+- [x] **T55** `[TEST]` `test-pr-publish.sh`: P1–P4, P6, P7 — красные
   - Зависит от: T46
   - Файлы: `sdx/hooks/test-pr-publish.sh` (новый)
   - Что: каркас (`PR_PUBLISH_ONLY`); пакет — из `pr-build.sh`; P1 — push в локальный bare как `repo.url`: на удалённой стороне ровно одна новая ссылка `refs/heads/change/<C>-<exec>` (`for-each-ref`), `sdx/s1` и теги отсутствуют; `remote_sha == tip`; P2 — враждебный конфиг: `push.default=matching`, `remote.origin.push=+refs/heads/*:refs/heads/*`, `push.followTags=true` + аннотированный тег на `sdx/s1` → по-прежнему только `change/…`, тегов нет; P3 — не-fast-forward: на удалённой стороне `change/…` на постороннем коммите → rc 1; повтор уже отправленного → rc 0, `already: true`; FF-продолжение уходит без `--force`; P4 — `https://github.com/o/r.git`, `git@github.com:o/r.git` → `github`, локальный путь → `bare`, подсказка заказа приоритетнее; P6 — отказы: ветка `sdx/s1`/`main`; URL `ext::sh -c 'touch MARK'` (маркер не создан), `-oProxyCommand=…`, пробел, нет remote; `prod-guard.conf` с `git push` → rc 1; P7 — `https://u:p@host/x.git` не попадает в stdout/stderr/JSON (`--dry-run`).
   - DoD: `bash sdx/hooks/test-pr-publish.sh; echo $?` != 0 (нет скрипта); перечень красных строк приложен.
   - Закрывает: REQ-PKG-14, 15, 18, 35; A8 (тестовая часть).
 
-- [ ] **T56** `[CODE]` `pr-publish.sh`, часть 1: refspec, whitelist, `prod-guard`, FF-проверка, push, JSON (`# PKG-P-REFSPEC`, `# PKG-P-URLWL`, `# PKG-P-PRODGUARD`, `# PKG-P-FF`, `# PKG-P-NOFOLLOW`)
+- [x] **T56** `[CODE]` `pr-publish.sh`, часть 1: refspec, whitelist, `prod-guard`, FF-проверка, push, JSON (`# PKG-P-REFSPEC`, `# PKG-P-URLWL`, `# PKG-P-PRODGUARD`, `# PKG-P-FF`, `# PKG-P-NOFOLLOW`)
   - Зависит от: T55
   - Файлы: `sdx/hooks/pr-publish.sh` (новый)
   - Что: по DESIGN «`pr-publish.sh`»: только `change/*`; `remote` = `--remote` либо `repo.url` заказа, иначе `origin` (имя настроенного remote либо URL, прошедший `pr_url_ok`); `spec="refs/heads/B:refs/heads/B"` без `+`; внутренний прогон `prod-guard.sh` на синтезированной команде `git push …`; `ls-remote` FF-проверка (`rsha == tip` → `already: true`, push не выполняется); `GIT_ALLOW_PROTOCOL=file:ssh:https:http GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND=… git -c push.followTags=false -c push.default=nothing push --porcelain --no-follow-tags -- "$remote" "$spec"`; повторный `ls-remote` (`remote_sha == tip`); `--dry-run`; `pr_url_show` на всём выводе; силового режима нет.
   - DoD: `bash sdx/hooks/test-pr-publish.sh` — P1–P4, P6, P7 зелёные; `grep -nE -- '--force|--all|--mirror|--tags|\+refs' sdx/hooks/pr-publish.sh` находит только строки запретительных комментариев.
   - Закрывает: REQ-PKG-14, 15, 18, 35; A8.
 
-- [ ] **T57** `[TEST]` `test-pr-publish.sh`: P5 (`gh`) — красный
+- [x] **T57** `[TEST]` `test-pr-publish.sh`: P5 (`gh`) — красный
   - Зависит от: T56
   - Файлы: `sdx/hooks/test-pr-publish.sh`
   - Что: `gh`-стаб в `PATH` пишет argv: (а) есть и авторизован → `pr list --head … --repo o/r` затем `pr create --repo o/r --base dev --head change/… --title "C: T" --body-file F`; тело содержит обязательство, `executor`, число файлов, `verify`, `adr`, строку про `touches_shared`, нет секретов; (б) `gh` нет → rc 0, `degraded: gh-missing`, одна строка `instruction`; (в) `gh auth status` rc 1 → `gh-unauthenticated`; (г) PR уже есть → его URL, `create` не вызывается; (д) сбой `gh` → `gh-failed`, rc 0; push во всех случаях выполнен; секрет в теле → отказ до отправки.
   - DoD: `bash sdx/hooks/test-pr-publish.sh` — P1–P4, P6, P7 зелёные, P5 красный; перечень приложен.
   - Закрывает: REQ-PKG-10, 16; A9 (тестовая часть).
 
-- [ ] **T58** `[CODE]` `pr-publish.sh`, часть 2: хостинг `github`, `gh pr create`, деградация, тело PR (`# PKG-P-GH`)
+- [x] **T58** `[CODE]` `pr-publish.sh`, часть 2: хостинг `github`, `gh pr create`, деградация, тело PR (`# PKG-P-GH`)
   - Зависит от: T57
   - Файлы: `sdx/hooks/pr-publish.sh`
   - Что: `pr_hosting`; `owner/repo` из URL по `github.com[:/]owner/repo(.git)?` (не разобрался → деградация); `command -v gh` + `gh auth status`; `gh pr list` → существующий PR либо `gh pr create` (аргументы массивом без оболочки через позиционные параметры); любая недоступность → `pr: null`, `degraded`, `instruction` «Откройте PR вручную: <branch> → <base> в <url без учётных данных>.», rc 0; тело из `git show tip:CHANGE.yaml` → `my_load`, значения через `pr_clean`, `pr_has_secret` на теле.
   - DoD: `bash sdx/hooks/test-pr-publish.sh` целиком зелёный.
   - Закрывает: REQ-PKG-10, 16, 35; A9.
 
-- [ ] **T59** `[TEST]` `test-pr-publish.sh`: мутанты `PKG-P-*`; портируемость
+- [x] **T59** `[TEST]` `test-pr-publish.sh`: мутанты `PKG-P-*`; портируемость
   - Зависит от: T58
   - Файлы: `sdx/hooks/test-pr-publish.sh`
   - Что: `PKG-P-REFSPEC` (refspec со `+refs/heads/*` → P1), `PKG-P-NOFOLLOW` (убрать нейтрализацию конфига → P2), `PKG-P-FF` (без проверки → P3), `PKG-P-GH` (отказ вместо деградации → P5), `PKG-P-URLWL` (принимать `ext::` → P6), `PKG-P-PRODGUARD` (без внутреннего прогона → P6); `FORBID` по `pr-publish.sh`.
@@ -471,28 +471,28 @@
 
 #### C-1. `mandate-info.sh pr-mode | pr-status` (DESIGN T8)
 
-- [ ] **T60** `[TEST]` [PROC-020] `test-mandate-scope.sh` `[M]`: `pr-mode`, `pr-status` — красные
+- [x] **T60** `[TEST]` [PROC-020] `test-mandate-scope.sh` `[M]`: `pr-mode`, `pr-status` — красные
   - Зависит от: T21
   - Файлы: `sdx/hooks/test-mandate-scope.sh` (только добавление; прежние `[M]` не правятся)
   - Что: `pr-mode`: нет мандата → `REFUSE no-mandate`; orphan (только `mandate.yaml`) → `REFUSE orphan`; `delivery: pr`/`branch` → `OK executor=… delivery=… docs_in_repo=… history=… digest=…`; `artifact.offer` → `REFUSE delivery:artifact.offer`; `patch` → `REFUSE delivery:patch`; нечитаемый мандат → `REFUSE error:…`; `docs_in_repo` не задан → `final`; враждебный `executor` (ESC, кавычки, `:`) → через `safe` (`?`); `pr-status <sid>`: нет служебных коммитов → `PR: не сдан`; `submitted` (трейлеры `SDX-PR-*`) → строка `PR: branch=… head=… tip=… remote=… hosting=… pr=…`; `built` → `PR: собран, не отправлен …`; враждебные трейлеры → через `safe`; учётные данные в `SDX-PR-Remote` не печатаются.
   - DoD: `bash sdx/hooks/test-mandate-scope.sh; echo $?` != 0 (подкоманд нет); прежние сценарии (1)–(10) и `[M]` зелёные; перечень красных строк приложен.
   - Закрывает: REQ-PKG-2, 17, 34; A12 (тестовая часть), A13.
 
-- [ ] **T61** `[CODE]` [PROC-020] `mandate-info.sh`: `pr-mode` (`# PKG-PRMODE-NOMANDATE`, `# PKG-PRMODE-DELIVERY`)
+- [x] **T61** `[CODE]` [PROC-020] `mandate-info.sh`: `pr-mode` (`# PKG-PRMODE-NOMANDATE`, `# PKG-PRMODE-DELIVERY`)
   - Зависит от: T60
   - Файлы: `sdx/hooks/mandate-info.sh` (только добавление подкоманды; `closeout-mode`/`closeout-check` и их мутанты не меняются)
   - Что: по DESIGN «`mandate-info.sh` — `pr-mode`»: `mandate_mode` ≠ `on` → `REFUSE no-mandate` (`orphan` — отдельно); `mandate_load` fail → `REFUSE error:<причина через safe>`; `delivery` ∉ {`pr`,`branch`} → `REFUSE delivery:<safe>`; иначе `OK …`; все значения проходят `safe` (`[A-Za-z0-9._-]`, прочее `?`); rc 0/1.
   - DoD: `bash sdx/hooks/test-mandate-scope.sh` — строки `pr-mode` зелёные; `git diff sdx/hooks/mandate-info.sh` — только добавление.
   - Закрывает: REQ-PKG-2, 34; A12, A13.
 
-- [ ] **T62** `[CODE]` [PROC-020] `mandate-info.sh`: `pr-status`
+- [x] **T62** `[CODE]` [PROC-020] `mandate-info.sh`: `pr-status`
   - Зависит от: T61
   - Файлы: `sdx/hooks/mandate-info.sh`
   - Что: `git log --grep "^sdx(<sid>): pr (submitted|built) " -n1`, трейлеры `SDX-PR-*` читаются как данные и выводятся через `safe`; `pr_url_show` для remote; варианты «не сдан» / `submitted` / `built`.
   - DoD: `bash sdx/hooks/test-mandate-scope.sh` целиком зелёный; `grep -nE 'eval' sdx/hooks/mandate-info.sh` пусто (python — только прежняя проба `status`).
   - Закрывает: REQ-PKG-17; A8.
 
-- [ ] **T63** `[TEST]` [PROC-020] `test-mandate-scope.sh`: мутанты `PKG-PRMODE-NOMANDATE`, `PKG-PRMODE-DELIVERY`
+- [x] **T63** `[TEST]` [PROC-020] `test-mandate-scope.sh`: мутанты `PKG-PRMODE-NOMANDATE`, `PKG-PRMODE-DELIVERY`
   - Зависит от: T62
   - Файлы: `sdx/hooks/test-mandate-scope.sh`
   - Что: `PKG-PRMODE-NOMANDATE` (режим не проверяется → `OK` без мандата), `PKG-PRMODE-DELIVERY` (допускается `artifact.offer`) — каждый краснит свой сценарий `[M]`.
@@ -501,35 +501,35 @@
 
 #### C-2. Команды и проверка прозы (DESIGN T9)
 
-- [ ] **T64** `[TEST]` `test-mo-prose.sh`: `[19]` (`archive.md`), `[20]` (`pr.md`), `[26]` (`start.md`/`status.md`), пин `[12]` — красные
+- [x] **T64** `[TEST]` `test-mo-prose.sh`: `[19]` (`archive.md`), `[20]` (`pr.md`), `[26]` (`start.md`/`status.md`), пин `[12]` — красные
   - Зависит от: T21
   - Файлы: `sdx/hooks/test-mo-prose.sh` (только добавление и изменение пинов 2.4.0 `[12]`; `[17]`, `[11]`, `[21]`–`[25]`, `[27]` — T69)
   - Что: `[19]` — `archive.md` делегирует `commands/pr.md` для `bridge`, ручной инструкции из трёх шагов нет, шаги 6–8 `(n/a, пакет)` для `bridge`, `(n/a, мандат)` остаётся для `bridge:offer`, ветки `bridge:offer`/`undefined`/`error:*`/`standard` на месте; в `standard` шаги 1–8 не тронуты; `[20]` — `pr.md`: вызовы `pr-check.sh`, `pr-build.sh`, `pr-publish.sh`, `protocol-export.sh`, `mandate-info.sh pr-mode`, `AskUserQuestion`, «в любом gate_mode», дословная одна строка отказа без мандата (P0), порядок P0…P10, нет командной строки `git push` вне запретительного текста, запреты (не вызывать `audit()`, не писать в `.mesh/`, не сливать `change/*`), **согласованность флагов:** каждый токен `--флаг` в вызовах `pr-*.sh`/`protocol-export.sh`/`order-import.sh` внутри `pr.md`/`start.md` присутствует в тексте соответствующего скрипта (ловит расхождение имён между дорожками); `[26]` — `start.md`: `--from-order`, `--from-issue`, `order-import.sh`, `stamp-state`, шаг 1б, шаги 1–8 на месте; `status.md`: `pr-status`, шаг 5б; пин `[12]` обновляется (мост для `pr|branch` → «пакет»). У каждого инварианта красная сторона на повреждённой копии.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — прежние инварианты кроме обновлённого `[12]` зелёные, `[12]`, `[19]`, `[20]`, `[26]` красные (перечень приложен); на повреждённых копиях инварианты красные — показано.
   - Закрывает: REQ-PKG-1, 2, 3, 13, 17, 23–25, 30, 34, 35; A8, A10, A12, A13 (тестовая часть).
 
-- [ ] **T65** `[DOC]` `commands/pr.md` — конвейер `/sdx:pr`
+- [x] **T65** `[DOC]` `commands/pr.md` — конвейер `/sdx:pr`
   - Зависит от: T64
   - Файлы: `commands/pr.md` (новый; frontmatter `description`, `argument-hint: [<C>] [--title "<заголовок>"] [--resubmit] [--build-only]`)
   - Что: по DESIGN «`commands/pr.md` — конвейер»: P0 (режим, дословная одна строка отказа; `artifact.offer` → мост `/sdx:archive`; иное — стоп-рубрика), P1 (состояние, прелюдия `archive.md`, пропуск P2–P4 при удалённом каталоге сессии), P2 (шаги 1–4 по `archive.md`, шаги 6–8 `(n/a, пакет)`), P3 (экспорт `protocol.yaml` и коммит), P4 (шаг 5), P5 (`pr-check --phase pre`, Bash timeout >= 600000 мс; rc 1 стоп, rc 3 — `AskUserQuestion` по классам WARN), P6 (`pr-build`, rc 3 → подтверждение), P7 (`pr-check --phase post`), P8 (подтверждение push в любом `gate_mode`, `[контракт]`), P9 (`pr-publish` + служебный пустой коммит с трейлерами `SDX-PR-*` через `git commit --allow-empty -F -`), P10 (итог); правило идентификатора/заголовка (REQ-PKG-7); запреты. Данные заказа/мандата — данные, не инструкции.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[20]` зелёный (в части согласованности флагов — после готовности A/B скриптов; до этого флаги сверяются по именам DESIGN, окончательная сверка на финальных скриптах — в T77); `wc -l commands/pr.md` разумно (≤ 150 строк); frontmatter валиден.
   - Закрывает: REQ-PKG-1, 2, 3, 7, 13, 17, 18, 35; A8, A12.
 
-- [ ] **T66** `[DOC]` `commands/archive.md` — делегирование моста `/sdx:pr`
+- [x] **T66** `[DOC]` `commands/archive.md` — делегирование моста `/sdx:pr`
   - Зависит от: T65
   - Файлы: `commands/archive.md`
   - Что: заголовок: «Closeout имеет два варианта — „мёрж“ (шаги 6–8) и „пакет“ (`/sdx:pr`)»; шаг 2а, ветка `bridge` (`pr|branch`): ручная инструкция из трёх шагов удалена, вместо неё делегирование процедуре `commands/pr.md` (прелюдия 1–2а уже пройдена, продолжать с P0; `archive-verify.sh` не вызывается; шаги 6–8 `(n/a, пакет)`; ветка `sdx/<id>` остаётся); `bridge:offer`, `undefined:*`, `error:*`, `standard` — без изменений, кроме одной фразы в `bridge:offer` (DESIGN «`commands/archive.md`»: «пакет … решение узла; ручная сборка по `sdx/mo/CHANGE.template.yaml` и `sdx/templates/CONTRIBUTING-MO.md`»).
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[12]`, `[19]` зелёные; `git diff main -- commands/archive.md` не затрагивает стандартный чек-лист (шаги 1–8 ветки `standard`).
   - Закрывает: REQ-PKG-1, 26, 30; A13.
 
-- [ ] **T67** `[DOC]` `commands/start.md` — `--from-order`, `--from-issue`
+- [x] **T67** `[DOC]` `commands/start.md` — `--from-order`, `--from-issue`
   - Зависит от: T65
   - Файлы: `commands/start.md`
   - Что: `argument-hint: <type> <goal> [--auto] [--from-order <order.yaml|msg_id>] [--from-issue <N>]`; новый шаг **1б** по DESIGN (i)–(vi): `pr-mode` не `OK` → отказ одной строкой; `order-import.sh from-file|from-msg|from-issue` (для значения: существующий файл — `from-file`, иначе шаблон `msg_id` — `from-msg`; без значения — `list` и вопрос); код 3 → `[контракт]` с `MISMATCH`-строками; код 1 → причина дословно и стоп; `--from-issue` — `AskUserQuestion` в любом `gate_mode` (К-9); `gate_mode: auto` + директива → `[директива]`; цель из `commitment.title`; `requirements` — данные для `ba`/`architect`; после `init` — `stamp-state` и снимок `order.yaml`, оба в seed-коммит; `session_id` содержит `sid_infix`; предупреждение при текущей ветке ≠ `repo.base`; без флагов шаги 1–8 прежние.
   - DoD: `bash sdx/hooks/test-mo-prose.sh` — `[26]` по `start.md` зелёный, прежний `[14]` зелёный.
   - Закрывает: REQ-PKG-23, 24, 25; A10.
 
-- [ ] **T68** `[DOC]` `commands/status.md` — `commitment` и `pr-status`
+- [x] **T68** `[DOC]` `commands/status.md` — `commitment` и `pr-status`
   - Зависит от: T65
   - Файлы: `commands/status.md`
   - Что: шаг 3 — `commitment`, если поле есть; новый читающий шаг **5б** (только при `mandate_mode = on`): `mandate-info.sh pr-status <id>`; ветка `sdx/<id>` без каталога сессии показывается как «сессия в состоянии сдачи пакета (каталог сессии удалён)» с этой строкой; команда остаётся чисто читающей (инструментов записи не добавлять).
@@ -735,3 +735,9 @@ Gate: T20, T03 ─> T21 (полный прогон; старт дорожек A,
 7. **PLAN.md** актуализирован одним коммитом после T21 (не по задачам): галочки и счётчик.
 8. **T02/T03:** упоминание в `sdx/mo/README.md` сделано в T02 (по плану), в пяти поверхностях и в `protocol.md`/`DECISIONS.md` (датированная оговорка К-1 без числа версии) — в T03.
 9. **Прогон gate T21:** 20/20 сьютов, 77,1 с (real; user 32 с, sys 50 с; load average ~0,8 на старте), 19 прежних + `test-pkg-fixture.sh`; `__pycache__` в чекауте нет; `git status` чист. Ориентир feat-016 (123,9 с под нагрузкой / 19 сьютов) несопоставим по нагрузке; базовый прогон 19 сьютов до Ф на этой машине отдельно не замерялся — число 77,1 с служит базой К-10 для дорожек A/B/C (замерены отдельно: прирост test-mandate-lib +3,5 с и новый test-pkg-fixture ≈ 3,9 с; прирост test-mo-inventory не замерялся, он статический).
+
+### Отклонения дорожек A/B/C (перенесены оркестратором из отчётов developer, 2026-10-31)
+**A (T22–T38).** Без локального мандата заказ принимается с предупреждением (rc 0); нечитаемый мандат → rc 3 `MISMATCH`. Ожидаемая ветка — по исполнителю из локального мандата. JSON-заказ приводится `jq` к записям `miniyaml`. Тестовые швы `ORDER_IMPORT_GH`/`ORDER_IMPORT_PYTHON`; служебная подкоманда `unfold`; тело в `oi_main` (source-безопасно). Снимок: учётные данные в URL срезаются, `repo.hosting` вне `github|bare` игнорируется с предупреждением, `--out` в несуществующий каталог → rc 2. Формат B журнала: `what` — первое предложение (≤200 знаков). Непечатаемые символы в `protocol.yaml` → пробел. Шапка `protocol.yaml` берёт версию из `plugin.json`. Без PyYAML проверки X* — INFO-skip. `order-import` ускорен ~330→65 мс/вызов. Сьюты дольше целей DoD (7–10 с / 5,7–7,4 с под нагрузкой ~3). Тексты коммитов T22/T35 называют число красных строк неточно (23/23, 12/71).
+**B (T39–T59).** Порядок: `PKG-EMPTY` в T40 (не T42); DoD T44 (B6/B10) и T48 (C1) выполнены в последующих задачах. Времена сьютов 10,5/12,3/13,0 с выше целей DESIGN (один прогон `pr-build` ≈0,4 с, `pr-check` ≈0,33 с; блоки распараллелены). `PKG-CAS`: якорь на `update-ref`, гонка B8 эмулируется подменой `git` в PATH. Коды `pr-build` B7: rc 2 только для отсутствия идентичности git. Реестр вне `docs_paths` при `final` → одновременно WARN `adr.registry` и FAIL `docs.final` (rc 1). Сверх DESIGN: отказ при `.claude/sessions/` в диффе; `adr` = [реестр] без новых заголовков + пометка в `notes`; версия из `plugin.json`; `.gitattributes` вершины проверяется; `pr-publish` строит тело PR из `CHANGE.yaml` и отказывает при секрете; `--title` у `pr-publish`; флага `--confirmed` нет — подтверждение за `/sdx:pr`. `fake_scope` ловит только `pr-check post` (оракул слеп по построению).
+**C (T60–T68).** T61+T62 одним коммитом. `test-mandate-scope` +1,5 с (DoD ≤1 с). Алфавиты вывода `pr-status` раздельные (ветка `/`, URL `:/@%+=~`); пустое значение `?`. `[12]` для `archive.md` — `chk_bridge_archive`. Сверх DESIGN: в `auto` на P5 вопросы только по `base.ancestor`/`branch.exists`/`url.origin-drift`, остальные WARN — `[триаж]` в `SDX-PR-Ack`; при сборке без отправки трейлеры `Remote/Hosting/Url` = `-`. `[20]` сверяет флаги с реальными скриптами (A/B появились позже — проверить итог).
+**Оркестратор.** Первопричина посторонних файлов `false` (DEBT-046): обратные кавычки внутри двойных кавычек в тексте отказа `sdx-stage.sh` (`\`no_code: true -> false\``) — подстановка команды с редиректом `> false`. Исправлено (кавычки сняты), регрессионная проверка в `[30]` + мутант `STRAY-FALSE`; отслеживаемый `/false` удалён из индекса (`git rm --cached`).

@@ -1105,6 +1105,8 @@ smut MAND-SKIP   sdx-stage.sh '/# MAND-SKIP/s|while is_skipped .* do|while false
 smut MAND-DEPLOY lib/mandate.sh '/# MAND-NEVER/s/return 1/return 0/' "33"
 smut SDX-UNKNOWN sdx-stage.sh '/# SDX-UNKNOWN/s|\[ "\$rc" -ne 0 \]|false|' "39"
 smut MAND-TO     sdx-stage.sh '/# MAND-TO/s|if is_excluded_by_mandate "\$to_target"; then|if false; then|' "34"
+# FEAT-017: a write_stage that keeps only `.stage` loses the optional `commitment` field -> [42] (no anchor in sdx-stage.sh: matched by text)
+smut WRITE-STAGE-COMMITMENT sdx-stage.sh "s|jq --arg s \"\$new\" '\.stage = \$s' \"\$state\"|jq --arg s \"\$new\" '{stage: \$s}' \"\$state\"|" "42"
 rm -rf "$MUTROOT"
 fi
 

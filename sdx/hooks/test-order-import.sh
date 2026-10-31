@@ -25,7 +25,11 @@ FAIL_COUNT=0
 pass() { echo "  PASS: $1"; PASS_COUNT=$((PASS_COUNT + 1)); }
 fail() { echo "  FAIL: $1 — $2"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 info() { echo "  INFO: $1"; }
-want() { [ -z "${ORDER_IMPORT_ONLY:-}" ] && return 0; case " $ORDER_IMPORT_ONLY " in *" $1 "*) return 0 ;; esac; return 1; }
+# Mutation runs name a single differentiating sub-block (O1t, O4f, O5d, O5e, O5b, O6c, O7s): want() opens the section,
+# full() is true only for a whole-section run, wsub() is true for a whole-section run or for that sub-block.
+want() { local t; [ -z "${ORDER_IMPORT_ONLY:-}" ] && return 0; for t in $ORDER_IMPORT_ONLY; do case "$t" in "$1"|"$1"[a-z]) return 0 ;; esac; done; return 1; }
+full() { [ -z "${ORDER_IMPORT_ONLY:-}" ] && return 0; case " $ORDER_IMPORT_ONLY " in *" $1 "*) return 0 ;; esac; return 1; }
+wsub() { full "$1" && return 0; case " $ORDER_IMPORT_ONLY " in *" $1$2 "*) return 0 ;; esac; return 1; }
 
 echo "=== test-order-import.sh ==="
 echo ""
@@ -113,6 +117,7 @@ run_oi from-file "$TMP/golden.yaml" --proj "$NOMAND"
 eq "[O1] golden: rc 0" "$RC" "0"
 eq "[O1] golden: commitment" "$(jv .commitment)" "C-ACME-001"
 eq "[O1] golden: title (folded plain scalar joined by one space)" "$(jv .title)" "Add the mod1 export endpoint with pagination and stable ordering for large result sets"
+if full O1; then
 eq "[O1] golden: executor" "$(jv .executor)" "ex1"
 eq "[O1] golden: repo_base" "$(jv .repo_base)" "dev"
 eq "[O1] golden: repo_url" "$(jv .repo_url)" "ssh://git@git.example.com/srv/app.git"
@@ -120,6 +125,8 @@ eq "[O1] golden: branch" "$(jv .branch)" "change/C-ACME-001-ex1"
 eq "[O1] golden: delivery" "$(jv .delivery)" "pr"
 eq "[O1] golden: due (quoted date)" "$(jv .due)" "2026-12-01"
 eq "[O1] golden: source" "$(jv .source)" "file"
+fi
+if full O1; then
 bash "$SCRIPT" unfold "$TMP/golden.yaml" > "$TMP/golden.unf" 2>/dev/null
 my_load "$TMP/golden.unf"; lrc=$?
 _my_scalar commitment.id
@@ -128,6 +135,7 @@ _my_scalar commitment.requirements
 eq "[O1] golden: requirements (single-quoted folded scalar, 3 lines joined)" "$MY_S" "Implement GET /mod1/export returning CSV: columns id, name, created; support the page and size parameters; keep ordering stable across pages; document the contract in docs/specs/mod1.md and cover with tests."
 _my_list notes
 eq "[O1] golden: folded list item joined, the next item intact" "$MY_L" "a note long enough to be folded by the dumper onto a second line of the document, and a third"$'\n'"short"
+fi
 fi
 
 # ---------------------------------------------------------------------------------------------------- [O2]
@@ -181,9 +189,11 @@ for n in range(26):
     walk(got, "")
     open("%s/%02d.exp" % (out, n), "w", encoding="utf-8").write("\n".join(lines) + "\n")
 PY
+  # the script defines its functions when sourced and runs nothing: oi_unfold is called directly (no process per dump)
+  . "$SCRIPT"
   for y in "$TMP"/gen/*.yaml; do
     b="${y%.yaml}"
-    bash "$SCRIPT" unfold "$y" > "$b.unf" 2>/dev/null
+    LC_ALL=C tr -d '\r' < "$y" | oi_unfold > "$b.unf" 2>/dev/null
     if my_load "$b.unf"; then printf '%s\n' "$MY_NORM" | tr '\037' '\t' > "$b.got"; else printf 'PARSE-ERROR %s\n' "$MY_ERR" > "$b.got"; fi
   done
   # one python call compares every pair (sorted records) and counts the dumps that were actually folded
@@ -297,6 +307,7 @@ export GH_STUB_LOG="$TMP/gh.log" GH_STUB_BODY="$TMP/issue.txt"
 OLDPATH="$PATH"; PATH="$TMP/ghbin:$PATH"
 run_oi from-issue 7 --proj "$NOMAND"
 eq "[O4] issue 7: the order block is taken (not the bash block, not the config block)" "$RC:$(jv .commitment):$(jv .source):$(jv .source_ref)" "0:C-ISSUE-007:issue:#7"
+if full O4; then
 eq "[O4] gh was called as: issue view 7 --json body" "$(cat "$GH_STUB_LOG")" "issue view 7 --json body"
 run_oi from-issue 12 --repo acme/app --proj "$NOMAND"
 eq "[O4] --repo is passed to gh" "$(cat "$GH_STUB_LOG")" "issue view 12 --repo acme/app --json body"
@@ -314,9 +325,12 @@ for bad in 'a b/c' 'noslash' '-x/y' 'a/b/c'; do
   if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'repo'; then pass "[O4] malformed --repo [$bad] refused: rc 1"; else fail "[O4] malformed --repo [$bad]" "rc=$RC out=[$OUT] err=[$ERR]"; fi
 done
 eq "[O4] gh was not called for a malformed argument" "$(cat "$GH_STUB_LOG")" "issue view 9 --json body"
+fi
 PATH="$OLDPATH"
+if full O4; then
 ORDER_IMPORT_GH=gh-is-not-installed run_oi from-issue 7 --proj "$NOMAND"
 if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q -- '--from-order'; then pass "[O4] no gh: rc 1 with the hint --from-order <file>"; else fail "[O4] no gh" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+fi
 fi
 
 # ---------------------------------------------------------------------------------------------------- [O6]
@@ -328,7 +342,8 @@ idcase() {  # <label> <jq-path> <value> <field fragment>
   run_oi from-file "$TMP/h.json" --proj "$NOMAND"
   if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q -- "$4"; then pass "[O6] $1: rc 1, the field is named ($4)"; else fail "[O6] $1" "rc=$RC out=[$OUT] err=[$ERR]"; fi
 }
-idcase "C with a slash" .commitment.id "a/b" commitment.id
+if wsub O6 c; then idcase "C with a slash" .commitment.id "a/b" commitment.id; fi
+if full O6; then
 idcase "C = .." .commitment.id ".." commitment.id
 idcase "C with a space" .commitment.id "C 1" commitment.id
 idcase "C with a colon" .commitment.id "x:y" commitment.id
@@ -366,6 +381,7 @@ mkj "$TMP/h.json" .repo.url "https://user:tok3n@git.example.com/srv/app.git"
 run_oi from-file "$TMP/h.json" --proj "$NOMAND"
 if [ "$RC" -eq 0 ] && [ "$(jv .repo_url)" = "https://git.example.com/srv/app.git" ] && [ "$(jv '.warnings|length')" -ge 1 ] && ! printf '%s' "$OUT" | grep -q tok3n; then pass "[O6] credentials in repo.url are removed from the result, with a warning"; else fail "[O6] url credentials" "rc=$RC out=[$OUT]"; fi
 fi
+fi
 
 ensure_fixture() { [ -n "${PKG_FIXTURE_TEMPLATE:-}" ] || pkg_fixture_template "$TMP" || { echo "fixture template failed" >&2; return 1; }; }
 
@@ -376,16 +392,17 @@ if ensure_fixture && pkg_fixture_copy "$TMP/fx5"; then
   P5="$PKG_WC"
   mkj "$TMP/m.json" .commitment.id C-ACME-001
   run_oi from-file "$TMP/m.json" --proj "$P5"
-  eq "[O5] a matching order: rc 0, no mandate warning" "$RC:$(jv '[.warnings[]|select(test("мандат"))]|length')" "0:0"
+  if full O5; then eq "[O5] a matching order: rc 0, no mandate warning" "$RC:$(jv '[.warnings[]|select(test("мандат"))]|length')" "0:0"; fi
   mism() {  # <label> <jq-edit> <expected stdout>
     printf '%s' "$BASE_JSON" | jq -c "$2" > "$TMP/m.json"
     run_oi from-file "$TMP/m.json" --proj "$P5" --out "$TMP/m-out.yaml"
     if [ "$RC" -eq 3 ] && [ "$OUT" = "$3" ] && [ ! -e "$TMP/m-out.yaml" ]; then pass "[O5] $1: rc 3, the exact MISMATCH lines, no snapshot written"
     else fail "[O5] $1" "rc=$RC out=[$OUT] snapshot=$([ -e "$TMP/m-out.yaml" ] && echo written || echo none)"; fi
   }
-  mism "digest differs" '.mandate_digest = "999999999999"' "MISMATCH mandate_digest order=999999999999 local=123456789012"
-  mism "executor differs" '.executor = "ex2"' "MISMATCH executor order=ex2 local=ex1"
-  mism "branch differs" '.deliver.branch = "change/C-ACME-001-ex9"' "MISMATCH deliver.branch order=change/C-ACME-001-ex9 local=change/C-ACME-001-ex1"
+  if wsub O5 d; then mism "digest differs" '.mandate_digest = "999999999999"' "MISMATCH mandate_digest order=999999999999 local=123456789012"; fi
+  if wsub O5 e; then mism "executor differs" '.executor = "ex2"' "MISMATCH executor order=ex2 local=ex1"; fi
+  if wsub O5 b; then mism "branch differs" '.deliver.branch = "change/C-ACME-001-ex9"' "MISMATCH deliver.branch order=change/C-ACME-001-ex9 local=change/C-ACME-001-ex1"; fi
+  if full O5; then
   mism "all three differ (all lines at once, fixed order)" '.mandate_digest = "000000000000" | .executor = "ex2" | .deliver.branch = "change/x"' \
 "MISMATCH mandate_digest order=000000000000 local=123456789012
 MISMATCH executor order=ex2 local=ex1
@@ -403,6 +420,7 @@ MISMATCH deliver.branch order=change/x local=change/C-ACME-001-ex1"
   if [ "$RC" -eq 3 ] && printf '%s' "$OUT" | grep -q '^MISMATCH ' && [ -n "$OUT" ]; then pass "[O5] an unreadable local mandate: rc 3 (fail-closed)"; else fail "[O5] unreadable mandate" "rc=$RC out=[$OUT]"; fi
   run_oi from-file "$TMP/m.json" --proj "$NOMAND"
   eq "[O5] no local mandate: accepted with a warning, rc 0" "$RC:$(jv '[.warnings[]|select(test("мандат"))]|length')" "0:1"
+  fi
 else
   fail "[O5] fixture" "the fixture could not be built"
 fi
@@ -413,6 +431,7 @@ if want O7; then
 echo "[O7] the snapshot (--out) and stamp-state"
 if ensure_fixture; then
   printf '%s' "$BASE_JSON" > "$TMP/m.json"
+  if full O7; then
   RT="$TMP/rt"; rm -rf "$RT"; mkdir -p "$RT"
   git -C "$RT" init -q && git -C "$RT" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init && git -C "$RT" checkout -q -b sdx/rt
   mkdir -p "$RT/.claude/sessions/rt"; printf '{"stage":"Closeout"}\n' > "$RT/.claude/sessions/rt/session_state.json"
@@ -437,6 +456,7 @@ if ensure_fixture; then
   eq "[O7] quotes, backslash, colon and hash survive the snapshot" "$PR_O_TITLE" 'He said "hi" \ back: a # b'
   run_oi from-file "$TMP/m.json" --proj "$RT" --out "$TMP/no-dir/order.yaml"
   if [ "$RC" -eq 2 ] && [ ! -e "$TMP/no-dir" ]; then pass "[O7] --out into a missing directory: rc 2, nothing created"; else fail "[O7] --out missing dir" "rc=$RC"; fi
+  fi
   # stamp-state
   SP="$TMP/sp"; mkdir -p "$SP/.claude/sessions/s7"
   CLAUDE_PROJECT_DIR="$SP" bash "$SCRIPT_DIR/sdx-stage.sh" init s7 feature Discovery interactive sdx/s7 false false >/dev/null 2>&1
@@ -447,9 +467,12 @@ if ensure_fixture; then
   else fail "[O7] stamp-state" "rc=$RC err=[$ERR] state=$(jq -c . "$SF")"; fi
   cp "$SF" "$TMP/sf.before"
   run_oi stamp-state --sid s7 --commitment C-ACME-001 --proj "$SP"
+  if full O7; then
   if [ "$RC" -eq 0 ] && cmp -s "$SF" "$TMP/sf.before"; then pass "[O7] stamp-state is idempotent (same value: rc 0, file unchanged)"; else fail "[O7] idempotent" "rc=$RC"; fi
+  fi
   run_oi stamp-state --sid s7 --commitment C-OTHER-002 --proj "$SP"
   if [ "$RC" -eq 1 ] && cmp -s "$SF" "$TMP/sf.before" && printf '%s' "$ERR" | grep -q 'commitment'; then pass "[O7] stamp-state refuses another value (rc 1, file unchanged)"; else fail "[O7] other value" "rc=$RC err=[$ERR]"; fi
+  if full O7; then
   run_oi stamp-state --sid s7 --commitment 'a/b' --proj "$SP"
   if [ "$RC" -eq 1 ] && cmp -s "$SF" "$TMP/sf.before"; then pass "[O7] stamp-state refuses an invalid C (rc 1, file unchanged)"; else fail "[O7] invalid C" "rc=$RC"; fi
   run_oi stamp-state --sid nosuch --commitment C-ACME-001 --proj "$SP"
@@ -463,9 +486,37 @@ if ensure_fixture; then
   mkdir -p "$SP/.claude/sessions/s7"; printf 'x\n' > "$SP/.claude/sessions/s7/context_report.md"
   out="$(CLAUDE_PROJECT_DIR="$SP" bash "$SCRIPT_DIR/sdx-stage.sh" next s7 2>&1)"
   if [ "$out" = "OK Discovery -> Business Spec" ] && [ "$(jq -r .commitment "$SF")" = "C-ACME-001" ]; then pass "[O7] sdx-stage.sh next works on the stamped state and keeps the field"; else fail "[O7] next after stamp" "out=[$out]"; fi
+  fi
 else
   fail "[O7] fixture" "the fixture could not be built"
 fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [Mut]
+if want Mut && [ -z "${ORDER_IMPORT_NESTED:-}" ]; then
+echo "[Mut] mutation runs: each mutant (a copy of the script + lib/ in a temp dir) must differ from the original and turn its block red"
+MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
+# mutate <name> <sed expr> <block>: re-enter this script with ORDER_IMPORT_ONLY=<block> against the mutated copy
+mutate() {
+  local name="$1" expr="$2" only="$3" d="$MUTDIR/$1" out first
+  mkdir -p "$d/lib"; cp "$SCRIPT_DIR/order-import.sh" "$d/"; cp "$LIB"/*.sh "$d/lib/"
+  sed "$expr" "$SCRIPT_DIR/order-import.sh" > "$d/order-import.sh"
+  if cmp -s "$SCRIPT_DIR/order-import.sh" "$d/order-import.sh"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  out="$(ORDER_IMPORT_NESTED=1 ORDER_IMPORT_UNDER_TEST="$d/order-import.sh" ORDER_IMPORT_ONLY="$only" bash "${BASH_SOURCE[0]}" 2>&1)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-110)"
+    pass "[Mut] мутант $name → красный (ожидаемо) в [$only]: ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "block [$only] stayed green on the mutant (the check proves nothing)"
+  fi
+}
+mutate PKG-O-UNFOLD '/# PKG-O-UNFOLD/s/if (open \&\& ind > cind)/if (0)/' O1t
+mutate PKG-O-FENCE  '/# PKG-O-FENCE/s/if (hit)/if (1)/' O4f
+mutate PKG-O-DIGEST '/# PKG-O-DIGEST/s/\[ "\$O_DIGEST" = "\$ldg" \]/true/' O5d
+mutate PKG-O-EXEC   '/# PKG-O-EXEC/s/\[ "\$O_EXEC" = "\$lex" \]/true/' O5e
+mutate PKG-O-BRANCH '/# PKG-O-BRANCH/s/\[ "\$O_BRANCH" = "\$lbr" \]/true/' O5b
+mutate PKG-O-ID     '/# PKG-O-ID/s/pr_valid_id "\$O_C"/true/' O6c
+mutate PKG-O-STAMP  '/# PKG-O-STAMP/s/refuse "[^"]*"/true/' O7s
 fi
 
 #@@SECTIONS-END@@

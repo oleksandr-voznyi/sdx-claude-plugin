@@ -78,7 +78,6 @@ oi_unfold() { LC_ALL=C awk "$OI_UNFOLD_AWK"; }
 OI_MAX=65536           # the size limit of an order text (bytes)
 OI_TMP=""
 oi_cleanup() { [ -n "$OI_TMP" ] && rm -rf "$OI_TMP"; }
-trap oi_cleanup EXIT
 oi_tmpdir() { [ -n "$OI_TMP" ] && return 0; OI_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdx-order-import.XXXXXX")" || { echo "order-import: не удалось создать временный каталог." >&2; exit 2; }; }
 
 refuse() { echo "order-import: $1" >&2; exit 1; }
@@ -444,36 +443,42 @@ usage() {
   exit 2
 }
 
-sub="${1:-}"; [ $# -gt 0 ] && shift
-POS=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; INBOX=""; REPO=""; SID=""; CARG=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --proj|--out|--inbox-json|--repo|--sid|--commitment)
-      [ $# -ge 2 ] || { echo "order-import: у $1 нет значения." >&2; exit 2; }
-      case "$1" in --proj) PROJ="$2" ;; --out) OUTF="$2" ;; --inbox-json) INBOX="$2" ;; --repo) REPO="$2" ;; --sid) SID="$2" ;; *) CARG="$2" ;; esac
-      shift 2 ;;
-    --*) echo "order-import: неизвестный аргумент: $(pr_clean "$1" 40; printf '%s' "$PR_CLEAN")" >&2; usage ;;
-    *) [ -z "$POS" ] || usage; POS="$1"; shift ;;
-  esac
-done
+oi_main() {
+  trap oi_cleanup EXIT
+  sub="${1:-}"; [ $# -gt 0 ] && shift
+  POS=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; INBOX=""; REPO=""; SID=""; CARG=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --proj|--out|--inbox-json|--repo|--sid|--commitment)
+        [ $# -ge 2 ] || { echo "order-import: у $1 нет значения." >&2; exit 2; }
+        case "$1" in --proj) PROJ="$2" ;; --out) OUTF="$2" ;; --inbox-json) INBOX="$2" ;; --repo) REPO="$2" ;; --sid) SID="$2" ;; *) CARG="$2" ;; esac
+        shift 2 ;;
+      --*) echo "order-import: неизвестный аргумент: $(pr_clean "$1" 40; printf '%s' "$PR_CLEAN")" >&2; usage ;;
+      *) [ -z "$POS" ] || usage; POS="$1"; shift ;;
+    esac
+  done
 
-case "$sub" in
-  from-file)
-    [ -n "$POS" ] || usage
-    oi_clean "${POS##*/}" 80
-    oi_accept "$POS" file "$PR_CLEAN" ;;
-  from-msg)
-    [ -n "$POS" ] || usage
-    oi_from_msg "$POS" ;;
-  from-issue)
-    [ -n "$POS" ] || usage
-    oi_from_issue "$POS" ;;
-  list) oi_list ;;
-  stamp-state) oi_stamp ;;
-  unfold)
-    [ -n "$POS" ] || usage
-    [ -f "$POS" ] || refuse "файл не читается"
-    LC_ALL=C tr -d '\r' < "$POS" | oi_unfold
-    case $? in 0) ;; 3) refuse "order: ошибка склейки строк" ;; *) exit 2 ;; esac ;;
-  *) usage ;;
-esac
+  case "$sub" in
+    from-file)
+      [ -n "$POS" ] || usage
+      oi_clean "${POS##*/}" 80
+      oi_accept "$POS" file "$PR_CLEAN" ;;
+    from-msg)
+      [ -n "$POS" ] || usage
+      oi_from_msg "$POS" ;;
+    from-issue)
+      [ -n "$POS" ] || usage
+      oi_from_issue "$POS" ;;
+    list) oi_list ;;
+    stamp-state) oi_stamp ;;
+    unfold)
+      [ -n "$POS" ] || usage
+      [ -f "$POS" ] || refuse "файл не читается"
+      LC_ALL=C tr -d '\r' < "$POS" | oi_unfold
+      case $? in 0) ;; 3) refuse "order: ошибка склейки строк" ;; *) exit 2 ;; esac ;;
+    *) usage ;;
+  esac
+}
+
+# run only when executed; sourcing (the tests do it to call oi_unfold directly) defines the functions and nothing else
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then oi_main "$@"; fi

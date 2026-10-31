@@ -217,7 +217,34 @@ pre_diff() {
   else fail url.scheme "repo.url: недопустимая схема или символы"; fi
 }
 
+# the project tests again (REQ-PKG-11 з): the session cache is gone after Closeout step 5, so the runner is run afresh.
+# Last, and only when nothing above failed. A diverged base means the working tree is not the package: then a pass is only a WARN.
+pre_tests() {
+  local tmo="" cand out rc secs
+  [ "$nfail" -eq 0 ] || return 0
+  if [ "$no_tests" = 1 ]; then note tests "--no-tests: повторный прогон тестов пропущен по запросу пользователя"; return 0; fi
+  test_cmd_resolve "$proj"
+  if [ -z "$TC_CMD" ]; then note tests "тест-команды в проекте нет — прогон пропущен"; return 0; fi
+  for cand in "tim""eout" "gtim""eout"; do
+    if command -v "$cand" >/dev/null 2>&1; then tmo="$cand"; break; fi
+  done
+  secs="${SDX_VERIFY_TIMEOUT:-180}"
+  if [ -n "$tmo" ]; then out="$(cd "$proj" && "$tmo" "$secs" bash -c "$TC_CMD" 2>&1)"; rc=$?
+  else
+    note tests "утилиты ограничения времени нет (macOS без coreutils) — прогон без лимита"
+    out="$(cd "$proj" && bash -c "$TC_CMD" 2>&1)"; rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then   # PKG-C-TESTS
+    fail tests "тест-команда проекта ($TC_KIND) завершилась кодом $rc"
+    { echo "pr-check: tests: хвост вывода (rc=$rc):"; printf '%s\n' "$out" | tail -n 15 | LC_ALL=C tr -d '\000-\010\013-\037\177'; } >&2
+  elif [ "${PRE_ANC:-0}" != 1 ]; then
+    warn tests "тест-команда зелёная, но прогон не относится к пакету (рабочее дерево ≠ дерево пакета: base расходится)"
+  else
+    ok tests "тест-команда проекта ($TC_KIND) зелёная"
+  fi
+}
+
 case "$phase" in
-  pre|all) phase_pre; pre_diff ;;
+  pre|all) phase_pre; pre_diff; pre_tests ;;
 esac
 finish

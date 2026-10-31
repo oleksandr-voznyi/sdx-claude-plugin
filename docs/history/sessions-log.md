@@ -1065,3 +1065,46 @@ Verification: мост Closeout для ЛЮБОГО `delivery` (`bridge`/`bridge
 (полные SPEC/DESIGN с пометками кругов), `docs/history/experiments/mo-mandate-manual-test-2026-10-29.md`,
 `docs/history/releases/v2.4.0-notes.md` (черновик, не опубликован; push/релиз — по явной просьбе). Версия плагина 2.4.0.
 Ветка `sdx/feat-016-mo-mandate-20261028`. Следующий шаг — `FEAT-017` (2.5.0, `/sdx:pr`) после ответа владельца МО.
+
+## 2026-10-31 — feat-017-mo-change-package-20261031 (feature, полный цикл SPEC/DESIGN/PLAN) · плагин 2.5.0
+
+**Предмет.** `FEAT-017` — «сдача пакетом изменения» (2.5.0): второй вариант Closeout под мандатом МО. Вход — ответ
+владельца МО 28.10 (`change/`, `docs/DECISIONS.md` под `docs/**`, пилот `dobro`: `bare`, затем GitHub).
+
+**Решения (`decisions_log.md`, 12 записей).** Discovery: `/sdx:pr` отдельной командой, `base` из заказа, порядок конвейера
+(экспорт `protocol.yaml` до шага 5), `final` = `full`, `github` без `gh` → деградация, `artifact.offer` без поля `change`,
+`CONTRIBUTING-MO.md` в `sdx/templates/`, `CHANGE.yaml` через git-plumbing (хук области не срабатывает). DESIGN `[триада]`:
+К-1 вендоринг `CHANGE.template.yaml` в этой сессии (датированное отступление от PROC-028), К-2 трейлеры служебного коммита,
+К-3 без force, К-9 подтверждение `--from-issue`, К-10 параллельный раннер. Verification: resubmit при ушедшей базе — два
+родителя; `bare` без инструкции; пост-проверка в `pr-publish`; `auto` — принятые WARN только в трейлер `SDX-PR-Ack`;
+снимок заказа из подтверждённого содержимого; единая классификация Closeout «мёрж / пакет / мост / undefined»;
+ручной сценарий — НЕ ПРОВЕРЕНО (`DEBT-051`).
+
+**Поставка.** `lib/pr-lib.sh`, `lib/pkg-fixture.sh` (python-оракул `audit()`), `pr-build.sh` (squash + манифест plumbing-коммитом,
+`archive_sha256`, два родителя при ушедшей базе), `pr-check.sh` (`pre`/`post`, зеркало формальных проверок `audit()`),
+`pr-publish.sh` (явный refspec `change/*`, prod-guard, URL-whitelist, пост-проверка до сети, `gh`/деградация, `ready`),
+`protocol-export.sh` (пять списков, оба формата журнала), `order-import.sh` (`from-file|from-msg|from-issue|list|stamp-state`,
+`order-unfold`), `mandate-info.sh pr-mode|pr-status`; команды `pr.md` (новая), `archive.md`, `start.md`, `status.md`;
+`sdx/mo/CHANGE.template.yaml` (четвёртый вендорённый файл), `sdx/templates/CONTRIBUTING-MO.md`; протокол, ADR-022,
+сниппет (§6 эталона + одно предложение), `devops.md`, README×2, `CLAUDE.md`, дельты `docs/specs|designs/mo-interop.md`;
+`.claude/sdx/verify-cmd.sh` — параллельный раннер (`SDX_VERIFY_JOBS`). Тесты: 6 новых сьютов (`test-pr-build` 162+,
+`test-pr-check` 197+, `test-pr-publish` 153, `test-protocol-export` 88, `test-order-import` 119, `test-pkg-fixture` 67),
+расширения (`test-mandate-lib` 430, `test-mo-prose` 312, `test-sdx-stage` 102, `test-mandate-scope` 115, `test-mo-inventory`
+26); 25 сьютов, 117–152 с (предел 180). Исполнение: фундамент → три дорожки `developer` параллельно → замыкание (82 задачи).
+
+**Попутно.** Первопричина `DEBT-046` (файлы `false`): обратные кавычки в тексте отказа `sdx-stage.sh` — исправлено,
+регресс `[43]` + мутант `STRAY-FALSE`, `/false` удалён из индекса. Коммит дорожки B однажды переписан `--amend` дорожкой C
+(не в этой сессии — см. FEAT-016); здесь — нет.
+
+**Верификация.** QA: 25/25, матрица A1–A16, 42 мутанта (39 убиты, выжившие закрыты кругом 1), сквозной прогон с оракулом
+`approve`, дефект Д-1 (resubmit) и риск Р-1 (sim-kit 0.9.3). Fresh-eyes — четыре круга: 1 — FAIL (P7 без флагов) + 13 WARN;
+2 — FAIL (регрессия `auto_decisions.md` после P4) + WARN безопасности (снимок из повторного чтения issue); 3 — 2 FAIL
+документных; 4 — PASS, 7 редакционных WARN исправлены.
+
+**Бэклог.** `FEAT-017` и `DEBT-046` закрыты. Новые `DEBT-050` (дрейф эталона 0.9.3), `DEBT-051` (ручной сценарий),
+`DEBT-052` (раннер без автотеста). Upstream — `SDX-MO-change-package-note-2026-10-31.md` в `agentico/reviews/`.
+
+**Перенесено.** `docs/history/plans|specs|designs/feat-017-mo-change-package-20261031.md`,
+`docs/history/experiments/mo-change-package-manual-test-2026-10-31.md`, `docs/history/releases/v2.5.0-notes.md`
+(и шапка `v2.4.0-notes.md` — опубликован). Ветка `sdx/feat-017-mo-change-package-20261031`. Следующий шаг — пилот `dobro`
+(`DEBT-051`), перевендоринг 0.9.3 (`DEBT-050`), затем `FEAT-018` (3.0, headless).

@@ -651,10 +651,422 @@ if [ -f "$LIB/miniyaml.sh" ]; then
   else pass "[L9] miniyaml.sh has no eval (mandate values are never executed)"; fi
 else fail "[L9] miniyaml.sh has no eval" "file missing"; fi
 PYNAME='py''thon'
-hits="$(grep -nE "$PYNAME" "$LIB"/*.sh "$SCRIPT_DIR/sdx-stage.sh" 2>/dev/null)"
+# lib/pkg-fixture.sh is the one TEST helper in lib/ (FEAT-017): its python oracle is test-only and self-checked by
+# test-pkg-fixture.sh; every other lib file and sdx-stage.sh stays python-free.
+hits=""; for f in "$LIB"/*.sh "$SCRIPT_DIR/sdx-stage.sh"; do
+  case "${f##*/}" in pkg-fixture.sh) continue ;; esac
+  hits="$hits$(grep -nE "$PYNAME" "$f" 2>/dev/null)"
+done
 if [ -z "$hits" ] && [ -f "$LIB/miniyaml.sh" ] && [ -f "$SCRIPT_DIR/sdx-stage.sh" ]; then pass "[L9] no python in lib/*.sh and sdx-stage.sh (REQ-MAND-33)"
 else fail "[L9] no python in lib/*.sh and sdx-stage.sh" "${hits:-lib/miniyaml.sh missing}"; fi
 
+fi
+
+# ============================================================== [P] mandate_fnmatch (FEAT-017, REQ-PKG-11 (e))
+if want P; then
+echo "[P] mandate_fnmatch: pure fnmatch (scope.branches is checked by the node with fnmatch only, DEV:374-375)"
+FNTAB="$TMP/fntab.txt"
+cat > "$FNTAB" <<'TABLE'
+change/C-ex1	change/*	1
+feat/x	change/*	0
+change/x	change	0
+change/a/b	change/*	1
+change/	change/*	1
+changeX	change/*	0
+change-x	change*	1
+Change/x	change/*	0
+change/x	CHANGE/*	0
+a	[!x]	1
+x	[!x]	0
+a	[^x]	0
+^	[^x]	1
+x	[^x]	1
+a\b	a\b	1
+a\x	a\\x	0
+abc	a?c	1
+x/y	x?y	1
+x	<empty>	0
+<empty>	<empty>	1
+<empty>	*	1
+a.txt	*.txt	1
+TABLE
+fn_n=0
+while IFS=$'\t' read -r fs fpat fexp; do
+  [ -z "$fexp" ] && continue
+  fn_n=$((fn_n + 1))
+  [ "$fs" = "<empty>" ] && fs=""; [ "$fpat" = "<empty>" ] && fpat=""
+  if ! have_ma || ! declare -F mandate_fnmatch >/dev/null 2>&1; then fail "[P] fnmatch($fs, $fpat)" "mandate_fnmatch undefined"; continue; fi
+  if LC_ALL=C mandate_fnmatch "$fs" "$fpat"; then r=1; else r=0; fi
+  if [ "$r" = "$fexp" ]; then pass "[P] fnmatch('$fs', '$fpat') = $fexp"; else fail "[P] fnmatch('$fs', '$fpat')" "got $r expected $fexp"; fi
+done < "$FNTAB"
+[ "$fn_n" -ge 15 ] && pass "[P] table has $fn_n >= 15 cases" || fail "[P] table size" "$fn_n"
+# the discriminator: the prefix rule of glob_any (DEV:67-68) makes 'change' cover 'change/x'; branch masks must not
+if have_ma && declare -F mandate_fnmatch >/dev/null 2>&1; then
+  if mandate_glob_one "change/x" "change" && ! mandate_fnmatch "change/x" "change"; then pass "[P] discriminator: glob_one('change/x','change') holds, fnmatch does not"
+  else fail "[P] discriminator" "glob_one and fnmatch must differ on ('change/x','change')"; fi
+  mf_lc="$(LC_ALL=en_US.UTF-8 bash -c '. "$1/mandate.sh"; mandate_fnmatch "[" "[[]" && echo y' _ "$LIB" 2>/dev/null)"
+  [ "$mf_lc" = y ] && pass "[P] result does not depend on the caller locale" || info "[P] locale probe: en_US.UTF-8 unavailable or differing ('$mf_lc')"
+else fail "[P] discriminator" "mandate_fnmatch undefined"; fi
+# oracle: python's fnmatch over the same table (INFO-skip without python3)
+if command -v python3 >/dev/null 2>&1; then
+  FNORACLE='
+import sys, os, fnmatch
+bad = 0
+for l in sys.stdin.read().split("\n"):
+    if not l: continue
+    f, p, e = l.split("\t")
+    f = "" if f == "<empty>" else f
+    p = "" if p == "<empty>" else p
+    r = fnmatch.fnmatchcase(f, p) if not os.environ.get("WRONG") else fnmatch.fnmatch(f, p) or f.startswith(p.rstrip("*").rstrip("/") + "/")
+    if int(r) != int(e): bad += 1; print("DIVERGE", f, p, e, int(r))
+print("BAD", bad)'
+  o1="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c "$FNORACLE" < "$FNTAB" 2>&1 | tail -1)"
+  [ "$o1" = "BAD 0" ] && pass "[P] oracle: the table agrees with python fnmatch" || fail "[P] oracle" "$o1"
+  o2="$(WRONG=1 PYTHONDONTWRITEBYTECODE=1 python3 -I -c "$FNORACLE" < "$FNTAB" 2>&1 | tail -1)"
+  [ "$o2" != "BAD 0" ] && pass "[P] oracle red side: the prefix-rule formula diverges ($o2)" || fail "[P] oracle red side" "wrong formula not detected"
+else info "[P] oracle skipped: python3 absent"; fi
+fi
+
+# ============================================================== [L10] lib/pr-lib.sh: pure functions (FEAT-017)
+if want L10; then
+echo "[L10] pr-lib: identifiers, cleaning, secrets, sha256, URL whitelist, hosting; portability"
+PR_OK=0
+if [ -f "$LIB/pr-lib.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$LIB/pr-lib.sh" && PR_OK=1
+fi
+have_pr() { [ "$PR_OK" = 1 ] && declare -F pr_valid_id >/dev/null 2>&1; }
+# l10 <label> <expect-rc> <function> <args...>: run a boolean function and compare its rc
+l10() {
+  local label="$1" exp="$2" fn="$3" rc; shift 3
+  if ! have_pr || ! declare -F "$fn" >/dev/null 2>&1; then fail "[L10] $label" "lib/pr-lib.sh or $fn missing"; return; fi
+  "$fn" "$@"; rc=$?
+  if [ "$rc" = "$exp" ]; then pass "[L10] $label"; else fail "[L10] $label" "$fn rc=$rc expected $exp"; fi
+}
+# pr_valid_id: valid
+l10 "valid_id C-ACME-001" 0 pr_valid_id "C-ACME-001"
+l10 "valid_id ex1" 0 pr_valid_id "ex1"
+l10 "valid_id 64 chars" 0 pr_valid_id "$(printf 'a%.0s' $(seq 1 64))"
+l10 "valid_id a.b_c-d" 0 pr_valid_id "a.b_c-d"
+# pr_valid_id: invalid
+l10 "valid_id empty" 1 pr_valid_id ""
+l10 "valid_id client-harness:kitgroup" 1 pr_valid_id "client-harness:kitgroup"
+l10 "valid_id .." 1 pr_valid_id ".."
+l10 "valid_id a..b" 1 pr_valid_id "a..b"
+l10 "valid_id leading -" 1 pr_valid_id "-x"
+l10 "valid_id leading ." 1 pr_valid_id ".x"
+l10 "valid_id space" 1 pr_valid_id "a b"
+l10 "valid_id slash" 1 pr_valid_id "a/b"
+l10 "valid_id 65 chars" 1 pr_valid_id "$(printf 'a%.0s' $(seq 1 65))"
+l10 "valid_id trailing ." 1 pr_valid_id "abc."
+l10 "valid_id trailing .lock" 1 pr_valid_id "abc.lock"
+l10 "valid_id unicode" 1 pr_valid_id "жук"
+l10 "valid_id newline" 1 pr_valid_id $'a\nb'
+# pr_clean: PR_CLEAN <- cleaned value
+l10c() {  # <label> <input> <expected> [max]
+  if ! have_pr || ! declare -F pr_clean >/dev/null 2>&1; then fail "[L10] clean $1" "pr_clean missing"; return; fi
+  PR_CLEAN="<unset>"; pr_clean "$2" ${4:+"$4"}
+  if [ "$PR_CLEAN" = "$3" ]; then pass "[L10] clean $1"; else fail "[L10] clean $1" "got [$PR_CLEAN] expected [$3]"; fi
+}
+l10c "newline and tab become spaces" $'a\nb\tc' "a b c"
+l10c "ESC is cut, the rest stays" $'a\033[31mb' "a[31mb"
+l10c "C0 and CR are cut" $'a\001b\rc' "abc"
+l10c "DEL is cut" $'a\177b' "ab"
+l10c "U+2028 becomes a space" $'a\342\200\250b' "a b"
+l10c "U+2029 becomes a space" $'a\342\200\251b' "a b"
+l10c "U+0085 becomes a space" $'a\302\205b' "a b"
+# verify-1 W6: every C1 control (U+0080..U+009F, UTF-8 C2 80..C2 9F) becomes a space; neighbours (U+00A0, U+007E, U+00BF) stay
+for c1 in 128 129 134 141 150 159; do
+  l10c "C1 U+00$(printf '%X' "$c1") becomes a space" "a$(printf "\\302\\$(printf '%03o' "$c1")")b" "a b"
+done
+l10c "C1 inside a path-like value" $'src/a\302\206b.js' "src/a b.js"
+l10c "the neighbours of C1 survive (U+00A0, U+00BF)" $'a\302\240b\302\277c' $'a\302\240b\302\277c'
+l10c "Cyrillic (D0..D1 lead bytes) survives" "Жук ё" "Жук ё"
+l10c "trim" "   x y  " "x y"
+l10c "trailing newline" $'x\n' "x"
+l10c "plain unicode survives" "Фича ж" "Фича ж"
+l10c "default cut to 200" "$(printf 'a%.0s' $(seq 1 300))" "$(printf 'a%.0s' $(seq 1 200))"
+l10c "explicit max" "abcdefghij" "abcde" 5
+l10c "backtick and dollar are data" 'a`b$(c)' 'a`b$(c)'
+if have_pr && declare -F pr_clean >/dev/null 2>&1; then
+  pr_clean "$(printf 'ж%.0s' $(seq 1 150))" 101
+  if printf '%s' "$PR_CLEAN" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 && [ "${#PR_CLEAN}" -le 101 ]; then pass "[L10] clean: a cut multibyte value is still valid UTF-8"
+  else fail "[L10] clean multibyte cut" "invalid UTF-8 or too long"; fi
+else fail "[L10] clean multibyte cut" "pr_clean missing"; fi
+# pr_has_secret
+l10 "secret: password: x" 0 pr_has_secret "password: x"
+l10 "secret: \"token\"=" 0 pr_has_secret '"token"=abc'
+l10 "secret: api_key:" 0 pr_has_secret "api_key: 1"
+l10 "secret: client-secret :" 0 pr_has_secret "client-secret : v"
+l10 "secret: PASSWD= (case)" 0 pr_has_secret "PASSWD=1"
+l10 "secret: second line" 0 pr_has_secret $'fine\nsecret: v'
+l10 "no secret: plain text" 1 pr_has_secret "Add the login form"
+l10 "no secret: tokenizer without : or =" 1 pr_has_secret "fix the tokenizer module"
+l10 "no secret: empty" 1 pr_has_secret ""
+# pr_sha256 (stdin -> hex)
+if have_pr && declare -F pr_sha256 >/dev/null 2>&1; then
+  h="$(printf 'abc' | pr_sha256)"
+  [ "$h" = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" ] && pass "[L10] sha256 of 'abc'" || fail "[L10] sha256 of 'abc'" "got [$h]"
+else fail "[L10] sha256 of 'abc'" "pr_sha256 missing"; fi
+# pr_url_ok
+for u in "ssh://git@host/srv/app.git" "https://h/o/r.git" "http://h/o/r.git" "file:///srv/app.git" "git@host:o/r.git" "/srv/git/app.git" "ssh://dobro/srv/app.git" "https://u:p@h/x.git"; do
+  l10 "url_ok accepts $u" 0 pr_url_ok "$u"
+done
+for u in "ext::sh -c x" "ext::sh" "fd::1" "transport::x" "-oProxyCommand=x" "https://h/a b" "" "ftp://h/x" "ssh://-oProxyCommand=x/y" "--upload-pack=x" $'https://h/a\nb' "git@-host:x" "relative/path" "FILE:x"; do
+  l10 "url_ok refuses [$u]" 1 pr_url_ok "$u"
+done
+# pr_url_show: credentials are removed from displayed URLs
+l10u() {  # <label> <input> <expected>
+  if ! have_pr || ! declare -F pr_url_show >/dev/null 2>&1; then fail "[L10] url_show $1" "pr_url_show missing"; return; fi
+  PR_URLS="<unset>"; pr_url_show "$2"
+  if [ "$PR_URLS" = "$3" ]; then pass "[L10] url_show $1"; else fail "[L10] url_show $1" "got [$PR_URLS] expected [$3]"; fi
+}
+l10u "user:pass removed" "https://u:p@h/x.git" "https://h/x.git"
+l10u "https token-as-user removed" "https://TOKEN@h/x.git" "https://h/x.git"
+l10u "ssh user stays" "ssh://git@h/x.git" "ssh://git@h/x.git"
+l10u "ssh user:pass removed" "ssh://git:pw@h/x.git" "ssh://h/x.git"
+l10u "scp form untouched" "git@h:o/r" "git@h:o/r"
+l10u "local path untouched" "/srv/git/app.git" "/srv/git/app.git"
+l10u "no credentials untouched" "https://h/x.git" "https://h/x.git"
+# pr_hosting <url> [hint] -> PR_HOSTING
+l10h() {  # <label> <expected> <url> [hint]
+  if ! have_pr || ! declare -F pr_hosting >/dev/null 2>&1; then fail "[L10] hosting $1" "pr_hosting missing"; return; fi
+  PR_HOSTING="<unset>"; pr_hosting "$3" ${4:+"$4"}
+  if [ "$PR_HOSTING" = "$2" ]; then pass "[L10] hosting $1"; else fail "[L10] hosting $1" "got [$PR_HOSTING] expected [$2]"; fi
+}
+l10h "github https" github "https://github.com/o/r.git"
+l10h "github scp" github "git@github.com:o/r.git"
+l10h "github ssh" github "ssh://git@github.com/o/r.git"
+l10h "local path is bare" bare "/srv/git/app.git"
+l10h "other host is bare" bare "https://git.example.com/o/r.git"
+l10h "look-alike host is bare" bare "https://evilgithub.com/o/r.git"
+l10h "hint bare beats github.com" bare "https://github.com/o/r.git" bare
+l10h "hint github beats a local path" github "/srv/git/app.git" github
+l10h "unknown hint is ignored" github "https://github.com/o/r.git" gitlab
+# portability (BUG-010) and no python/eval in pr-lib.sh
+FORBID10='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path'
+if [ -f "$LIB/pr-lib.sh" ]; then
+  if grep -nE "$FORBID10" "$LIB/pr-lib.sh" >/dev/null 2>&1; then fail "[L10] lib/pr-lib.sh portability" "forbidden: $(grep -nE "$FORBID10" "$LIB/pr-lib.sh" | head -3)"
+  else pass "[L10] lib/pr-lib.sh: no GNU-only/bash4-only constructs"; fi
+  cp "$LIB/pr-lib.sh" "$TMP/port-mut10.sh"; printf 'ma''pfile -t xs <<<""\n' >> "$TMP/port-mut10.sh"
+  if ! cmp -s "$LIB/pr-lib.sh" "$TMP/port-mut10.sh" && grep -qE "$FORBID10" "$TMP/port-mut10.sh"; then pass "[L10] red side: the same grep flags a pr-lib mutant with a bash4 construct"
+  else fail "[L10] red side of the pr-lib portability grep" "mutant not flagged"; fi
+  if grep -nE 'py''thon|\bev''al\b' "$LIB/pr-lib.sh" >/dev/null 2>&1; then fail "[L10] pr-lib.sh has no python and no eval" "found: $(grep -nE 'py''thon|\bev''al\b' "$LIB/pr-lib.sh" | head -2)"
+  else pass "[L10] pr-lib.sh has no python and no eval"; fi
+else
+  fail "[L10] lib/pr-lib.sh portability" "file missing"; fail "[L10] red side of the pr-lib portability grep" "file missing"; fail "[L10] pr-lib.sh has no python and no eval" "file missing"
+fi
+fi
+
+# ============================================================== [L11] lib/pr-lib.sh: git-dependent functions on a mini repository
+if want L11; then
+echo "[L11] pr-lib on a mini repository: session history, order snapshot, base, files, scope, registry, resolve"
+L11_OK=0
+if [ -f "$LIB/pr-lib.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$LIB/pr-lib.sh" && L11_OK=1
+fi
+l11_have() { [ "$L11_OK" = 1 ] && declare -F "$1" >/dev/null 2>&1; }
+# hermetic git: no user/system config leaks in (diff.renames, core.quotepath, hooks...), fixed identity
+printf '[user]\n\tname = t\n\temail = t@t\n[init]\n\tdefaultBranch = dev\n[core]\n\thooksPath = /dev/null\n[commit]\n\tgpgsign = false\n' > "$TMP/gitcfg11"
+export GIT_CONFIG_GLOBAL="$TMP/gitcfg11" GIT_CONFIG_NOSYSTEM=1
+mkdir -p "$TMP/g11"
+R="$TMP/g11/repo"
+MANDATE11=$'mandate:\n  repo: app\n  stages:\n  - spec\n  - design\n  - execute\n  - verify\n  scope:\n    paths:\n    - src/mod1/**\n    shared_paths:\n    - package-lock.json\n    docs_paths:\n    - docs/**\n    branches:\n    - change/*\n  delivery: pr\n  history: executor\n  docs_in_repo: final\n  valid_until: \'2099-01-01\'\n  on_write: deny\n  executor: ex1\n  digest: \'123456789012\'\n  format: 1\n'
+ORDER11=$'order:\n  format: 1\n  source: "msg"\n  source_ref: "m-1"\n  commitment:\n    id: "C-ACME-001"\n    kind: "change"\n    title: "Feature mod1"\n    requirements: "Do it"\n    due: "2026-12-01"\n    creditor: "acme"\n  executor: "ex1"\n  mandate_digest: "123456789012"\n  repo:\n    id: "app"\n    url: "ssh://dobro/srv/app.git"\n    base: "dev"\n    hosting: "github"\n  deliver:\n    branch: "change/C-ACME-001-ex1"\n    delivery: "pr"\n'
+(
+  set -e
+  git init -q "$R"; cd "$R"
+  mkdir -p docs src/mod1 src/core
+  printf 'r\n' > README.md; printf '# Decisions\n\n## ADR-001. Base\n' > docs/DECISIONS.md; printf 'a=1\n' > src/mod1/a.js; printf '{}\n' > package-lock.json
+  git add -A; git commit -q -m base
+  git checkout -q -b sdx/s2; mkdir -p .claude/sessions/s2; printf '{"stage":"Closeout"}\n' > .claude/sessions/s2/session_state.json
+  git add -A; git commit -q -m "s2 session only"
+  git checkout -q dev; git checkout -q -b sdx/s1
+  mkdir -p .claude/sessions/s1
+  printf '{"stage":"Closeout"}\n' > .claude/sessions/s1/session_state.json
+  printf '%s' "$ORDER11" > .claude/sessions/s1/order.yaml
+  printf 'Итог: PASS\n' > .claude/sessions/s1/verification_report.md
+  git add -A; git commit -q -m "s1 session"
+  printf 'a=2\n' >> src/mod1/a.js; printf 'x\n' >> package-lock.json; printf '\n## ADR-099. New decision\n' >> docs/DECISIONS.md
+  mkdir -p docs/specs; printf 'spec\n' > docs/specs/mod1.md; printf 'спека\n' > "docs/спека.md"; printf 'b=1\n' > src/core/b.js
+  git add -A; git commit -q -m "s1 code"
+  git rm -r -q .claude/sessions/s1; git commit -q -m "s1 close"
+  git init -q --bare "$TMP/g11/remote.git"; git remote add origin "$TMP/g11/remote.git"; git push -q origin dev
+  git fetch -q origin
+  mkdir -p .mesh; printf '%s' "$MANDATE11" > .mesh/mandate.yaml; printf 'endpoint:\n  on_write: notice\n' > .mesh/endpoint.yaml
+) >/dev/null 2>&1
+L11_BUILT=0; [ -n "$(git -C "$R" rev-parse --verify -q refs/heads/sdx/s1 2>/dev/null)" ] && L11_BUILT=1
+[ "$L11_BUILT" = 1 ] && pass "[L11] mini repository built" || fail "[L11] mini repository" "fixture build failed"
+l11eq() {  # <label> <got> <expected>
+  if [ "$2" = "$3" ]; then pass "[L11] $1"; else fail "[L11] $1" "got [$2] expected [$3]"; fi
+}
+l11rc() {  # <label> <got-rc> <expected-rc>
+  if [ "$2" = "$3" ]; then pass "[L11] $1"; else fail "[L11] $1" "rc=$2 expected $3"; fi
+}
+SHA_S1_PRE="$(git -C "$R" rev-parse --verify -q 'refs/heads/sdx/s1~1' 2>/dev/null)"   # last commit that still has the session directory
+SHA_S2="$(git -C "$R" rev-parse --verify -q refs/heads/sdx/s2 2>/dev/null)"
+SHA_DEV="$(git -C "$R" rev-parse --verify -q refs/heads/dev 2>/dev/null)"
+
+# ---- pr_session_rev / pr_sess_cat
+if l11_have pr_session_rev; then
+  pr_session_rev "$R" s1; rc=$?; l11rc "session_rev s1 (directory removed at tip) rc" "$rc" 0
+  l11eq "session_rev s1 -> parent of the removing commit" "$PR_SESS_REV" "$SHA_S1_PRE"   # PKG-SESSREV
+  pr_session_rev "$R" s2; rc=$?; l11rc "session_rev s2 (directory at the tip) rc" "$rc" 0
+  l11eq "session_rev s2 -> tip" "$PR_SESS_REV" "$SHA_S2"
+  pr_session_rev "$R" nosuch; rc=$?; l11rc "session_rev for an unknown session rc" "$rc" 1
+  pr_session_rev "$R" "../x"; rc=$?; l11rc "session_rev refuses a hostile sid" "$rc" 1
+else for t in "s1 rc" "s1 value" "s2 rc" "s2 value" "unknown" "hostile"; do fail "[L11] session_rev $t" "pr_session_rev missing"; done; fi
+if l11_have pr_sess_cat; then
+  out="$(pr_sess_cat "$R" s1 verification_report.md)"; rc=$?
+  l11rc "sess_cat existing file rc" "$rc" 0; l11eq "sess_cat existing file content" "$out" "Итог: PASS"
+  pr_sess_cat "$R" s1 nope.md >/dev/null 2>&1; rc=$?; l11rc "sess_cat missing file rc" "$rc" 1
+  pr_sess_cat "$R" s1 "../x" >/dev/null 2>&1; rc=$?; l11rc "sess_cat refuses a path-like name" "$rc" 1
+else for t in "existing rc" "existing content" "missing" "path-like"; do fail "[L11] sess_cat $t" "pr_sess_cat missing"; done; fi
+
+# MANDATE_MIN=<non-empty> (mutation runs): the fixture and the session-history block only — the rest of [L11] is
+# exercised by the normal run, a mutant of pr_session_rev needs just its own block to turn red.
+if [ -z "${MANDATE_MIN:-}" ]; then
+# ---- pr_order_load
+if l11_have pr_order_load; then
+  pr_order_load "$R" s1; rc=$?
+  l11rc "order_load s1 rc" "$rc" 0
+  l11eq "order_load COMMIT" "${PR_O_COMMIT:-}" "C-ACME-001"
+  l11eq "order_load TITLE" "${PR_O_TITLE:-}" "Feature mod1"
+  l11eq "order_load BASE" "${PR_O_BASE:-}" "dev"
+  l11eq "order_load URL" "${PR_O_URL:-}" "ssh://dobro/srv/app.git"
+  l11eq "order_load HOSTING" "${PR_O_HOSTING:-}" "github"
+  l11eq "order_load BRANCH" "${PR_O_BRANCH:-}" "change/C-ACME-001-ex1"
+  l11eq "order_load EXEC" "${PR_O_EXEC:-}" "ex1"
+  l11eq "order_load DIGEST" "${PR_O_DIGEST:-}" "123456789012"
+  l11eq "order_load DELIVERY" "${PR_O_DELIVERY:-}" "pr"
+  pr_order_load "$R" s2; rc=$?
+  l11rc "order_load without a snapshot rc (1 = none)" "$rc" 1
+  l11eq "order_load without a snapshot leaves PR_O_* empty" "${PR_O_COMMIT:-}${PR_O_EXEC:-}${PR_O_URL:-}" ""
+  mandate_load "$R"; pr_order_load "$R" s1 >/dev/null 2>&1; _my_scalar mandate.executor
+  l11eq "order_load does not clobber the loaded mandate (MY_NORM)" "$MY_S" "ex1"
+else for t in rc COMMIT TITLE BASE URL HOSTING BRANCH EXEC DIGEST DELIVERY none-rc none-empty no-clobber; do fail "[L11] order_load $t" "pr_order_load missing"; done; fi
+
+# ---- pr_base_ref
+if l11_have pr_base_ref; then
+  pr_base_ref "$R" dev; rc=$?
+  l11rc "base_ref dev rc" "$rc" 0
+  l11eq "base_ref prefers the local branch" "$PR_BASE_REF" "refs/heads/dev"
+  l11eq "base_ref sha" "$PR_BASE_SHA" "$SHA_DEV"
+  l11eq "base_ref no drift when local == remote-tracking" "$PR_BASE_DRIFT" "0"
+  pr_base_ref "$R" nosuch >/dev/null 2>&1; rc=$?; l11rc "base_ref: no such branch rc" "$rc" 1
+  l11eq "base_ref: error names the field" "${PR_ERR%%:*}" "base"
+  pr_base_ref "$R" "bad..name" >/dev/null 2>&1; rc=$?; l11rc "base_ref: invalid ref name rc" "$rc" 1
+  rm -rf "$TMP/g11/r2"; cp -a "$R" "$TMP/g11/r2"
+  git -C "$TMP/g11/r2" branch -q -f dev refs/heads/sdx/s1   # local dev ahead of origin/dev
+  pr_base_ref "$TMP/g11/r2" dev; rc=$?
+  l11rc "base_ref drift rc" "$rc" 0
+  l11eq "base_ref reports drift between local and remote-tracking" "$PR_BASE_DRIFT" "1"
+  l11eq "base_ref drift still prefers the local branch" "$PR_BASE_REF" "refs/heads/dev"
+  git -C "$TMP/g11/r2" checkout -q sdx/s1; git -C "$TMP/g11/r2" branch -q -D dev
+  pr_base_ref "$TMP/g11/r2" dev; rc=$?
+  l11rc "base_ref remote-tracking only rc" "$rc" 0
+  l11eq "base_ref falls back to the remote-tracking branch" "$PR_BASE_REF" "refs/remotes/origin/dev"
+  l11eq "base_ref remote-tracking sha" "$PR_BASE_SHA" "$SHA_DEV"
+else for t in rc local sha drift-none nosuch err-field invalid drift-rc drift-flag drift-local rt-rc rt-ref rt-sha; do fail "[L11] base_ref $t" "pr_base_ref missing"; done; fi
+
+# ---- pr_files
+if l11_have pr_files; then
+  pr_files "$R" dev refs/heads/sdx/s1; rc=$?
+  l11rc "files rc" "$rc" 0
+  l11eq "files: names without quoting, session directory absent, sorted" "$PR_FILES" $'docs/DECISIONS.md\ndocs/specs/mod1.md\ndocs/спека.md\npackage-lock.json\nsrc/core/b.js\nsrc/mod1/a.js'
+  pr_files "$R" dev dev; rc=$?; l11rc "files: empty diff rc" "$rc" 0; l11eq "files: empty diff -> empty" "$PR_FILES" ""
+  rm -rf "$TMP/g11/r3"; cp -a "$R" "$TMP/g11/r3"
+  ( cd "$TMP/g11/r3" && git checkout -q -b nl dev && printf 'x' > "$(printf 'a\nb')" && git add -A && git commit -q -m nl ) >/dev/null 2>&1
+  pr_files "$TMP/g11/r3" dev nl >/dev/null 2>&1; rc=$?
+  l11rc "files: a newline in a path -> rc 1" "$rc" 1
+  case "${PR_ERR:-}" in files:*) pass "[L11] files: PR_ERR names the field" ;; *) fail "[L11] files: PR_ERR names the field" "got [${PR_ERR:-}]" ;; esac
+  pr_files "$R" dev nosuchrev >/dev/null 2>&1; rc=$?; l11rc "files: unknown revision -> rc 1" "$rc" 1
+else for t in rc names empty-rc empty newline err-field badrev; do fail "[L11] files $t" "pr_files missing"; done; fi
+
+# ---- pr_scope_eval (mandate: paths src/mod1/**, shared package-lock.json, docs docs/**)
+if l11_have pr_scope_eval; then
+  mandate_load "$R"
+  PR_FILES=$'docs/DECISIONS.md\ndocs/specs/mod1.md\ndocs/спека.md\npackage-lock.json\nsrc/core/b.js\nsrc/mod1/a.js\n.claude/sessions/s1/order.yaml\noutside/x'
+  pr_scope_eval
+  l11eq "scope_eval OUT = outside every area" "$PR_OUT" $'src/core/b.js\n.claude/sessions/s1/order.yaml\noutside/x'
+  l11eq "scope_eval SHARED" "$PR_SHARED" "package-lock.json"
+  l11eq "scope_eval DOCSF" "$PR_DOCSF" $'docs/DECISIONS.md\ndocs/specs/mod1.md\ndocs/спека.md'
+  l11eq "scope_eval SESSF" "$PR_SESSF" ".claude/sessions/s1/order.yaml"
+  l11eq "scope_eval DOCS_OUTSIDE empty when docs/** is covered" "$PR_DOCS_OUTSIDE" ""
+  P2="$(mproj l11narrow "${MANDATE11/docs\/\*\*/docs/specs/**}")"; mandate_load "$P2"; pr_scope_eval
+  l11eq "scope_eval DOCS_OUTSIDE = docs/ paths outside docs_paths" "$PR_DOCS_OUTSIDE" $'docs/DECISIONS.md\ndocs/спека.md'
+  P3="$(mproj l11nopaths "$(printf '%s\n' "$MANDATE11" | grep -v -e 'src/mod1' -e '^    paths:$')")"; mandate_load "$P3"; pr_scope_eval
+  l11eq "scope_eval: empty paths -> no OUT (no restriction)" "$PR_OUT" ""
+  PR_FILES=""; mandate_load "$R"; pr_scope_eval
+  l11eq "scope_eval: empty file list -> all empty" "$PR_OUT$PR_SHARED$PR_DOCSF$PR_SESSF$PR_DOCS_OUTSIDE" ""
+else for t in OUT SHARED DOCSF SESSF DOCS_OUTSIDE narrow nopaths empty; do fail "[L11] scope_eval $t" "pr_scope_eval missing"; done; fi
+
+# ---- pr_registry
+if l11_have pr_registry; then
+  PR_FILES=$'docs/DECISIONS.md\nsrc/mod1/a.js'
+  pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: docs/DECISIONS.md changed -> one" "$PR_REG_STATE" "one"
+  l11eq "registry path" "$PR_REG_PATH" "docs/DECISIONS.md"
+  l11eq "registry anchor from the added heading" "$PR_REG_ANCHORS" "docs/DECISIONS.md#ADR-099"
+  PR_FILES="src/mod1/a.js"; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: not changed -> none" "$PR_REG_STATE" "none"
+  l11eq "registry: none -> empty path and anchors" "$PR_REG_PATH$PR_REG_ANCHORS" ""
+  PR_FILES=$'docs/a/decisions-1.md\ndocs/b/DECISIONS-2.md'; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: two mask candidates -> ambiguous" "$PR_REG_STATE" "ambiguous"
+  PR_FILES=$'docs/a/decisions-1.md\nsrc/x'; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: one mask candidate -> one" "$PR_REG_STATE" "one"
+  l11eq "registry: mask candidate path" "$PR_REG_PATH" "docs/a/decisions-1.md"
+  PR_FILES=$'docs/DECISIONS.md\ndocs/a/decisions-1.md'; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: docs/DECISIONS.md has priority over the mask" "$PR_REG_PATH" "docs/DECISIONS.md"
+else for t in one path anchor none none-empty ambiguous mask-one mask-path priority; do fail "[L11] registry $t" "pr_registry missing"; done; fi
+
+# ---- pr_resolve
+if l11_have pr_resolve; then
+  pr_resolve "$R" s1; rc=$?
+  l11rc "resolve from the order snapshot rc" "$rc" 0
+  l11eq "resolve PR_C" "${PR_C:-}" "C-ACME-001"
+  l11eq "resolve PR_EXEC (from the mandate)" "${PR_EXEC:-}" "ex1"
+  l11eq "resolve PR_BRANCH" "${PR_BRANCH:-}" "change/C-ACME-001-ex1"
+  l11eq "resolve PR_TITLE" "${PR_TITLE:-}" "Feature mod1"
+  l11eq "resolve PR_BASE_NAME" "${PR_BASE_NAME:-}" "dev"
+  l11eq "resolve PR_BASE_REF" "${PR_BASE_REF:-}" "refs/heads/dev"
+  l11eq "resolve PR_BASE_SHA" "${PR_BASE_SHA:-}" "$SHA_DEV"
+  l11eq "resolve PR_URL" "${PR_URL:-}" "ssh://dobro/srv/app.git"
+  l11eq "resolve PR_HOSTING_HINT" "${PR_HOSTING_HINT:-}" "github"
+  l11eq "resolve PR_DELIVERY" "${PR_DELIVERY:-}" "pr"
+  l11eq "resolve PR_DOCS_MODE" "${PR_DOCS_MODE:-}" "final"
+  l11eq "resolve PR_DIGEST" "${PR_DIGEST:-}" "123456789012"
+  pr_resolve "$R" s1 --commitment C-ACME-001 --title "Own title" >/dev/null 2>&1; rc=$?
+  l11rc "resolve: argument equal to the snapshot rc" "$rc" 0
+  l11eq "resolve: an explicit --title is not a silent override" "${PR_TITLE:-}" "Own title"
+  pr_resolve "$R" s1 --commitment C-OTHER-9 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: argument differs from a non-empty snapshot -> rc 1" "$rc" 1
+  case "${PR_ERR:-}" in commitment:*) pass "[L11] resolve: PR_ERR names the field (commitment)" ;; *) fail "[L11] resolve: PR_ERR names the field" "got [${PR_ERR:-}]" ;; esac
+  pr_resolve "$R" s1 --base-name main >/dev/null 2>&1; rc=$?; l11rc "resolve: --base-name differs from the snapshot -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment C-X-1 --title "T" >/dev/null 2>&1; rc=$?
+  l11rc "resolve without a snapshot, arguments given rc" "$rc" 0
+  l11eq "resolve without a snapshot: PR_C from the argument" "${PR_C:-}" "C-X-1"
+  l11eq "resolve without a snapshot: base from default-branch.sh" "${PR_BASE_NAME:-}" "dev"
+  l11eq "resolve without a snapshot: no URL, no hint" "${PR_URL:-}${PR_HOSTING_HINT:-}" ""
+  pr_resolve "$R" s2 --title "T" >/dev/null 2>&1; rc=$?; l11rc "resolve: no commitment anywhere -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment "a b" --title T >/dev/null 2>&1; rc=$?; l11rc "resolve: invalid commitment id -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment C-X-1 >/dev/null 2>&1; rc=$?; l11rc "resolve: no title anywhere -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment C-X-1 --title "password: hunter2" >/dev/null 2>&1; rc=$?; l11rc "resolve: a secret in the title -> rc 1" "$rc" 1
+  rm -rf "$TMP/g11/r4"; cp -a "$R" "$TMP/g11/r4"; printf '%s' "${MANDATE11/executor: ex1/executor: client-harness:kitgroup}" > "$TMP/g11/r4/.mesh/mandate.yaml"
+  pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: executor comes only from the mandate and must be valid -> rc 1" "$rc" 1
+  case "${PR_ERR:-}" in executor:*) pass "[L11] resolve: PR_ERR names the field (executor)" ;; *) fail "[L11] resolve: PR_ERR names the field (executor)" "got [${PR_ERR:-}]" ;; esac
+  printf '%s' "${MANDATE11/docs_in_repo: final/docs_in_repo: none}" > "$TMP/g11/r4/.mesh/mandate.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1
+  l11eq "resolve: docs_in_repo none" "${PR_DOCS_MODE:-}" "none"
+  printf '%s' "$MANDATE11" | grep -v 'docs_in_repo' > "$TMP/g11/r4/.mesh/mandate.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1
+  l11eq "resolve: docs_in_repo unset -> final (node default)" "${PR_DOCS_MODE:-}" "final"
+  printf '%s' "${MANDATE11/executor: ex1/executor: other}" > "$TMP/g11/r4/.mesh/mandate.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: the snapshot's executor differs from the mandate's -> rc 1" "$rc" 1
+  rm -f "$TMP/g11/r4/.mesh/endpoint.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: no mandate mode (no endpoint.yaml) -> rc 1" "$rc" 1
+else for t in rc C EXEC BRANCH TITLE BASE_NAME BASE_REF BASE_SHA URL HINT DELIVERY DOCS DIGEST arg-ok title-override arg-differs err-field base-differs noorder-rc noorder-C noorder-base noorder-url nocommit badid notitle secret execbad exec-field docs-none docs-unset snap-exec nomode; do fail "[L11] resolve $t" "pr_resolve missing"; done; fi
+fi   # MANDATE_MIN
 fi
 
 if want Mut; then
@@ -662,12 +1074,12 @@ echo "[Mut] mutation runs: each mutant (a copy of lib/ in a temp dir) must diffe
 MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
 # mutate <name> <lib file> <sed expr> <sections>: re-enter this script with MANDATE_ONLY=<sections> against the mutated lib
 mutate() {
-  local name="$1" file="$2" expr="$3" only="$4" d="$MUTDIR/$1" out first
+  local name="$1" file="$2" expr="$3" only="$4" min="${5:-}" d="$MUTDIR/$1" out first
   if [ ! -f "$LIB/$file" ]; then fail "[Mut] $name" "no $file to mutate"; return; fi
   mkdir -p "$d"; cp "$LIB"/*.sh "$d/"
   sed "$expr" "$LIB/$file" > "$d/$file"
   if cmp -s "$LIB/$file" "$d/$file"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
-  out="$(MANDATE_LIB_UNDER_TEST="$d" MANDATE_ONLY="$only" bash "${BASH_SOURCE[0]}" 2>&1)"
+  out="$(MANDATE_LIB_UNDER_TEST="$d" MANDATE_ONLY="$only" MANDATE_MIN="$min" bash "${BASH_SOURCE[0]}" 2>&1)"
   if printf '%s\n' "$out" | grep -q 'FAIL:'; then
     first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-120)"
     pass "[Mut] мутант $name → красный (ожидаемо) в [$only]: ${first#  FAIL: }"
@@ -686,6 +1098,13 @@ mutate MAND-EXPIRY       mandate.sh '/# MAND-EXPIRY/s/-lt/-gt/' "L6"
 mutate MAND-MODE         mandate.sh '/# MAND-MODE/s|\[ -f "\$p/.mesh/endpoint.yaml" \] &&|true \&\&|' "L7"
 mutate MAND-SANITIZE     miniyaml.sh '/# MAND-SANITIZE/d' "L1q L8"
 mutate MAND-SCOPE-WARN   mandate.sh '/# MAND-SCOPE-WARN/s/\[ -n "\$MANDATE_PATHS" \]/true/' "L8w"
+# FEAT-017: mutants of mandate_fnmatch and pr-lib (anchors "# PKG-*")
+mutate PKG-FNMATCH       mandate.sh 's|^  case "\$f" in \$p) return 0 ;; esac   # PKG-FNMATCH|  mandate_glob_one "\$f" "\$p" \&\& return 0|' "P"
+mutate PKG-ID            pr-lib.sh '/# PKG-ID: closed alphabet/d' "L10"
+mutate PKG-SECRET        pr-lib.sh "/# PKG-SECRET/s/-Eiq '[^']*'/-Eiq ''/" "L10"
+mutate PKG-URL-WL        pr-lib.sh '/# PKG-URL-WL: ext::/s/return 1/return 0/' "L10"
+mutate PKG-CLEAN-C1      pr-lib.sh '/# PKG-CLEAN-C1/s/ 128 / 000 /' "L10"
+mutate PKG-SESSREV       pr-lib.sh 's|"\$del^"|"\$ref"|' "L11" min
 fi
 
 echo ""

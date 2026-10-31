@@ -52,7 +52,7 @@ expect_red() {
 # ---- checks: print the reason to stdout and return 1 on violation -------------------------
 chk_plugin_version() {
   local v; v="$(jq -r .version "$1" 2>/dev/null)"
-  [ "$v" = "2.4.0" ] || { echo "plugin version is '$v', expected 2.4.0"; return 1; }
+  [ "$v" = "2.5.0" ] || { echo "plugin version is '$v', expected 2.5.0"; return 1; }
 }
 
 chk_protocol_tags() {
@@ -133,7 +133,7 @@ chk_snippet_mandate() {
   block="$(sed -n '/SDX:BEGIN/,/SDX:END/p' "$f")"
   n="$(printf '%s\n' "$block" | grep -cF '.mesh/mandate.yaml' || true)"
   [ "$n" = 1 ] || { echo "'.mesh/mandate.yaml' must occur on exactly one line of the SDX block, found $n"; return 1; }
-  if grep -qE '/sdx:pr([^a-z]|$)' "$f"; then echo "/sdx:pr in $f"; return 1; fi  # not /sdx:proto
+  printf '%s\n' "$block" | grep -qE '/sdx:pr([^a-z]|$)' || { echo "no /sdx:pr inside the SDX block of $f"; return 1; }  # not /sdx:proto (FEAT-017 pin)
   [ "$(grep -c 'SDX:BEGIN' "$f")" = 1 ] && [ "$(grep -c 'SDX:END' "$f")" = 1 ] || { echo "SDX:BEGIN/SDX:END markers not exactly once in $f"; return 1; }
   return 0
 }
@@ -215,6 +215,225 @@ chk_adr_amendments() {  # dated amendments to ADR-020 and ADR-021 by the mandate
   return 0
 }
 
+chk_bridge_archive() {  # [12] pin (FEAT-017): archive.md = chk_bridge + the bridge for pr|branch is a PACKAGE delegated to commands/pr.md
+  local f="$1"
+  chk_bridge "$f" || return 1
+  grep -F 'commands/pr.md' "$f" | grep -F '(n/a, пакет)' | grep -qF 'не вызывается' || { echo "no bridge line with commands/pr.md + '(n/a, пакет)' + 'не вызывается' in $f"; return 1; }
+}
+chk_archive_pkg() {  # [19] archive.md: two Closeout variants, bridge delegates to /sdx:pr, the rest of the bridge and standard steps 1-8 intact
+  local f="$1" t n
+  chk_bridge_archive "$f" || return 1
+  grep -qF 'два варианта' "$f" || { echo "no 'два варианта' in $f"; return 1; }
+  grep -qF '„пакет“' "$f" || { echo "no '„пакет“' in $f"; return 1; }
+  grep -F 'bridge:offer' "$f" | grep -qF '(n/a, мандат)' || { echo "no bridge:offer line with '(n/a, мандат)' in $f"; return 1; }
+  grep -F 'bridge:offer' "$f" | grep -qF 'решение узла' || { echo "no bridge:offer line with 'решение узла' in $f"; return 1; }
+  for t in 'пошаговую инструкцию ручной сборки' '(1) собрать squash-коммит'; do
+    if grep -qF -- "$t" "$f"; then echo "stale manual 3-step instruction ('$t') in $f"; return 1; fi
+  done
+  for t in 'undefined:<delivery>' 'error:<причина>' '`standard`'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  for n in '1. Коммиты.' '2. Перенос дельт в постоянные документы.' '3. Архив плана.' '4. Глобальный лог знаний и бэклог.' '5. Удаление файлов сессии' '6. Резолв основной ветки и слияние.' '7. Enforcement-проверка закрытия.' '8. Финальная запись.'; do
+    grep -qF -- "**$n" "$f" || { echo "standard step '$n' missing in $f"; return 1; }
+  done
+  grep -qF 'git merge --no-ff sdx/<session_id>' "$f" || { echo "no 'git merge --no-ff' in $f"; return 1; }
+  grep -qF 'archive-verify.sh" <session_id>' "$f" || { echo "no archive-verify.sh call in $f"; return 1; }
+}
+
+# ---- FEAT-017 (T69): protocol, snippet = MO-INTEROP section 6, ADR-022, devops, surfaces, CONTRIBUTING-MO ----
+chk_protocol_pkg() {  # [21] protocol.md: two Closeout variants (merge / package), bridge for pr|branch lifted, /sdx:pr scripts, journals
+  local f="$1" t
+  for t in 'два варианта' '„пакет“' 'pr-build.sh' 'pr-check.sh' 'pr-publish.sh' 'protocol-export.sh' 'order-import.sh' 'SDX-PR-' 'commitment' 'protocol.yaml' '--from-order' 'К-1)' 'К-17' 'формат A' 'формат B' 'full' 'CHANGE.template.yaml'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  grep -F 'bridge' "$f" | grep -F 'pr' | grep -F '/sdx:pr' | grep -qF 'пакет' || { echo "no bridge line saying pr|branch is delivered as a package by /sdx:pr in $f"; return 1; }
+  for t in 'пользователь собирает вручную' 'до `/sdx:pr`, `FEAT-017`' 'названная временная граница'; do
+    if grep -qF -- "$t" "$f"; then echo "stale temporary-bridge wording ('$t') in $f"; return 1; fi
+  done
+  chk_bridge "$f"
+}
+chk_snippet_interop() {  # [22] the SDX block of the snippet carries the text of section 6 of the vendored MO-INTEROP.md (quote lines joined by a space)
+  local f="$1" sec6 block
+  sec6="$(awk '/^## 6\./{p=1;next} /^## 7\./{p=0} p && /^> /{sub(/^> /,""); printf "%s%s", (n++ ? " " : ""), $0}' "$ROOT/sdx/mo/MO-INTEROP.md")"
+  [ -n "$sec6" ] || { echo "section 6 of MO-INTEROP.md not found"; return 1; }
+  block="$(sed -n '/SDX:BEGIN/,/SDX:END/p' "$f")"
+  printf '%s\n' "$block" | grep -qF -- "$sec6" || { echo "the SDX block of $f does not contain the text of section 6 of MO-INTEROP.md"; return 1; }
+  printf '%s\n' "$block" | grep -qE '/sdx:pr([^a-z]|$)' || { echo "no /sdx:pr in the SDX block of $f"; return 1; }
+}
+chk_adr22() {  # [23] ADR-022 heading + body terms; ADR-021 carries a dated note about lifting the bridge
+  local f="$1" t
+  grep -E '^## ADR-022\.' "$f" | grep -qF 'Пакет изменения' || { echo "no heading '## ADR-022.' naming 'Пакет изменения' in $f"; return 1; }
+  for t in 'CHANGE.template.yaml' 'Closeout' 'feat-017-mo-change-package-20261031'; do
+    adr_section "$f" ADR-022 | grep -qF -- "$t" || { echo "ADR-022 lacks '$t' in $f"; return 1; }
+  done
+  adr_section "$f" ADR-021 | grep -F 'Поправка 2026-10-31' | grep -qF 'feat-017-mo-change-package-20261031' || { echo "no dated amendment (2026-10-31, feat-017) of ADR-021 in $f"; return 1; }
+}
+chk_devops_pkg() {  # [24] devops.md: mandate rules kept + /sdx:pr is the delivery action (not devops), no merges / tags, CHANGE.template.yaml; frontmatter intact
+  local f="$1" t
+  chk_devops_mandate "$f" || return 1
+  for t in '/sdx:pr' 'CHANGE.template.yaml' 'name: devops' 'model: sonnet' 'tools: Read, Write, Edit, Glob, Grep, Bash'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  [ "$(sed -n 1p "$f")" = '---' ] && [ "$(sed -n 6p "$f")" = '---' ] || { echo "frontmatter of $f is not lines 1-6"; return 1; }
+}
+chk_surface_pkg() {  # [25] README x2 and CLAUDE.md name the new surface
+  local f="$1" t
+  for t in 'CHANGE.template.yaml' 'pr-build.sh' 'CONTRIBUTING-MO.md' '2.5.0' '/sdx:pr' 'mesh_endpoint.py' 'devagent_hook.py' 'MO-INTEROP.md'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+}
+chk_contributing() {  # [27] <root>: CONTRIBUTING-MO.md is a template of the plugin, not a vendored file
+  [ -f "$1/sdx/templates/CONTRIBUTING-MO.md" ] || { echo "no sdx/templates/CONTRIBUTING-MO.md in $1"; return 1; }
+  [ ! -e "$1/sdx/mo/CONTRIBUTING-MO.md" ] || { echo "CONTRIBUTING-MO.md sits in sdx/mo/ of $1"; return 1; }
+  grep -qF 'у нового `head` два родителя' "$1/sdx/templates/CONTRIBUTING-MO.md" || { echo "CONTRIBUTING-MO.md lacks the two-parent resubmit rule in $1"; return 1; }
+  grep -qF 'merge-коммит, а не squash' "$1/sdx/templates/CONTRIBUTING-MO.md" || { echo "CONTRIBUTING-MO.md lacks the merge-commit note in $1"; return 1; }
+}
+
+PR_REFUSE='/sdx:pr: нужен режим мандата МО (.mesh/endpoint.yaml и .mesh/mandate.yaml); без него сдача пакетом неприменима — закрывайте сессию через /sdx:archive.'
+chk_pr_head() {
+  local f="$1" t
+  [ "$(sed -n 1p "$f")" = '---' ] || { echo "no frontmatter in $f"; return 1; }
+  sed -n 2,6p "$f" | grep -q '^description: ' || { echo "no description in $f"; return 1; }
+  sed -n 2,6p "$f" | grep -qF 'argument-hint: [<C>] [--title "<заголовок>"] [--resubmit] [--build-only]' || { echo "no argument-hint in $f"; return 1; }
+}
+chk_pr_calls() {  # the pipeline names every script and the confirmation contract
+  local f="$1" t
+  for t in 'pr-check.sh' 'pr-build.sh' 'pr-publish.sh' 'protocol-export.sh' 'mandate-info.sh' 'pr-mode' 'AskUserQuestion' 'в любом `gate_mode`' '[контракт]' '--phase pre' '--phase post' 'SDX-PR-Branch' 'SDX-PR-Confirmed' 'git commit --allow-empty -F -' '600000'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+}
+# verify-1 FAIL-1: every pr-check.sh call in pr.md carries both --commitment and --title (without an order they are the only source)
+chk_pr_carry() {
+  local f="$1" s seg n=0
+  while IFS="$(printf '\t')" read -r s seg; do
+    [ "$s" = pr-check.sh ] || continue
+    n=$((n + 1))
+    case "$seg" in *--commitment*) ;; *) echo "a pr-check.sh call without --commitment in $f: $seg"; return 1 ;; esac
+    case "$seg" in *--title*) ;; *) echo "a pr-check.sh call without --title in $f: $seg"; return 1 ;; esac
+  done < <(pr_calls "$f")
+  [ "$n" -ge 2 ] || { echo "fewer than 2 pr-check.sh calls found in $f ($n)"; return 1; }
+}
+# verify-1 W5: in gate_mode: auto adr.registry is never accepted silently (P5 names it among the questions that stay)
+chk_pr_auto_registry() {
+  local l; l="$(grep -E '^\*\*P5\.' "$1")"
+  printf '%s' "$l" | grep -F 'gate_mode: auto' | grep -qF 'и `adr.registry` остаются' || { echo "P5 does not keep adr.registry as a question in auto in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'молча не принимается' || { echo "P5 lacks 'молча не принимается' in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'принимаются как `[триаж]`' && { echo "P5 still accepts WARN as [триаж] in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'только в трейлере `SDX-PR-Ack`' || { echo "P5 lacks 'только в трейлере SDX-PR-Ack' in $1"; return 1; }
+  # after P4 the session directory is gone: nothing after the P4 step may write auto_decisions.md
+  awk '/^\*\*P4\./{f=1;next} f' "$1" | grep -qF 'auto_decisions.md' && { echo "pr.md writes auto_decisions.md after P4 in $1"; return 1; }
+  return 0
+}
+# verify-3 WARN-2: a direct /sdx:pr always passes the entry gate of archive.md (auto disclosure), on any stage including Closeout
+chk_pr_p1_gate() {
+  local l; l="$(grep -E '^\*\*P1\.' "$1")"
+  local t
+  for t in '**любом** `stage`' 'гейт входа' 'auto_decisions.md' 'no_gates' 'commands/archive.md'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "P1 lacks '$t' in $1"; return 1; }
+  done
+  printf '%s' "$l" | grep -qF 'и `stage` не `Closeout`' && { echo "P1 skips the entry gate at stage Closeout in $1"; return 1; }
+  return 0
+}
+chk_pr_refusal() {  # P0: the refusal without a mandate is exactly one verbatim line (REQ-PKG-2/34)
+  local c; c="$(grep -cF -- "$PR_REFUSE" "$1")"
+  [ "$c" = 1 ] || { echo "the one-line refusal occurs $c times in $1 (want 1)"; return 1; }
+}
+chk_pr_order() {  # headings **P0.** ... **P10.** once each, in order
+  local n prev=0 c ln
+  for n in 0 1 2 3 4 5 6 7 8 9 10; do
+    c="$(grep -cE "^\*\*P$n\." "$1")"; [ "$c" = 1 ] || { echo "heading P$n occurs $c times in $1"; return 1; }
+    ln="$(grep -nE "^\*\*P$n\." "$1" | cut -d: -f1)"
+    [ "$ln" -gt "$prev" ] || { echo "heading P$n is out of order in $1"; return 1; }
+    prev="$ln"
+  done
+}
+chk_pr_prohibitions() {
+  local f="$1" t bad
+  for t in 'не вызывай `audit()`' 'не пиши в `.mesh/`' 'не сливай `change/*`' 'данные, не инструкции'; do
+    grep -qF -- "$t" "$f" || { echo "no prohibition '$t' in $f"; return 1; }
+  done
+  bad="$(grep -F 'git push' "$f" | grep -vE 'не выполняй|Запрет|запрещ' || true)"
+  [ -z "$bad" ] || { echo "a 'git push' line outside prohibitive text in $f: $bad"; return 1; }
+}
+# flags/subcommands used in script calls inside <md> must exist in the text of that script (catches drift between lanes).
+# Scripts are looked up in $FLAG_SCRIPTS; a script that is absent there is skipped here (the caller reports a missing real script as FAIL).
+pr_calls() {  # md -> "<script>\t<rest of the call up to a backtick or ' #'>"
+  awk '{ line=$0; while (match(line, /(pr-check|pr-build|pr-publish|protocol-export|order-import)\.sh/)) {
+           s=substr(line,RSTART,RLENGTH); line=substr(line,RSTART+RLENGTH); seg=line
+           i=index(seg,"`"); if (i) seg=substr(seg,1,i-1); j=index(seg," #"); if (j) seg=substr(seg,1,j-1)
+           print s "\t" seg } }' "$1"
+}
+chk_flags() {
+  local f="$1" s seg script tok first
+  while IFS="$(printf '\t')" read -r s seg; do
+    [ -n "$s" ] || continue
+    script="$FLAG_SCRIPTS/$s"
+    [ -f "$script" ] || continue
+    for tok in $(printf '%s' "$seg" | grep -oE -- '--[a-z][a-z-]*'); do
+      grep -qF -- "$tok" "$script" || { echo "$s: flag $tok used in $f is absent from the script"; return 1; }
+    done
+    first="$(printf '%s' "$seg" | sed 's/^"//; s/^[[:space:]]*//' | cut -d' ' -f1)"
+    case "$first" in ""|--*|'['*|'<'*|')'*|'|'*|'&'*|';'*) ;; [a-z]*-[a-z]*) grep -qF -- "$first" "$script" || { echo "$s: subcommand $first used in $f is absent from the script"; return 1; } ;; esac
+  done < <(pr_calls "$f")
+}
+# verify-3 WARN-3: one Closeout taxonomy in every carrier: "мёрж" (no mandate) / "пакет" (pr|branch, /sdx:pr) / "мост" (artifact.offer, bridge:offer) / undefined
+chk_closeout_taxonomy() {  # chk_closeout_taxonomy <file>; quote styles are normalised, so the same words are required everywhere
+  local f="$1" n t
+  n="$(sed -e 's/«/"/g' -e 's/»/"/g' -e 's/„/"/g' -e 's/“/"/g' -e 's/”/"/g' "$f")"
+  for t in '"мёрж"' '"пакет"' '"мост"'; do
+    grep -qF -- "$t" <<<"$n" || { echo "no Closeout term $t in $f"; return 1; }
+  done
+  # the drifted wording: package = any defined delivery, or bridge:offer folded into the package variant
+  grep -F '"пакет"' <<<"$n" | grep -qF 'любым определённым' && { echo "stale 'package = any defined delivery' in $f"; return 1; }
+  return 0
+}
+chk_taxonomy_notes() {  # protocol.md / archive.md: marks of steps 6-8 per variant
+  local f="$1"
+  grep -qF '(n/a, пакет)' "$f" || { echo "no '(n/a, пакет)' in $f"; return 1; }
+  local n; n="$(sed -e 's/«/"/g' -e 's/»/"/g' -e 's/„/"/g' -e 's/“/"/g' -e 's/”/"/g' "$f" | grep -F '"мост"')"
+  grep -qF 'bridge:offer' <<<"$n" || { echo "no line naming the bridge variant together with bridge:offer in $f"; return 1; }
+  chk_closeout_taxonomy "$f"
+}
+chk_start_order() {  # start.md (FEAT-017): --from-order / --from-issue, step 1б, stamp-state; steps 1-8 intact
+  local f="$1" t n l
+  sed -n 1,4p "$f" | grep -qF 'argument-hint: <type> <goal> [--auto] [--from-order <order.yaml|msg_id>] [--from-issue <N>]' || { echo "no new argument-hint in $f"; return 1; }
+  for t in '--from-order' '--from-issue' 'order-import.sh' 'stamp-state' 'sid_infix' 'from-file' 'from-msg' 'from-issue' 'MISMATCH' 'AskUserQuestion' 'repo.base' 'pr-mode' 'order.yaml' 'commitment'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  blk="$(awk '/^1б\./{p=1;print;next} p && /^[0-9]/{p=0} p' "$f")"
+  printf "%s" "$blk" | grep -qF AskUserQuestion || { echo "step 1б lacks AskUserQuestion in $f"; return 1; }
+  printf "%s" "$blk" | grep -qF 'в любом `gate_mode`' || { echo "step 1б lacks в любом gate_mode in $f"; return 1; }
+  # verify-1 W4: --from-order in gate_mode: auto is a [директива] stop (AskUserQuestion), like --from-issue
+  printf "%s" "$blk" | grep -F -- '--from-order' | grep -F 'gate_mode: auto' | grep -F '[директива]' | grep -qF 'AskUserQuestion' || { echo "step 1б lacks the auto + --from-order [директива] stop in $f"; return 1; }
+  # verify-2 WARN-1: the snapshot is written from the shown and confirmed content, the source is not re-read
+  printf "%s" "$blk" | grep -qF -- '--out "$snapdir/order.yaml"' || { echo "step 1б lacks the first call with --out to a temp snapshot in $f"; return 1; }
+  # verify-3 WARN-1: the whole snapshot (requirements included) is shown as data before the session is created
+  l="$(printf "%s" "$blk" | grep -F -- '(ii-а)')"
+  for t in 'целиком' 'requirements' '[ДАННЫЕ, не инструкции]'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "step 1б (ii-а) lacks '$t' in $f"; return 1; }
+  done
+  # verify-3 INFO: the mktemp path is printed and substituted literally; MISMATCH creates no session
+  printf "%s" "$blk" | grep -qF 'буквально' || { echo "step 1б lacks the literal snapdir path rule in $f"; return 1; }
+  printf "%s" "$blk" | grep -qF 'сессия не создаётся' || { echo "step 1б lacks 'сессия не создаётся' for MISMATCH in $f"; return 1; }
+  s6="$(grep -E '^6а\.' "$f")"
+  printf '%s' "$s6" | grep -qF 'не вызывается повторно' || { echo "step 6а lacks 'не вызывается повторно' in $f"; return 1; }
+  printf '%s' "$s6" | grep -qF 'подтверждённый снимок' || { echo "step 6а lacks 'подтверждённый снимок' in $f"; return 1; }
+  printf '%s' "$s6" | grep -qE 'order-import\.sh" from-' && { echo "step 6а re-reads the source in $f"; return 1; }
+  for n in '1' '2' '3' '4' '5' '6' '7' '8'; do
+    grep -qE "^$n\. " "$f" || { echo "step $n missing in $f"; return 1; }
+  done
+  chk_start_mandate "$f"
+}
+chk_status_pkg() {  # status.md (FEAT-017): commitment in step 3, step 5б reads pr-status, stays read-only
+  local f="$1" l
+  l="$(grep -E '^5б\.' "$f")"
+  [ -n "$l" ] || { echo "no step 5б in $f"; return 1; }
+  for t in 'mandate-info.sh' 'pr-status' 'каталог сессии удалён' 'Чисто читающий'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "step 5б lacks '$t' in $f"; return 1; }
+  done
+  grep -F '**Session ID**' "$f" | grep -qF 'commitment' || { echo "step 3 lacks commitment in $f"; return 1; }
+  if sed -n '/^---$/,/^---$/p' "$f" | grep -q '^tools:'; then echo "status.md must not declare tools"; return 1; fi
+}
 echo "=== test-mo-prose.sh ==="
 echo ""
 
@@ -321,12 +540,12 @@ done
 expect_red "red: flagless mesh_endpoint.py call" chk_devops_mandate "$TMP/t10b.md"
 
 echo ""
-echo "[11] CLAUDE.md snippet: one sentence on .mesh/mandate.yaml, no /sdx:pr, markers once"
+echo "[11] CLAUDE.md snippet: one sentence on .mesh/mandate.yaml, /sdx:pr named (FEAT-017), markers once"
 expect_ok "snippet" chk_snippet_mandate "$SNIPPET"
 grep -vF '.mesh/mandate.yaml' "$SNIPPET" > "$TMP/t11a.md"
 expect_red "red: snippet without the mandate sentence" chk_snippet_mandate "$TMP/t11a.md"
-{ cat "$SNIPPET"; echo 'см. /sdx:pr'; } > "$TMP/t11b.md"
-expect_red "red: snippet with /sdx:pr" chk_snippet_mandate "$TMP/t11b.md"
+sed 's#/sdx:pr#/sdx:zz#g' "$SNIPPET" > "$TMP/t11b.md"
+expect_red "red: snippet without /sdx:pr" chk_snippet_mandate "$TMP/t11b.md"
 sed 's/<!-- SDX:END/<!-- SDX:END2/' "$SNIPPET" | grep -v 'SDX:END2' > "$TMP/t11c.md"
 expect_red "red: snippet without the SDX:END marker" chk_snippet_mandate "$TMP/t11c.md"
 { cat "$SNIPPET"; } | awk '{print} /\.mesh\/mandate\.yaml/ && !d {print "второй `.mesh/mandate.yaml`"; d=1}' > "$TMP/t11d.md"
@@ -334,12 +553,13 @@ expect_red "red: mandate sentence on two lines" chk_snippet_mandate "$TMP/t11d.m
 
 echo ""
 echo "[12] Closeout bridge: commands/archive.md and protocol.md"
-expect_ok "archive.md" chk_bridge "$ARCHIVE_MD"
+expect_ok "archive.md" chk_bridge_archive "$ARCHIVE_MD"
 expect_ok "protocol.md" chk_bridge "$PROTOCOL"
 for t in 'bridge:offer' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'не вызывается' 'docs_in_repo' '(n/a, docs_in_repo: none)' 'Ветка `sdx/<id>`'; do
   for pair in "archive.md:$ARCHIVE_MD" "protocol.md:$PROTOCOL"; do
     grep -vF -- "$t" "${pair#*:}" > "$TMP/t12.md"
-    expect_red "red: ${pair%%:*} without '$t'" chk_bridge "$TMP/t12.md"
+    if [ "${pair%%:*}" = archive.md ]; then bfn=chk_bridge_archive; else bfn=chk_bridge; fi
+    expect_red "red: ${pair%%:*} without '$t'" "$bfn" "$TMP/t12.md"
   done
 done
 
@@ -406,9 +626,9 @@ sed 's/третий сужающий источник/источник/g' "$DECI
 expect_red "red: ADR-020 amendment without 'третий сужающий источник'" chk_adr_amendments "$TMP/t16c.md"
 
 echo ""
-echo "[17] .claude-plugin/plugin.json: version 2.4.0"
+echo "[17] .claude-plugin/plugin.json: version 2.5.0"
 expect_ok "plugin.json" chk_plugin_version "$ROOT/.claude-plugin/plugin.json"
-sed 's/"version": "2\.4\.0"/"version": "2.3.1"/' "$ROOT/.claude-plugin/plugin.json" > "$TMP/t17.json"
+sed 's/"version": "2\.5\.0"/"version": "2.4.0"/' "$ROOT/.claude-plugin/plugin.json" > "$TMP/t17.json"
 expect_red "red: plugin.json with the old version" chk_plugin_version "$TMP/t17.json"
 
 echo ""
@@ -431,6 +651,191 @@ expect_ok "verify.md --planned rule" chk_verify_planned "$VERIFY_MD"
 for t in 'если в сессии есть `SPEC.md` или `change_note.md`' 'если есть `DESIGN.md`' 'если есть `PLAN.md`' '`docs\/backlog\/` — всегда' '`docs\/DECISIONS.md`' 'docs_in_repo: none' 'не передаются'; do
   sed "s/$t/zz-removed/g" "$VERIFY_MD" > "$TMP/t18g.md"; expect_red "red: verify.md --planned rule without '$t'" chk_verify_planned "$TMP/t18g.md"
 done
+
+
+echo ""
+echo "[19] commands/archive.md: two Closeout variants, the bridge delegates to /sdx:pr (REQ-PKG-1, 26, 30)"
+expect_ok "archive.md" chk_archive_pkg "$ARCHIVE_MD"
+for t in 'commands/pr.md' '(n/a, пакет)' 'два варианта' '„пакет“' 'решение узла' '(n/a, мандат)' 'undefined:<delivery>' 'error:<причина>' '**3. Архив плана.' '**6. Резолв основной ветки и слияние.' 'git merge --no-ff sdx/<session_id>' 'archive-verify.sh" <session_id>'; do
+  grep -vF -- "$t" "$ARCHIVE_MD" > "$TMP/t19.md"
+  expect_red "red: archive.md without '$t'" chk_archive_pkg "$TMP/t19.md"
+done
+{ cat "$ARCHIVE_MD"; echo 'Пользователю выведи пошаговую инструкцию ручной сборки пакета: (1) собрать squash-коммит'; } > "$TMP/t19b.md"
+expect_red "red: archive.md with the old manual instruction" chk_archive_pkg "$TMP/t19b.md"
+
+echo ""
+echo "[19b] one Closeout taxonomy in every carrier: мёрж / пакет / мост / undefined (verify-3 WARN-3)"
+adr_section "$DECISIONS" ADR-022 > "$TMP/adr022.md"
+for pair in "protocol.md:$PROTOCOL" "archive.md:$ARCHIVE_MD" "ADR-022:$TMP/adr022.md" "CLAUDE.md:$ROOT/CLAUDE.md" "specs/mo-interop.md:$ROOT/docs/specs/mo-interop.md" "designs/mo-interop.md:$ROOT/docs/designs/mo-interop.md"; do
+  nm="${pair%%:*}"; fl="${pair#*:}"
+  expect_ok "$nm: terms мёрж / пакет / мост" chk_closeout_taxonomy "$fl"
+  for w in 'мёрж' 'пакет' 'мост'; do
+    sed "s/$w\([“»]\)/zz\1/g" "$fl" > "$TMP/t19c.md"
+    expect_red "red: $nm without the term \"$w\"" chk_closeout_taxonomy "$TMP/t19c.md"
+  done
+done
+expect_ok "protocol.md: (n/a, пакет) and the bridge named with bridge:offer" chk_taxonomy_notes "$PROTOCOL"
+expect_ok "archive.md: (n/a, пакет) and the bridge named with bridge:offer" chk_taxonomy_notes "$ARCHIVE_MD"
+{ cat "$PROTOCOL"; echo 'Вариант „пакет“ — любым определённым `delivery`.'; } > "$TMP/t19d.md"
+expect_red "red: protocol.md with the drifted 'package = any defined delivery'" chk_closeout_taxonomy "$TMP/t19d.md"
+sed 's/(n\/a, пакет)/(n\/a, zz)/g' "$PROTOCOL" > "$TMP/t19e.md"
+expect_red "red: protocol.md without (n/a, пакет)" chk_taxonomy_notes "$TMP/t19e.md"
+
+echo ""
+echo "[20] commands/pr.md: pipeline P0..P10, scripts, confirmation in any gate_mode, prohibitions, flags match the scripts (REQ-PKG-1, 2, 3, 13, 17, 35)"
+PR_MD="$ROOT/commands/pr.md"
+expect_ok "pr.md frontmatter" chk_pr_head "$PR_MD"
+expect_ok "pr.md calls and contract" chk_pr_calls "$PR_MD"
+expect_ok "pr.md one-line refusal (P0)" chk_pr_refusal "$PR_MD"
+expect_ok "pr.md every pr-check call carries --commitment and --title" chk_pr_carry "$PR_MD"
+sed '/^\*\*P7\./s/ \[--commitment <C>\] \[--title "<T>"\]` (те/` (те/' "$PR_MD" > "$TMP/t20k.md"
+expect_red "red: pr.md P7 pr-check post without --commitment/--title" chk_pr_carry "$TMP/t20k.md"
+sed '/^\*\*P7\./s/ \[--title "<T>"\]` (те/` (те/' "$PR_MD" > "$TMP/t20k2.md"
+expect_red "red: pr.md P7 pr-check post without --title" chk_pr_carry "$TMP/t20k2.md"
+expect_ok "pr.md P5 keeps adr.registry as a question in auto" chk_pr_auto_registry "$PR_MD"
+sed '/^\*\*P5\./s/ и `adr.registry` остаются/ остаются/' "$PR_MD" > "$TMP/t20l.md"
+expect_red "red: pr.md P5 without adr.registry among the auto questions" chk_pr_auto_registry "$TMP/t20l.md"
+sed '/^\*\*P5\./s/молча не принимается/принимается/' "$PR_MD" > "$TMP/t20m.md"
+expect_red "red: pr.md P5 without 'молча не принимается'" chk_pr_auto_registry "$TMP/t20m.md"
+sed '/^\*\*P5\./s/Журнал авторежима сессии вести негде/Запись в `auto_decisions.md`/' "$PR_MD" > "$TMP/t20n.md"
+expect_red "red: pr.md P5 writes auto_decisions.md after P4" chk_pr_auto_registry "$TMP/t20n.md"
+sed '/^\*\*P5\./s/только в трейлере `SDX-PR-Ack`/в трейлере/' "$PR_MD" > "$TMP/t20o.md"
+expect_red "red: pr.md P5 without 'только в трейлере SDX-PR-Ack'" chk_pr_auto_registry "$TMP/t20o.md"
+expect_ok "pr.md P1 always passes the entry gate of archive.md" chk_pr_p1_gate "$PR_MD"
+sed '/^\*\*P1\./s/ всегда пройди прелюдию/ пройди прелюдию/; /^\*\*P1\./s/гейт входа/вход/' "$PR_MD" > "$TMP/t20p.md"
+expect_red "red: pr.md P1 without the entry gate" chk_pr_p1_gate "$TMP/t20p.md"
+sed '/^\*\*P1\./s/auto_decisions.md/zz.md/' "$PR_MD" > "$TMP/t20q.md"
+expect_red "red: pr.md P1 without the auto_decisions.md disclosure" chk_pr_p1_gate "$TMP/t20q.md"
+sed '/^\*\*P1\./s/(прямой вызов — на \*\*любом\*\* `stage`, включая `Closeout`)/и `stage` не `Closeout`/' "$PR_MD" > "$TMP/t20r.md"
+expect_red "red: pr.md P1 only at stage != Closeout" chk_pr_p1_gate "$TMP/t20r.md"
+expect_ok "pr.md order P0..P10" chk_pr_order "$PR_MD"
+expect_ok "pr.md prohibitions, no bare git push" chk_pr_prohibitions "$PR_MD"
+sed '1,5{/^argument-hint:/d;}' "$PR_MD" > "$TMP/t20a.md"; expect_red "red: pr.md without argument-hint" chk_pr_head "$TMP/t20a.md"
+for t in 'pr-check.sh' 'pr-build.sh' 'pr-publish.sh' 'protocol-export.sh' 'pr-mode' 'AskUserQuestion' 'в любом `gate_mode`' '[контракт]' '--phase post' 'SDX-PR-Confirmed' 'git commit --allow-empty -F -'; do
+  sed "s/$(printf '%s' "$t" | sed 's/[][\.*^$/]/\\&/g')/zz-removed/g" "$PR_MD" > "$TMP/t20b.md"
+  expect_red "red: pr.md without '$t'" chk_pr_calls "$TMP/t20b.md"
+done
+sed 's/нужен режим мандата МО/zz-removed/' "$PR_MD" > "$TMP/t20c.md"; expect_red "red: pr.md with a changed refusal line" chk_pr_refusal "$TMP/t20c.md"
+{ cat "$PR_MD"; echo "$PR_REFUSE"; } > "$TMP/t20d.md"; expect_red "red: pr.md with the refusal twice" chk_pr_refusal "$TMP/t20d.md"
+sed -e 's/^\*\*P5\./**PX./' -e 's/^\*\*P6\./**P5./' -e 's/^\*\*PX\./**P6./' "$PR_MD" > "$TMP/t20e.md"; expect_red "red: pr.md with P5/P6 swapped" chk_pr_order "$TMP/t20e.md"
+grep -vE '^\*\*P8\.' "$PR_MD" > "$TMP/t20f.md"; expect_red "red: pr.md without P8" chk_pr_order "$TMP/t20f.md"
+{ cat "$PR_MD"; echo '    git push origin change/C-1-ex1'; } > "$TMP/t20g.md"; expect_red "red: pr.md with a bare git push" chk_pr_prohibitions "$TMP/t20g.md"
+for t in 'не вызывай `audit()`' 'не пиши в `.mesh/`' 'не сливай `change/*`'; do
+  sed "s/$(printf '%s' "$t" | sed 's/[][\.*^$/]/\\&/g')/zz-removed/g" "$PR_MD" > "$TMP/t20h.md"; expect_red "red: pr.md without '$t'" chk_pr_prohibitions "$TMP/t20h.md"
+done
+# flag consistency. Fixture: stubs carrying exactly the CLI of DESIGN (green side independent of the parallel lanes) ...
+FX="$TMP/flagfx"; mkdir -p "$FX"
+echo '# --sid --proj --phase --commitment --title --base-name --no-tests pre post all' > "$FX/pr-check.sh"
+echo '# --sid --proj --commitment --title --base-name --allow-diverged --resubmit --notes' > "$FX/pr-build.sh"
+echo '# --sid --proj --commitment --title --base-name --remote --hosting --dry-run' > "$FX/pr-publish.sh"
+echo '# --sid --proj --out --from-rev' > "$FX/protocol-export.sh"
+echo '# from-file from-msg from-issue list stamp-state --proj --out --inbox-json --repo --sid --commitment' > "$FX/order-import.sh"
+for md in "$PR_MD" "$START_MD"; do
+  FLAG_SCRIPTS="$FX" expect_ok "$(basename "$md"): every script flag exists in the DESIGN CLI (fixture)" chk_flags "$md"
+done
+{ cat "$PR_MD"; echo '`bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/pr-build.sh" --sid x --zz-bogus`'; } > "$TMP/t20i.md"
+FLAG_SCRIPTS="$FX" expect_red "red: pr.md with a flag no script knows" chk_flags "$TMP/t20i.md"
+sed 's/--allow-diverged//' "$FX/pr-build.sh" > "$TMP/pr-build.sh"; mkdir -p "$TMP/flagfx2"; cp "$FX"/*.sh "$TMP/flagfx2/"; cp "$TMP/pr-build.sh" "$TMP/flagfx2/pr-build.sh"
+FLAG_SCRIPTS="$TMP/flagfx2" expect_red "red: a script that dropped --allow-diverged (drift between lanes)" chk_flags "$PR_MD"
+{ cat "$START_MD"; echo '`bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/order-import.sh" from-nowhere x`'; } > "$TMP/t20j.md"
+FLAG_SCRIPTS="$FX" expect_red "red: start.md with an unknown order-import subcommand" chk_flags "$TMP/t20j.md"
+# ... and against the real scripts: a script called by the command but absent from sdx/hooks/ is a failure
+for md in "$PR_MD" "$START_MD"; do
+  have=""; for s in pr-check pr-build pr-publish protocol-export order-import; do
+    if pr_calls "$md" | grep -q "^$s.sh"; then
+      if [ -f "$SCRIPT_DIR/$s.sh" ]; then have="$have $s"; else fail "$(basename "$md"): $s.sh is called but missing" "no sdx/hooks/$s.sh"; fi
+    fi
+  done
+  if [ -n "$have" ]; then FLAG_SCRIPTS="$SCRIPT_DIR" expect_ok "$(basename "$md"): flags of${have} match the real scripts" chk_flags "$md"; fi
+done
+
+echo ""
+echo "[26] commands/start.md (--from-order, --from-issue, step 1б, stamp-state) and commands/status.md (commitment, step 5б pr-status)"
+expect_ok "start.md" chk_start_order "$START_MD"
+for t in '--from-order' '--from-issue' 'stamp-state' 'sid_infix' 'MISMATCH' 'repo.base' 'pr-mode' 'order.yaml'; do
+  sed "s/$t/zz-removed/g" "$START_MD" > "$TMP/t26a.md"; expect_red "red: start.md without '$t'" chk_start_order "$TMP/t26a.md"
+done
+sed 's/^   - (iii-а) При `gate_mode: auto` приём заказа через `--from-order`/   - (iii-а) При другом режиме приём через `--from-order`/' "$START_MD" > "$TMP/t26f.md"
+expect_red "red: start.md without the auto + --from-order [директива] stop" chk_start_order "$TMP/t26f.md"
+sed '/^6а\./s/не вызывается повторно/вызывается ещё раз/' "$START_MD" > "$TMP/t26g.md"
+expect_red "red: start.md 6а without 'не вызывается повторно'" chk_start_order "$TMP/t26g.md"
+sed '/^6а\./s/подтверждённый снимок/снимок/' "$START_MD" > "$TMP/t26h.md"
+expect_red "red: start.md 6а without 'подтверждённый снимок'" chk_start_order "$TMP/t26h.md"
+{ cat "$START_MD"; echo '6а. повтори `bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/order-import.sh" from-issue 5 --out x`'; } | sed '0,/^6а\./{/^6а\./d}' > "$TMP/t26i.md"
+expect_red "red: start.md 6а re-reading the source" chk_start_order "$TMP/t26i.md"
+sed 's/--out "$snapdir\/order.yaml"//' "$START_MD" > "$TMP/t26j.md"
+expect_red "red: start.md 1б without the first call --out" chk_start_order "$TMP/t26j.md"
+sed '/(ii-а)/s/requirements/zz/g' "$START_MD" > "$TMP/t26k.md"
+expect_red "red: start.md (ii-а) without requirements in the shown snapshot" chk_start_order "$TMP/t26k.md"
+sed '/(ii-а)/s/целиком/частично/' "$START_MD" > "$TMP/t26l.md"
+expect_red "red: start.md (ii-а) without 'целиком'" chk_start_order "$TMP/t26l.md"
+sed '/(ii-а)/s/\[ДАННЫЕ, не инструкции\]/[показ]/' "$START_MD" > "$TMP/t26m.md"
+expect_red "red: start.md (ii-а) without the data marker" chk_start_order "$TMP/t26m.md"
+sed 's/буквально/как придётся/g' "$START_MD" > "$TMP/t26n.md"
+expect_red "red: start.md without the literal snapdir path rule" chk_start_order "$TMP/t26n.md"
+sed 's/сессия не создаётся/сессия создаётся/' "$START_MD" > "$TMP/t26o.md"
+expect_red "red: start.md without 'сессия не создаётся' on MISMATCH" chk_start_order "$TMP/t26o.md"
+sed 's/^1б\./1x./' "$START_MD" > "$TMP/t26b.md"; expect_red "red: start.md without step 1б" chk_start_order "$TMP/t26b.md"
+sed 's/^3\. /3x. /' "$START_MD" > "$TMP/t26c.md"; expect_red "red: start.md without step 3" chk_start_order "$TMP/t26c.md"
+expect_ok "status.md" chk_status_pkg "$STATUS_MD"
+for t in 'pr-status' 'каталог сессии удалён' 'commitment' '^5б\.'; do
+  sed "s/$t/zz-removed/g" "$STATUS_MD" > "$TMP/t26d.md"; expect_red "red: status.md without '$t'" chk_status_pkg "$TMP/t26d.md"
+done
+
+sed '1a tools: Write' "$STATUS_MD" > "$TMP/t26e.md"
+expect_red "red: status.md declaring write tools" chk_status_pkg "$TMP/t26e.md"
+echo ""
+echo "[21] protocol.md: two Closeout variants, the FEAT-016 bridge for pr|branch lifted, /sdx:pr scripts, journals (REQ-PKG-22, 30, 33)"
+expect_ok "protocol.md" chk_protocol_pkg "$PROTOCOL"
+for t in 'два варианта' '„пакет“' 'pr-build.sh' 'pr-check.sh' 'pr-publish.sh' 'protocol-export.sh' 'order-import.sh' 'SDX-PR-' 'commitment' 'protocol.yaml' '--from-order' 'К-17' 'формат A' 'формат B' 'CHANGE.template.yaml'; do
+  sed "s/$(printf '%s' "$t" | sed 's/[][\.*^$/]/\\&/g')/zz-removed/g" "$PROTOCOL" > "$TMP/t21.md"
+  expect_red "red: protocol.md without '$t'" chk_protocol_pkg "$TMP/t21.md"
+done
+{ cat "$PROTOCOL"; echo 'Пакет `change/<C>-<exec>` пользователь собирает вручную — названная временная граница.'; } > "$TMP/t21b.md"
+expect_red "red: protocol.md with the temporary manual bridge" chk_protocol_pkg "$TMP/t21b.md"
+
+echo ""
+echo "[22] sdx/templates/claude-md-snippet.md = section 6 of the vendored MO-INTEROP.md (REQ-PKG-32)"
+expect_ok "snippet" chk_snippet_interop "$SNIPPET"
+sed 's/сдавай пакет изменения/сдавай всё подряд/' "$SNIPPET" > "$TMP/t22a.md"; expect_red "red: snippet with a changed sentence of section 6" chk_snippet_interop "$TMP/t22a.md"
+sed 's#/sdx:pr#/sdx:zz#g' "$SNIPPET" > "$TMP/t22b.md"; expect_red "red: snippet without /sdx:pr" chk_snippet_interop "$TMP/t22b.md"
+grep -vF 'МО над стендами и над процессом изменений' "$SNIPPET" > "$TMP/t22c.md"; expect_red "red: snippet without the section 6 paragraph" chk_snippet_interop "$TMP/t22c.md"
+
+echo ""
+echo "[23] docs/DECISIONS.md: ADR-022 'Пакет изменения', dated amendment of ADR-021 (REQ-PKG-31)"
+expect_ok "DECISIONS.md" chk_adr22 "$DECISIONS"
+sed 's/^## ADR-022\..*/## ADR-022. Иное/' "$DECISIONS" > "$TMP/t23a.md"; expect_red "red: ADR-022 heading without 'Пакет изменения'" chk_adr22 "$TMP/t23a.md"
+grep -v '^## ADR-022\.' "$DECISIONS" > "$TMP/t23b.md"; expect_red "red: no ADR-022 heading" chk_adr22 "$TMP/t23b.md"
+awk '/^## ADR-021\./{p=1} /^## ADR-022\./{p=0} p && /Поправка 2026-10-31/ {gsub(/feat-017-mo-change-package-20261031/,"zz")} {print}' "$DECISIONS" > "$TMP/t23c.md"; expect_red "red: ADR-021 amendment without the session id" chk_adr22 "$TMP/t23c.md"
+sed 's/CHANGE\.template\.yaml/zz.yaml/g' "$DECISIONS" > "$TMP/t23d.md"; expect_red "red: ADR-022 without CHANGE.template.yaml" chk_adr22 "$TMP/t23d.md"
+
+echo ""
+echo "[24] agents/devops.md: /sdx:pr is the delivery action, no merges / tags, CHANGE.template.yaml, frontmatter intact (REQ-PKG-32, 33)"
+expect_ok "devops.md" chk_devops_pkg "$DEVOPS_MD"
+for t in '/sdx:pr' 'CHANGE\.template\.yaml' 'теги' 'model: sonnet'; do
+  sed "s/$t/zz-removed/g" "$DEVOPS_MD" > "$TMP/t24.md"; expect_red "red: devops.md without '$t'" chk_devops_pkg "$TMP/t24.md"
+done
+
+echo ""
+echo "[25] README.md, README.en.md, CLAUDE.md: CHANGE.template.yaml, pr-build.sh, CONTRIBUTING-MO.md, 2.5.0, /sdx:pr (REQ-PKG-33)"
+for pair in "README.md:$README_RU" "README.en.md:$README_EN" "CLAUDE.md:$ROOT/CLAUDE.md"; do
+  expect_ok "${pair%%:*}" chk_surface_pkg "${pair#*:}"
+  for t in 'CHANGE\.template\.yaml' 'pr-build\.sh' 'CONTRIBUTING-MO\.md' '2\.5\.0'; do
+    sed "s/$t/zz-removed/g" "${pair#*:}" > "$TMP/t25.md"; expect_red "red: ${pair%%:*} without '$t'" chk_surface_pkg "$TMP/t25.md"
+  done
+done
+
+echo ""
+echo "[27] sdx/templates/CONTRIBUTING-MO.md exists and is not a vendored file of sdx/mo/ (REQ-PKG-33)"
+expect_ok "plugin tree" chk_contributing "$ROOT"
+mkdir -p "$TMP/c27a/sdx/templates" "$TMP/c27a/sdx/mo" "$TMP/c27b/sdx/templates" "$TMP/c27b/sdx/mo"
+: > "$TMP/c27a/sdx/mo/CONTRIBUTING-MO.md"; : > "$TMP/c27b/sdx/templates/CONTRIBUTING-MO.md"; : > "$TMP/c27b/sdx/mo/CONTRIBUTING-MO.md"
+expect_red "red: file only in sdx/mo/" chk_contributing "$TMP/c27a"
+expect_red "red: file in both places" chk_contributing "$TMP/c27b"
+mkdir -p "$TMP/c27c/sdx/templates"; sed 's/у нового `head` два родителя/у нового head один родитель/' "$ROOT/sdx/templates/CONTRIBUTING-MO.md" > "$TMP/c27c/sdx/templates/CONTRIBUTING-MO.md"
+expect_red "red: CONTRIBUTING-MO.md without the two-parent resubmit rule" chk_contributing "$TMP/c27c"
+mkdir -p "$TMP/c27d/sdx/templates"; sed 's/merge-коммит, а не squash/squash/' "$ROOT/sdx/templates/CONTRIBUTING-MO.md" > "$TMP/c27d/sdx/templates/CONTRIBUTING-MO.md"
+expect_red "red: CONTRIBUTING-MO.md without the merge-commit note" chk_contributing "$TMP/c27d"
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

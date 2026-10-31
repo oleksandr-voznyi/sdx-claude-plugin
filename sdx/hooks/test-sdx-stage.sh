@@ -1051,6 +1051,53 @@ else fail "[M40] read-only" "rc=$e1/$e2/$e3 o1='$o1' tree-same=$([ "$snap1" = "$
 cleanup
 fi
 
+# ---- [42] (FEAT-017, REQ-PKG-25): the optional field `commitment` survives every stage write ----
+# The field is written by order-import.sh stamp-state (a separate jq after init), never by this script; here it is
+# stamped with the same jq. Characterisation: passes without new code in sdx-stage.sh; its red side is the mutant
+# of write_stage in [M41] below (the mutant keeps only `.stage`, a copy of the script — the checkout is untouched).
+if mwant 42; then
+echo "[42] commitment survives next / next --to; init writes the seven keys and no commitment"
+TMPPROJ="$(mktemp -d)"
+out="$(run_stage init m42 feature Discovery interactive sdx/m42 false false 2>&1)"; ec=$?
+keys="$(jq -r 'keys | join(",")' "$(state_file m42)" 2>/dev/null)"
+if [ "$ec" -eq 0 ] && [ "$keys" = "gate_mode,git_branch,no_code,no_gates,session_id,stage,type" ]; then
+  pass "[42] init writes exactly the seven keys, no commitment"
+else fail "[42] init keys" "ec=$ec keys=[$keys] out=[$out]"; fi
+sf="$(state_file m42)"
+jq --arg c "C-ACME-001" '. + {commitment:$c}' "$sf" > "$sf.tmp" && mv "$sf.tmp" "$sf"
+others_before="$(jq -S 'del(.commitment, .stage)' "$sf")"
+put_artifact m42 context_report.md
+out="$(run_stage next m42 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(jq -r .stage "$sf")" = "Business Spec" ] && [ "$(jq -r .commitment "$sf")" = "C-ACME-001" ]; then
+  pass "[42] next keeps commitment (Discovery -> Business Spec)"
+else fail "[42] next keeps commitment" "ec=$ec out=[$out] state=$(jq -c . "$sf")"; fi
+out="$(run_stage next m42 --to Discovery 2>&1)"; ec=$?
+if [ "$ec" -eq 0 ] && [ "$(jq -r .stage "$sf")" = "Discovery" ] && [ "$(jq -r .commitment "$sf")" = "C-ACME-001" ]; then
+  pass "[42] next --to keeps commitment (back to Discovery)"
+else fail "[42] next --to keeps commitment" "ec=$ec out=[$out] state=$(jq -c . "$sf")"; fi
+if [ "$(jq -S 'del(.commitment, .stage)' "$sf")" = "$others_before" ]; then pass "[42] the other keys are byte-for-byte the same after both writes"
+else fail "[42] other keys" "changed: $(jq -c . "$sf")"; fi
+cleanup
+fi
+
+# ---- [43] (DEBT-046, found 2026-10-31): the no_code refusal of `next --to` must not leave a stray file ----
+# The refusal text used to carry backticks inside double quotes — a command substitution whose
+# `-> false` part is a redirect, silently creating an empty file named 'false' in the cwd.
+if mwant 43; then
+echo "[43] next --to refused under no_code: no stray file in the cwd, no backticks in the message"
+setup_sdx_repo "m43" "Verification" "true" "false"
+# verify-1 W7: run in the temporary project (never in the checkout): the stray file would be created in the cwd of the call
+rm -f "$TMPPROJ/false"
+out="$(cd "$TMPPROJ" && run_stage next "m43" --to "Execution" 2>&1 1>/dev/null)"; ec=$?
+if [ "$ec" -eq 1 ] && [ ! -e "$TMPPROJ/false" ] && ! printf '%s' "$out" | grep -q '[`]'; then
+  pass "[43] refusal (rc 1) leaves no 'false' in the cwd and carries no backticks (DEBT-046)"
+else
+  fail "[43] no_code refusal side effect" "ec=$ec stray=$([ -e "$TMPPROJ/false" ] && echo yes || echo no) backticks=$(printf '%s' "$out" | grep -c '[`]')"
+fi
+rm -f "$TMPPROJ/false"
+cleanup
+fi
+
 # ---- [M41] mutation runs (FEAT-016): copies of sdx-stage.sh + lib/ in a temp dir, anchored by "# MAND-*" tags ----
 if [ -z "${SDX_STAGE_MUT:-}" ]; then
 echo "[M41] mutation runs: each mutant must differ from the original and turn its scenarios red"
@@ -1076,6 +1123,9 @@ smut MAND-SKIP   sdx-stage.sh '/# MAND-SKIP/s|while is_skipped .* do|while false
 smut MAND-DEPLOY lib/mandate.sh '/# MAND-NEVER/s/return 1/return 0/' "33"
 smut SDX-UNKNOWN sdx-stage.sh '/# SDX-UNKNOWN/s|\[ "\$rc" -ne 0 \]|false|' "39"
 smut MAND-TO     sdx-stage.sh '/# MAND-TO/s|if is_excluded_by_mandate "\$to_target"; then|if false; then|' "34"
+# FEAT-017: a write_stage that keeps only `.stage` loses the optional `commitment` field -> [42] (no anchor in sdx-stage.sh: matched by text)
+smut WRITE-STAGE-COMMITMENT sdx-stage.sh "s|jq --arg s \"\$new\" '\.stage = \$s' \"\$state\"|jq --arg s \"\$new\" '{stage: \$s}' \"\$state\"|" "42"
+smut STRAY-FALSE sdx-stage.sh 's|(no_code: true -> false в|(`no_code: true -> false` в|' "43"
 rm -rf "$MUTROOT"
 fi
 

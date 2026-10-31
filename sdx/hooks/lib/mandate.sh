@@ -104,6 +104,16 @@ mandate_glob_one() {
   [ "${f#"$b"/}" != "$f" ]                                    # MAND-GLOB-PREFIX: startswith(b + "/")
 }
 
+# mandate_fnmatch <string> <pattern>: rc 0 iff fnmatch(string, pattern) — ONLY the first branch of glob_any.
+# scope.branches is checked by the node with plain fnmatch (DEV:374-375), without the prefix rules, so
+# 'change' must NOT cover 'change/x' here (unlike mandate_glob_one). Same two bash-vs-Python neutralisations.
+mandate_fnmatch() {
+  local LC_ALL=C f="$1" p="$2" bs='\'
+  _my_rep "$p" "$bs" "$bs$bs"; _my_rep "$MY_REP" "[^" "[$bs^"; p="$MY_REP"
+  case "$f" in $p) return 0 ;; esac   # PKG-FNMATCH
+  return 1
+}
+
 # mandate_glob_any <path> <pattern>...: rc 0 if any pattern matches (no patterns: no match)
 mandate_glob_any() {
   local f="$1" p

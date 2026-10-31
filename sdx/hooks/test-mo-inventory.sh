@@ -237,6 +237,29 @@ else
   fail "sdx/mo/ missing" "$MO_DIR does not exist (vendored by FEAT-015)"
 fi
 
+# FEAT-017 (REQ-PKG-28, 29): the fourth vendored file of release 0.9.1 and the neutral "how to submit a change"
+# template, which is SDX's own text and therefore must NOT live in sdx/mo/ (red side: finding (d)).
+echo "[14] Red side: a non-vendored template placed inside a copy of sdx/mo/ is an unlisted file (check (d))"
+rm -f "$fx/surface.md"; printf '# how to submit a change\n' > "$fx/CONTRIBUTING-MO.md"
+out="$(check_inventory "$fx")"
+case "$out" in *"unlisted file: CONTRIBUTING-MO.md"*) pass "CONTRIBUTING-MO.md inside sdx/mo/ is reported" ;; *) fail "CONTRIBUTING-MO.md in sdx/mo/ not reported" "got: '$out'" ;; esac
+rm -f "$fx/CONTRIBUTING-MO.md"; expect_green "[14]"
+
+if [ -d "$MO_DIR" ]; then
+  echo "[13] Real sdx/mo/: CHANGE.template.yaml is vendored (tag sim-kit-0.9.1), pinned, listed and mentioned on all surfaces"
+  CT=CHANGE.template.yaml
+  CT_SHA=346d2e6e52477faf69811411dfa11a96526daa28639a05ff523b9e90d86fd5cd
+  if [ -f "$MO_DIR/$CT" ]; then pass "$CT exists in sdx/mo/"; else fail "$CT missing" "not in $MO_DIR"; fi
+  if grep -qE "^$CT_SHA  $CT\$" "$MO_DIR/SIMKIT_SHA256" 2>/dev/null; then pass "SIMKIT_SHA256 pins $CT to the tag content ($CT_SHA)"
+  else fail "$CT not pinned" "no '$CT_SHA  $CT' line in SIMKIT_SHA256"; fi
+  n=0; for f in mesh_endpoint.py devagent_hook.py MO-INTEROP.md "$CT"; do [ -f "$MO_DIR/$f" ] && n=$((n + 1)); done
+  if [ "$n" = 4 ]; then pass "all four vendored files present"; else fail "vendored files incomplete" "$n of 4 present"; fi
+  out="$(cd "$ROOT" && for s in $SURFACES; do grep -qF -- "$CT" "$s" || echo "$s"; done)"
+  if [ -z "$out" ]; then pass "$CT is mentioned on all five surfaces"; else fail "$CT not mentioned" "$(printf '%s' "$out" | tr '\n' ' ')"; fi
+  if [ "$(cat "$MO_DIR/SIMKIT_VERSION" 2>/dev/null)" = "0.9.1" ]; then pass "SIMKIT_VERSION stays at the release the file was taken from"
+  else fail "SIMKIT_VERSION changed" "got '$(cat "$MO_DIR/SIMKIT_VERSION" 2>/dev/null)'"; fi
+fi
+
 # Red side of [6]: the same suite with MO_DIR pointing at a missing directory must FAIL exactly once.
 if [ -z "${MO_DIR_UNDER_TEST:-}" ]; then
   echo "[6r] Missing sdx/mo/ turns the suite red"

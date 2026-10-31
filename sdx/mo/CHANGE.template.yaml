@@ -1,0 +1,19 @@
+# Манифест пакета изменения (sim-kit 0.9, format 1) — кладётся в корень ветки change/<C>-<executor> (или PR). Общий формат с бандлом MOVE.IO (LD-06).
+# Нейтрален к инструменту: SDX генерирует (/sdx:pr), любой другой харнес пишет по этому шаблону. Без манифеста пакет не рассматривается.
+change:
+  format: 1
+  commitment: C-XXX-FEAT-001          # обязательство узла, по которому сделано изменение (обязательно)
+  executor: <executor-id>             # исполнитель из реестра узла (мандат)
+  mandate_digest: <12 hex>            # из .mesh/mandate.yaml (digest) — какой мандат исполнитель считает действующим
+  base: <sha>                         # от какого коммита dev сделана ветка
+  head: <sha>                         # голова пакета
+  archive_sha256: <sha256 of `git archive --format=tar <head>`>   # тождество поставки: PR, artifact.offer и стенд сверяются одним числом
+  scope_touched: []                   # что изменено, включая сгенерированное (lock-файлы, сборки, снимки); аудит пересчитает сам
+  touches_shared: false               # true — правит общие пути (миграции, манифесты/контракты, lock, CI, состав): слияние — решение человека
+  spec: docs/specs/<module>.md@<sha>  # если стадия spec была у исполнителя
+  verify: {tests: pass, report: <url|path>}   # что исполнитель проверил сам; узел перепроверит на своём стенде
+  adr: [docs/decisions.md#D-NNN]      # запись в реестр решений проекта — обязательный выход обязательства
+  docs: [docs/modules/<module>.md]    # итоговая документация «как стало», вошедшая в пакет
+  history_ref: executor:<session-id>  # где лежит история, если не в репозитории
+  # необязательные поля модульных платформ (MOVE.IO): module {id, version, kernelApi}, contracts_changed, migrations {forward_only, files}, layer
+  notes: ""

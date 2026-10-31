@@ -247,6 +247,115 @@ newfx && {
 }
 }
 
+# ---------------------------------------------------------------------------------------------------- [P5]
+# gh_stub <dir>: a fake `gh` that records its argv ("[a][b]..." per call) in $GH_LOG and the body file in $GH_BODY
+gh_stub() {
+  mkdir -p "$1"
+  cat > "$1/gh" <<'STUB'
+#!/usr/bin/env bash
+{ printf '[%s]' "$@"; echo; } >> "$GH_LOG"
+case "$1 $2" in
+  "auth status") exit "${GH_AUTH_RC:-0}" ;;
+  "pr list") [ "${GH_LIST_RC:-0}" = 0 ] || exit "$GH_LIST_RC"; printf '%s' "${GH_LIST_OUT:-[]}"; exit 0 ;;
+  "pr create")
+    prev=""; for a in "$@"; do [ "$prev" = --body-file ] && cp "$a" "$GH_BODY"; prev="$a"; done
+    [ "${GH_CREATE_RC:-0}" = 0 ] || exit "$GH_CREATE_RC"
+    echo "https://github.com/o/r/pull/7" ;;
+esac
+STUB
+  chmod +x "$1/gh"
+}
+# nogh_path <dir>: a PATH with the tools the scripts need and NO gh (symlinks to the tools found in the current PATH)
+nogh_path() {
+  local t p
+  mkdir -p "$1"
+  for t in git jq bash sh env awk sed grep cut tr head tail mktemp rm cat sort uniq wc dirname basename mv cp ls date find tee uname id; do
+    p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$1/$t"
+  done
+}
+blk_P5() {
+echo "[P5] pull request through the gh CLI (a stub in PATH) and the degradation"
+GHD="$TMP/ghbin"; gh_stub "$GHD"; export GH_LOG="$TMP/gh.log" GH_BODY="$TMP/gh.body"
+github_fx() {   # -> WC with a github order, a package, and a push-through rule github.com -> the local bare remote
+  newfx || return 1
+  order_with "$WC" 's|^    url: .*|    url: "https://github.com/o/r.git"|'
+  gw config "url.$REM.insteadOf" "https://github.com/o/r.git"
+  build_pkg "$WC" || return 1
+  : > "$GH_LOG"; rm -f "$GH_BODY"
+}
+github_fx && {   # (a) gh present and authenticated: list, then create
+  PATH="$GHD:$PATH" GH_LIST_OUT='[]' run_pub "$WC"
+  eq "P5a rc 0" "$PRC" "0"
+  eq "P5a push done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
+  eq "P5a hosting github" "$(jv .hosting)" "github"
+  eq "P5a the first gh call checks the authentication" "$(sed -n 1p "$GH_LOG")" "[auth][status]"
+  eq "P5a then gh pr list --head <branch> --repo o/r" "$(sed -n 2p "$GH_LOG")" "[pr][list][--head][$BR][--repo][o/r][--json][url]"
+  eq "P5a then gh pr create with the exact argv" "$(sed -n 3p "$GH_LOG" | sed 's/\[--body-file\]\[[^]]*\]$/[--body-file][F]/')" "[pr][create][--repo][o/r][--base][dev][--head][$BR][--title][C-ACME-001: Feature mod1][--body-file][F]"
+  eq "P5a no further gh calls" "$(grep -c . "$GH_LOG")" "3"
+  eq "P5a JSON pr.url, created" "$(jv '.pr.url+" "+(.pr.created|tostring)')" "https://github.com/o/r/pull/7 true"
+  eq "P5a JSON degraded and instruction are null" "$(jv '(.degraded|tostring)+" "+(.instruction|tostring)')" "null null"
+  body="$(cat "$GH_BODY" 2>/dev/null)"
+  has "P5a body: the commitment" "$body" "C-ACME-001"
+  has "P5a body: the executor" "$body" "ex1"
+  has "P5a body: the number of files" "$body" "4"
+  has "P5a body: verify" "$body" "pass"
+  has "P5a body: the ADR anchor" "$body" "docs/DECISIONS.md#ADR-099"
+  has "P5a body: touches_shared line" "$body" "слияние такого пакета — решение человека"
+  has "P5a body: history_ref" "$body" "executor:sdx/s1"
+  eq "P5a body has no secret-looking text" "$(printf '%s' "$body" | grep -Eic '(password|passwd|pwd|secret|token|api[_-]?key|client[_-]?secret)"?[[:space:]]*[:=]')" "0"
+}
+github_fx && {   # (b) no gh at all
+  nogh_path "$TMP/nogh"
+  eq "P5b the sandbox PATH really has no gh" "$(PATH="$TMP/nogh" command -v gh | wc -l | tr -d ' ')" "0"
+  PATH="$TMP/nogh" run_pub "$WC"
+  eq "P5b rc 0 (a degradation, not a refusal)" "$PRC" "0"
+  eq "P5b degraded gh-missing" "$(jv .degraded)" "gh-missing"
+  eq "P5b pr is null" "$(jv '.pr|tostring')" "null"
+  eq "P5b the push was done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
+  inst="$(jv .instruction)"
+  has "P5b one-line instruction: open the PR manually" "$inst" "Откройте PR вручную"
+  has "P5b ... names the branch, the base and the repository" "$inst" "$BR → dev в https://github.com/o/r.git"
+  eq "P5b ... exactly one line" "$(printf '%s\n' "$inst" | grep -c .)" "1"
+}
+github_fx && {   # (c) gh is there, but not authenticated
+  PATH="$GHD:$PATH" GH_AUTH_RC=1 run_pub "$WC"
+  eq "P5c rc 0" "$PRC" "0"
+  eq "P5c degraded gh-unauthenticated" "$(jv .degraded)" "gh-unauthenticated"
+  eq "P5c only the authentication was asked" "$(cat "$GH_LOG")" "[auth][status]"
+  eq "P5c the push was done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
+}
+github_fx && {   # (d) a PR for the branch already exists
+  PATH="$GHD:$PATH" GH_LIST_OUT='[{"url":"https://github.com/o/r/pull/3"}]' run_pub "$WC"
+  eq "P5d rc 0" "$PRC" "0"
+  eq "P5d the existing PR is returned, not created" "$(jv '.pr.url+" "+(.pr.created|tostring)')" "https://github.com/o/r/pull/3 false"
+  eq "P5d gh pr create was not called" "$(grep -c '^\[pr\]\[create\]' "$GH_LOG")" "0"
+  eq "P5d no degradation" "$(jv '.degraded|tostring')" "null"
+}
+github_fx && {   # (e) gh fails: list, then create
+  PATH="$GHD:$PATH" GH_LIST_RC=1 run_pub "$WC"
+  eq "P5e gh pr list fails: rc 0, gh-failed" "$PRC/$(jv .degraded)" "0/gh-failed"
+  PATH="$GHD:$PATH" GH_CREATE_RC=1 run_pub "$WC"
+  eq "P5e gh pr create fails: rc 0, gh-failed" "$PRC/$(jv .degraded)" "0/gh-failed"
+  has "P5e ... with the instruction" "$(jv .instruction)" "Откройте PR вручную"
+  eq "P5e ... and the push is done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
+}
+github_fx && {   # (f) a secret in the PR body: refused BEFORE the push
+  pkg_craft_bad_secret_notes "$WC" "$BR" >/dev/null 2>&1
+  PATH="$GHD:$PATH" run_pub "$WC"
+  eq "P5f secret in the manifest notes -> rc 1" "$PRC" "1"
+  has "P5f ... the reason is named" "$PERR" "секрет"
+  eq "P5f ... nothing was pushed" "$(remote_refs "$REM")" "refs/heads/dev"
+  eq "P5f ... and gh was not called" "$(grep -c . "$GH_LOG")" "0"
+}
+github_fx && {   # (g) delivery: branch -> the branch only, gh is not touched
+  sed 's/^  delivery: .*/  delivery: branch/' "$WC/.mesh/mandate.yaml" > "$WC/.mesh/m.new" && mv "$WC/.mesh/m.new" "$WC/.mesh/mandate.yaml"
+  PATH="$GHD:$PATH" run_pub "$WC"
+  eq "P5g delivery branch: rc 0, pushed" "$PRC/$(jv .pushed)" "0/true"
+  eq "P5g gh was not called" "$(grep -c . "$GH_LOG")" "0"
+  eq "P5g no PR, no degradation, no instruction" "$(jv '(.pr|tostring)+(.degraded|tostring)+(.instruction|tostring)')" "nullnullnull"
+}
+}
+
 # @@TAIL@@
 # ---- the blocks are independent (each builds its own fixture copy): run them concurrently, print in the declared order ----
 run_blocks() {
@@ -263,7 +372,7 @@ run_blocks() {
     FAIL_COUNT=$((FAIL_COUNT + $(grep -c "^  FAIL: " "$TMP/out-$b.txt")))
   done
 }
-run_blocks P1 P2 P3 P4 P6 P7
+run_blocks P1 P2 P3 P4 P5 P6 P7
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

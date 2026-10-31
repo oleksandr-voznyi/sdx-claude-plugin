@@ -11,6 +11,7 @@
 #  [O5] the local mandate check (mandate_digest / executor / deliver.branch): rc 3, ALL mismatches at once
 #  [O6] hostile identifiers and values (C with / .. space, markup in title, ext:: url, a secret)
 #  [O7] the snapshot (--out) read back by pr_order_load; stamp-state of session_state.json
+#  [O8] portability (BUG-010), no eval, python only as the mesh_endpoint.py launcher
 #  [Mut] mutation runs (copies of the script + lib/ in a temp dir, anchored by "# PKG-O-*")
 # ORDER_IMPORT_ONLY="O1 O3" restricts a run; ORDER_IMPORT_UNDER_TEST is the script under test (mutation runs).
 set -uo pipefail
@@ -490,6 +491,21 @@ if ensure_fixture; then
 else
   fail "[O7] fixture" "the fixture could not be built"
 fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [O8]
+if want O8; then
+echo "[O8] portability (BUG-010) of order-import.sh; no eval; python only as the mesh_endpoint.py launcher"
+FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path'
+if grep -nE "$FORBID" "$SCRIPT" >/dev/null 2>&1; then fail "[O8] order-import.sh portability" "forbidden: $(grep -nE "$FORBID" "$SCRIPT" | head -3)"
+else pass "[O8] order-import.sh: no GNU-only / bash4-only constructs"; fi
+cp "$SCRIPT" "$TMP/port-mut.sh"; printf 'ma''pfile -t xs <<<""\n' >> "$TMP/port-mut.sh"
+if ! cmp -s "$SCRIPT" "$TMP/port-mut.sh" && grep -qE "$FORBID" "$TMP/port-mut.sh"; then pass "[O8] red side: the same grep flags a script with a bash4 construct"
+else fail "[O8] red side of the portability grep" "mutant not flagged"; fi
+if grep -nE '\bev''al\b' "$SCRIPT" >/dev/null 2>&1; then fail "[O8] no eval" "found: $(grep -nE '\bev''al\b' "$SCRIPT" | head -2)"; else pass "[O8] order-import.sh has no eval"; fi
+# python3 is invoked in exactly one place: the launcher of the vendored mesh_endpoint.py (from-msg without --inbox-json)
+if [ "$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -c '"[$]py" -I -B ')" = 2 ] && ! grep -v '^[[:space:]]*#' "$SCRIPT" | grep -E '(^|[;&|(])[[:space:]]*python3? ' >/dev/null; then pass "[O8] python is called only through the mesh_endpoint.py launcher (pull + inbox)"
+else fail "[O8] python usage" "unexpected python call: $(grep -nE '(^|[;&|(])[[:space:]]*python3? ' "$SCRIPT" | head -2)"; fi
 fi
 
 # ---------------------------------------------------------------------------------------------------- [Mut]

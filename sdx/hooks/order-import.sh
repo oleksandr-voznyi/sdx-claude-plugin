@@ -9,7 +9,7 @@
 #   order-import.sh stamp-state --sid <sid> --commitment <C> [--proj DIR]
 #   order-import.sh unfold <path>            (internal: the order-unfold stage on stdout; used by the tests)
 #
-# bash 3.2 (BUG-010: no arrays, no mapfile, ...), bash + awk + sed + jq + git only; the order text is DATA: it is
+# bash 3.2 (BUG-010: no arrays, no bash-4 builtins, ...), bash + awk + sed + jq + git only; the order text is DATA: it is
 # unfolded, parsed by miniyaml (a YAML subset), validated and cleaned, and never reaches a shell as code.
 # set -e is deliberately not used: every failure is handled where it happens.
 set -uo pipefail

@@ -317,6 +317,9 @@ chk_pr_auto_registry() {
   printf '%s' "$l" | grep -F 'gate_mode: auto' | grep -qF 'и `adr.registry` остаются' || { echo "P5 does not keep adr.registry as a question in auto in $1"; return 1; }
   printf '%s' "$l" | grep -qF 'молча не принимается' || { echo "P5 lacks 'молча не принимается' in $1"; return 1; }
   printf '%s' "$l" | grep -qF 'принимаются как `[триаж]`' && { echo "P5 still accepts WARN as [триаж] in $1"; return 1; }
+  printf '%s' "$l" | grep -qF 'только в трейлере `SDX-PR-Ack`' || { echo "P5 lacks 'только в трейлере SDX-PR-Ack' in $1"; return 1; }
+  # after P4 the session directory is gone: nothing after the P4 step may write auto_decisions.md
+  awk '/^\*\*P4\./{f=1;next} f' "$1" | grep -qF 'auto_decisions.md' && { echo "pr.md writes auto_decisions.md after P4 in $1"; return 1; }
   return 0
 }
 chk_pr_refusal() {  # P0: the refusal without a mandate is exactly one verbatim line (REQ-PKG-2/34)
@@ -632,6 +635,10 @@ sed '/^\*\*P5\./s/ и `adr.registry` остаются/ остаются/' "$PR_M
 expect_red "red: pr.md P5 without adr.registry among the auto questions" chk_pr_auto_registry "$TMP/t20l.md"
 sed '/^\*\*P5\./s/молча не принимается/принимается/' "$PR_MD" > "$TMP/t20m.md"
 expect_red "red: pr.md P5 without 'молча не принимается'" chk_pr_auto_registry "$TMP/t20m.md"
+sed '/^\*\*P5\./s/Журнал авторежима сессии вести негде/Запись в `auto_decisions.md`/' "$PR_MD" > "$TMP/t20n.md"
+expect_red "red: pr.md P5 writes auto_decisions.md after P4" chk_pr_auto_registry "$TMP/t20n.md"
+sed '/^\*\*P5\./s/только в трейлере `SDX-PR-Ack`/в трейлере/' "$PR_MD" > "$TMP/t20o.md"
+expect_red "red: pr.md P5 without 'только в трейлере SDX-PR-Ack'" chk_pr_auto_registry "$TMP/t20o.md"
 expect_ok "pr.md order P0..P10" chk_pr_order "$PR_MD"
 expect_ok "pr.md prohibitions, no bare git push" chk_pr_prohibitions "$PR_MD"
 sed '1,5{/^argument-hint:/d;}' "$PR_MD" > "$TMP/t20a.md"; expect_red "red: pr.md without argument-hint" chk_pr_head "$TMP/t20a.md"

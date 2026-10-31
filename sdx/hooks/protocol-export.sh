@@ -140,10 +140,22 @@ PX_DONE_AWK='
 /^[ \t]*[-*][ \t]+\[[xX]\][ \t]+/ { t = $0; sub(/^[ \t]*[-*][ \t]+\[[xX]\][ \t]+/, "", t); gsub(/[\t]/, " ", t); print t }
 '
 
-# px_cat <path relative to the project root>: the file on stdout (at most 1 MiB), rc 1 if absent or unreadable
+# px_cat <path relative to the project root>: a file on stdout (at most 1 MiB), rc 1 if absent or unreadable.
+# With --from-rev the file is read from that commit (git show), never from the working tree (Closeout step 5 removed it).
 px_cat() {
+  if [ -n "$REVSHA" ]; then                                            # PKG-X-REV
+    [ "$(git -C "$PROJ" cat-file -t "$REVSHA:$1" 2>/dev/null)" = blob ] || return 1
+    git -C "$PROJ" show "$REVSHA:$1" 2>/dev/null | head -c 1048576
+    return 0
+  fi
   [ -f "$PROJ/$1" ] && [ -r "$PROJ/$1" ] || return 1
   head -c 1048576 "$PROJ/$1"
+}
+
+# px_has_dir <path>: the directory exists (in the working tree or in the --from-rev commit)
+px_has_dir() {
+  if [ -n "$REVSHA" ]; then [ "$(git -C "$PROJ" cat-file -t "$REVSHA:$1" 2>/dev/null)" = tree ]; return; fi
+  [ -d "$PROJ/$1" ]
 }
 
 # px_render: prints the YAML, then one line "#COUNTS ..." (split off by the caller)
@@ -156,18 +168,24 @@ usage() {
   exit 2
 }
 
-SID=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; REV=""
+SID=""; PROJ="${CLAUDE_PROJECT_DIR:-.}"; OUTF=""; REV=""; REV_SET=0; REVSHA=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --sid|--proj|--out|--from-rev)
       [ $# -ge 2 ] || { echo "protocol-export: у $1 нет значения." >&2; exit 2; }
-      case "$1" in --sid) SID="$2" ;; --proj) PROJ="$2" ;; --out) OUTF="$2" ;; *) REV="$2" ;; esac
+      case "$1" in --sid) SID="$2" ;; --proj) PROJ="$2" ;; --out) OUTF="$2" ;; *) REV="$2"; REV_SET=1 ;; esac
       shift 2 ;;
     *) echo "protocol-export: неизвестный аргумент." >&2; usage ;;
   esac
 done
 [ -n "$SID" ] || usage
 _pr_sid_ok "$SID" || { echo "protocol-export: sid: недопустимый идентификатор сессии." >&2; exit 2; }
+
+if [ "$REV_SET" = 1 ]; then
+  case "$REV" in ""|-*|*[[:space:]]*|*[[:cntrl:]]*) echo "protocol-export: --from-rev: недопустимая ревизия." >&2; exit 2 ;; esac
+  REVSHA="$(git -C "$PROJ" rev-parse --verify -q "$REV^{commit}" 2>/dev/null)" || { echo "protocol-export: --from-rev: ревизия не найдена." >&2; exit 2; }
+  [ -n "$OUTF" ] || OUTF="-"                                           # from a revision the result goes to stdout by default
+fi
 
 SDIR=".claude/sessions/$SID"
 PX_VER="$(jq -r '.version // empty' "$here/../../.claude-plugin/plugin.json" 2>/dev/null)"
@@ -201,7 +219,7 @@ elif [ "$HAVE_NOTE" = 1 ]; then
 fi
 
 # ---- rc 1 only when there is neither a readable source nor the session directory ----
-if [ "$READ_ANY" = 0 ] && [ ! -d "$PROJ/$SDIR" ]; then
+if [ "$READ_ANY" = 0 ] && ! px_has_dir "$SDIR"; then
   echo "protocol-export: нет ни одного источника и каталога сессии $SDIR — экспортировать нечего." >&2
   exit 1
 fi

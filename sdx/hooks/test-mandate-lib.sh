@@ -722,6 +722,130 @@ print("BAD", bad)'
 else info "[P] oracle skipped: python3 absent"; fi
 fi
 
+# ============================================================== [L10] lib/pr-lib.sh: pure functions (FEAT-017)
+if want L10; then
+echo "[L10] pr-lib: identifiers, cleaning, secrets, sha256, URL whitelist, hosting; portability"
+PR_OK=0
+if [ -f "$LIB/pr-lib.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$LIB/pr-lib.sh" && PR_OK=1
+fi
+have_pr() { [ "$PR_OK" = 1 ] && declare -F pr_valid_id >/dev/null 2>&1; }
+# l10 <label> <expect-rc> <function> <args...>: run a boolean function and compare its rc
+l10() {
+  local label="$1" exp="$2" fn="$3" rc; shift 3
+  if ! have_pr || ! declare -F "$fn" >/dev/null 2>&1; then fail "[L10] $label" "lib/pr-lib.sh or $fn missing"; return; fi
+  "$fn" "$@"; rc=$?
+  if [ "$rc" = "$exp" ]; then pass "[L10] $label"; else fail "[L10] $label" "$fn rc=$rc expected $exp"; fi
+}
+# pr_valid_id: valid
+l10 "valid_id C-ACME-001" 0 pr_valid_id "C-ACME-001"
+l10 "valid_id ex1" 0 pr_valid_id "ex1"
+l10 "valid_id 64 chars" 0 pr_valid_id "$(printf 'a%.0s' $(seq 1 64))"
+l10 "valid_id a.b_c-d" 0 pr_valid_id "a.b_c-d"
+# pr_valid_id: invalid
+l10 "valid_id empty" 1 pr_valid_id ""
+l10 "valid_id client-harness:kitgroup" 1 pr_valid_id "client-harness:kitgroup"
+l10 "valid_id .." 1 pr_valid_id ".."
+l10 "valid_id a..b" 1 pr_valid_id "a..b"
+l10 "valid_id leading -" 1 pr_valid_id "-x"
+l10 "valid_id leading ." 1 pr_valid_id ".x"
+l10 "valid_id space" 1 pr_valid_id "a b"
+l10 "valid_id slash" 1 pr_valid_id "a/b"
+l10 "valid_id 65 chars" 1 pr_valid_id "$(printf 'a%.0s' $(seq 1 65))"
+l10 "valid_id trailing ." 1 pr_valid_id "abc."
+l10 "valid_id trailing .lock" 1 pr_valid_id "abc.lock"
+l10 "valid_id unicode" 1 pr_valid_id "жук"
+l10 "valid_id newline" 1 pr_valid_id $'a\nb'
+# pr_clean: PR_CLEAN <- cleaned value
+l10c() {  # <label> <input> <expected> [max]
+  if ! have_pr || ! declare -F pr_clean >/dev/null 2>&1; then fail "[L10] clean $1" "pr_clean missing"; return; fi
+  PR_CLEAN="<unset>"; pr_clean "$2" ${4:+"$4"}
+  if [ "$PR_CLEAN" = "$3" ]; then pass "[L10] clean $1"; else fail "[L10] clean $1" "got [$PR_CLEAN] expected [$3]"; fi
+}
+l10c "newline and tab become spaces" $'a\nb\tc' "a b c"
+l10c "ESC is cut, the rest stays" $'a\033[31mb' "a[31mb"
+l10c "C0 and CR are cut" $'a\001b\rc' "abc"
+l10c "DEL is cut" $'a\177b' "ab"
+l10c "U+2028 is cut" $'a\342\200\250b' "ab"
+l10c "U+2029 is cut" $'a\342\200\251b' "ab"
+l10c "U+0085 is cut" $'a\302\205b' "ab"
+l10c "trim" "   x y  " "x y"
+l10c "trailing newline" $'x\n' "x"
+l10c "plain unicode survives" "Фича ж" "Фича ж"
+l10c "default cut to 200" "$(printf 'a%.0s' $(seq 1 300))" "$(printf 'a%.0s' $(seq 1 200))"
+l10c "explicit max" "abcdefghij" "abcde" 5
+l10c "backtick and dollar are data" 'a`b$(c)' 'a`b$(c)'
+if have_pr && declare -F pr_clean >/dev/null 2>&1; then
+  pr_clean "$(printf 'ж%.0s' $(seq 1 150))" 101
+  if printf '%s' "$PR_CLEAN" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 && [ "${#PR_CLEAN}" -le 101 ]; then pass "[L10] clean: a cut multibyte value is still valid UTF-8"
+  else fail "[L10] clean multibyte cut" "invalid UTF-8 or too long"; fi
+else fail "[L10] clean multibyte cut" "pr_clean missing"; fi
+# pr_has_secret
+l10 "secret: password: x" 0 pr_has_secret "password: x"
+l10 "secret: \"token\"=" 0 pr_has_secret '"token"=abc'
+l10 "secret: api_key:" 0 pr_has_secret "api_key: 1"
+l10 "secret: client-secret :" 0 pr_has_secret "client-secret : v"
+l10 "secret: PASSWD= (case)" 0 pr_has_secret "PASSWD=1"
+l10 "secret: second line" 0 pr_has_secret $'fine\nsecret: v'
+l10 "no secret: plain text" 1 pr_has_secret "Add the login form"
+l10 "no secret: tokenizer without : or =" 1 pr_has_secret "fix the tokenizer module"
+l10 "no secret: empty" 1 pr_has_secret ""
+# pr_sha256 (stdin -> hex)
+if have_pr && declare -F pr_sha256 >/dev/null 2>&1; then
+  h="$(printf 'abc' | pr_sha256)"
+  [ "$h" = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" ] && pass "[L10] sha256 of 'abc'" || fail "[L10] sha256 of 'abc'" "got [$h]"
+else fail "[L10] sha256 of 'abc'" "pr_sha256 missing"; fi
+# pr_url_ok
+for u in "ssh://git@host/srv/app.git" "https://h/o/r.git" "http://h/o/r.git" "file:///srv/app.git" "git@host:o/r.git" "/srv/git/app.git" "ssh://dobro/srv/app.git" "https://u:p@h/x.git"; do
+  l10 "url_ok accepts $u" 0 pr_url_ok "$u"
+done
+for u in "ext::sh -c x" "ext::sh" "fd::1" "transport::x" "-oProxyCommand=x" "https://h/a b" "" "ftp://h/x" "ssh://-oProxyCommand=x/y" "--upload-pack=x" $'https://h/a\nb' "git@-host:x" "relative/path" "FILE:x"; do
+  l10 "url_ok refuses [$u]" 1 pr_url_ok "$u"
+done
+# pr_url_show: credentials are removed from displayed URLs
+l10u() {  # <label> <input> <expected>
+  if ! have_pr || ! declare -F pr_url_show >/dev/null 2>&1; then fail "[L10] url_show $1" "pr_url_show missing"; return; fi
+  PR_URLS="<unset>"; pr_url_show "$2"
+  if [ "$PR_URLS" = "$3" ]; then pass "[L10] url_show $1"; else fail "[L10] url_show $1" "got [$PR_URLS] expected [$3]"; fi
+}
+l10u "user:pass removed" "https://u:p@h/x.git" "https://h/x.git"
+l10u "https token-as-user removed" "https://TOKEN@h/x.git" "https://h/x.git"
+l10u "ssh user stays" "ssh://git@h/x.git" "ssh://git@h/x.git"
+l10u "ssh user:pass removed" "ssh://git:pw@h/x.git" "ssh://h/x.git"
+l10u "scp form untouched" "git@h:o/r" "git@h:o/r"
+l10u "local path untouched" "/srv/git/app.git" "/srv/git/app.git"
+l10u "no credentials untouched" "https://h/x.git" "https://h/x.git"
+# pr_hosting <url> [hint] -> PR_HOSTING
+l10h() {  # <label> <expected> <url> [hint]
+  if ! have_pr || ! declare -F pr_hosting >/dev/null 2>&1; then fail "[L10] hosting $1" "pr_hosting missing"; return; fi
+  PR_HOSTING="<unset>"; pr_hosting "$3" ${4:+"$4"}
+  if [ "$PR_HOSTING" = "$2" ]; then pass "[L10] hosting $1"; else fail "[L10] hosting $1" "got [$PR_HOSTING] expected [$2]"; fi
+}
+l10h "github https" github "https://github.com/o/r.git"
+l10h "github scp" github "git@github.com:o/r.git"
+l10h "github ssh" github "ssh://git@github.com/o/r.git"
+l10h "local path is bare" bare "/srv/git/app.git"
+l10h "other host is bare" bare "https://git.example.com/o/r.git"
+l10h "look-alike host is bare" bare "https://evilgithub.com/o/r.git"
+l10h "hint bare beats github.com" bare "https://github.com/o/r.git" bare
+l10h "hint github beats a local path" github "/srv/git/app.git" github
+l10h "unknown hint is ignored" github "https://github.com/o/r.git" gitlab
+# portability (BUG-010) and no python/eval in pr-lib.sh
+FORBID10='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path'
+if [ -f "$LIB/pr-lib.sh" ]; then
+  if grep -nE "$FORBID10" "$LIB/pr-lib.sh" >/dev/null 2>&1; then fail "[L10] lib/pr-lib.sh portability" "forbidden: $(grep -nE "$FORBID10" "$LIB/pr-lib.sh" | head -3)"
+  else pass "[L10] lib/pr-lib.sh: no GNU-only/bash4-only constructs"; fi
+  cp "$LIB/pr-lib.sh" "$TMP/port-mut10.sh"; printf 'ma''pfile -t xs <<<""\n' >> "$TMP/port-mut10.sh"
+  if ! cmp -s "$LIB/pr-lib.sh" "$TMP/port-mut10.sh" && grep -qE "$FORBID10" "$TMP/port-mut10.sh"; then pass "[L10] red side: the same grep flags a pr-lib mutant with a bash4 construct"
+  else fail "[L10] red side of the pr-lib portability grep" "mutant not flagged"; fi
+  if grep -nE 'py''thon|\bev''al\b' "$LIB/pr-lib.sh" >/dev/null 2>&1; then fail "[L10] pr-lib.sh has no python and no eval" "found: $(grep -nE 'py''thon|\bev''al\b' "$LIB/pr-lib.sh" | head -2)"
+  else pass "[L10] pr-lib.sh has no python and no eval"; fi
+else
+  fail "[L10] lib/pr-lib.sh portability" "file missing"; fail "[L10] red side of the pr-lib portability grep" "file missing"; fail "[L10] pr-lib.sh has no python and no eval" "file missing"
+fi
+fi
+
 if want Mut; then
 echo "[Mut] mutation runs: each mutant (a copy of lib/ in a temp dir) must differ from the original and turn its sections red"
 MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"

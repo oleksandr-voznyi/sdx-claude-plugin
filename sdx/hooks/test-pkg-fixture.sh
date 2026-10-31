@@ -70,7 +70,7 @@ for f in session_state.json order.yaml decisions_log.md verification_report.md c
   eq "template: $f present one commit before the tip" "$(git -C "$WC" cat-file -e "refs/heads/sdx/s1~1:.claude/sessions/s1/$f" 2>/dev/null && echo yes || echo no)" "yes"
 done
 eq "template: verification_report says PASS" "$(git -C "$WC" show 'refs/heads/sdx/s1~1:.claude/sessions/s1/verification_report.md' 2>/dev/null | grep -c 'Итог: PASS')" "1"
-eq "template: the change touches code, lock file, registry and spec" "$(git -C "$WC" diff --name-only dev refs/heads/sdx/s1 2>/dev/null | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md package-lock.json src/core/b.js src/mod1/a.js "
+eq "template: the change touches code, lock file, registry and spec (not src/core)" "$(git -C "$WC" diff --name-only dev refs/heads/sdx/s1 2>/dev/null | tr '\n' ' ')" "docs/DECISIONS.md docs/specs/mod1.md package-lock.json src/mod1/a.js "
 eq "template: the registry gained ADR-099" "$(git -C "$WC" diff -U0 dev refs/heads/sdx/s1 -- docs/DECISIONS.md 2>/dev/null | grep -c '^+## ADR-099')" "1"
 eq "template: local identity is configured" "$(git -C "$WC" config --local user.name 2>/dev/null)/$(git -C "$WC" config --local user.email 2>/dev/null)" "fixture/fixture@example.invalid"
 eq "template: mandate mode is on" "$(mandate_mode "$WC")" "on"

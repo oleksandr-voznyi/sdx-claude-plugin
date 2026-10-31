@@ -436,7 +436,8 @@ pm unset    $'mandate:\n  executor: ex1\n'                             'REFUSE d
 pm broken   $'mandate:\n\tdelivery: pr\n'                               'REFUSE error:*'
 pm hostile  $'mandate:\n  executor: \'e$(id):x"y\'\n  delivery: pr\n'   'OK executor=e??id??x?y delivery=pr docs_in_repo=final history=unset digest=?'
 pm hostdel  $'mandate:\n  delivery: "p$(id)\\"r; x"\n'                  'REFUSE delivery:p??id??r??x'
-info_run pr-mode "$D_NO"
+D_PNO="$(mkd pm-no $'on_write: notice\n' -)"
+info_run pr-mode "$D_PNO"
 [ "$RC" -eq 1 ] && [ "$OUT" = 'REFUSE no-mandate' ] && pass "[M] pr-mode without a mandate -> REFUSE no-mandate, rc 1" || fail "[M] pr-mode none" "rc=$RC out=[$OUT]"
 D_EP="$(mkd pm-ep $'on_write: notice\n' -)"
 info_run pr-mode "$D_EP"
@@ -542,6 +543,8 @@ mutate MAND-REPLACE      mandate-scope.sh '/# MAND-REPLACE/s/if \[ "\$have_block
 mutate MAND-BRIDGE       mandate-info.sh '/# MAND-BRIDGE/s/echo bridge:offer/echo standard/' "Mcm"
 mutate MAND-CHECK-TREE   mandate-info.sh '/# MAND-CHECK-TREE/s/\[ -z "\$dirty" \]/true/' "Mcc"
 mutate MAND-CHECK-SESSION mandate-info.sh '/# MAND-CHECK-SESSION/s/\[ -z "\$insess" \]/true/' "Mcc"
+mutate PKG-PRMODE-NOMANDATE mandate-info.sh '/# PKG-PRMODE-NOMANDATE/s/echo "REFUSE no-mandate"; exit 1 ;;/true ;;/' "Mpm"
+mutate PKG-PRMODE-DELIVERY  mandate-info.sh '/# PKG-PRMODE-DELIVERY/s/pr|branch)/pr|branch|artifact.offer)/' "Mpm"
 fi
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

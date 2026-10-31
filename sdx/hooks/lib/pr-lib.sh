@@ -292,3 +292,95 @@ pr_registry() {
   done <<< "$(git -C "$proj" diff -U0 --no-renames "$base" "$head" -- "$PR_REG_PATH" 2>/dev/null | grep '^+#')"
   return 0
 }
+
+# ===================================================================================================
+# pr_resolve: the single place where C, executor, branch name, title and base are decided
+# ===================================================================================================
+
+# _pr_id_err <field> <value>: PR_ERR for a value refused by pr_valid_id; names the field and the offending characters
+_pr_id_err() {
+  local LC_ALL=C bad="${2//[A-Za-z0-9._-]/}"
+  pr_clean "$bad" 8
+  if [ -n "$PR_CLEAN" ]; then PR_ERR="$1: недопустимые символы '$PR_CLEAN'"
+  else PR_ERR="$1: недопустимое значение (до 64 знаков A-Za-z0-9._-, начало — буква или цифра, без '..', без окончания '.' и '.lock')"; fi
+}
+
+# pr_resolve <proj> <sid> [--commitment C] [--title T] [--base-name B]
+# Sources, in order: the order snapshot of the session, then the arguments; an argument that DIFFERS from a
+# non-empty snapshot value is refused (no silent substitution); the executor comes ONLY from the mandate (a
+# snapshot executor that differs is refused). Loads the mandate (MANDATE_* stay valid for pr_scope_eval).
+# Sets: PR_C PR_EXEC PR_BRANCH PR_TITLE PR_BASE_NAME PR_BASE_REF PR_BASE_SHA PR_BASE_DRIFT PR_URL PR_HOSTING_HINT
+#       PR_DELIVERY PR_DOCS_MODE PR_DIGEST PR_DIGEST_DRIFT (1 iff the snapshot digest != the mandate digest) PR_SESS_REV.
+# rc 0 | 1 with PR_ERR "<field>: <reason>".
+pr_resolve() {
+  local proj="$1" sid="$2" arg_c="" arg_t="" arg_b="" rc t bn exp
+  shift 2
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --commitment|--title|--base-name)
+        [ $# -ge 2 ] || { PR_ERR="args: у $1 нет значения"; return 1; }
+        case "$1" in --commitment) arg_c="$2" ;; --title) arg_t="$2" ;; *) arg_b="$2" ;; esac
+        shift 2 ;;
+      *) PR_ERR="args: неизвестный аргумент"; return 1 ;;
+    esac
+  done
+  PR_C=""; PR_EXEC=""; PR_BRANCH=""; PR_TITLE=""; PR_BASE_NAME=""; PR_URL=""; PR_HOSTING_HINT=""
+  PR_DELIVERY=""; PR_DOCS_MODE=""; PR_DIGEST=""; PR_DIGEST_DRIFT=0; PR_ERR=""
+  _pr_sid_ok "$sid" || { PR_ERR="session: недопустимый идентификатор сессии"; return 1; }
+  [ "$(mandate_mode "$proj")" = on ] || { PR_ERR="mandate: режим мандата не включён (нужны .mesh/endpoint.yaml и .mesh/mandate.yaml)"; return 1; }
+  if ! mandate_load "$proj"; then pr_clean "$MANDATE_ERR" 120; PR_ERR="mandate: не разобран ($PR_CLEAN)"; return 1; fi
+  _my_scalar mandate.executor; PR_EXEC="$MY_S"
+  _my_scalar mandate.digest; PR_DIGEST="$MY_S"
+  _my_scalar mandate.delivery; PR_DELIVERY="$MY_S"
+  _my_scalar mandate.docs_in_repo; PR_DOCS_MODE="${MY_S:-final}"
+  pr_order_load "$proj" "$sid"; rc=$?
+  if [ "$rc" -eq 2 ]; then return 1; fi
+  PR_ERR=""
+  # executor: only from the mandate
+  [ -n "$PR_EXEC" ] || { PR_ERR="executor: в мандате не задан"; return 1; }
+  pr_valid_id "$PR_EXEC" || { _pr_id_err executor "$PR_EXEC"; return 1; }
+  if [ -n "$PR_O_EXEC" ] && [ "$PR_O_EXEC" != "$PR_EXEC" ]; then
+    pr_clean "$PR_O_EXEC" 40; t="$PR_CLEAN"; pr_clean "$PR_EXEC" 40
+    PR_ERR="executor: в заказе '$t', в мандате '$PR_CLEAN'"; return 1
+  fi
+  # commitment
+  if [ -n "$PR_O_COMMIT" ]; then
+    if [ -n "$arg_c" ] && [ "$arg_c" != "$PR_O_COMMIT" ]; then
+      pr_clean "$arg_c" 40; t="$PR_CLEAN"; pr_clean "$PR_O_COMMIT" 40
+      PR_ERR="commitment: аргумент '$t' расходится со снимком заказа '$PR_CLEAN'"; return 1
+    fi
+    PR_C="$PR_O_COMMIT"
+  else
+    PR_C="$arg_c"
+  fi
+  [ -n "$PR_C" ] || { PR_ERR="commitment: не задан (нет снимка заказа и аргумента)"; return 1; }
+  pr_valid_id "$PR_C" || { _pr_id_err commitment "$PR_C"; return 1; }
+  # branch name
+  PR_BRANCH="change/$PR_C-$PR_EXEC"
+  if [ -n "$PR_O_BRANCH" ] && [ "$PR_O_BRANCH" != "$PR_BRANCH" ]; then
+    pr_clean "$PR_O_BRANCH" 80; PR_ERR="deliver.branch: в заказе '$PR_CLEAN', вычислено '$PR_BRANCH'"; return 1
+  fi
+  git check-ref-format "refs/heads/$PR_BRANCH" 2>/dev/null || { PR_ERR="branch: недопустимое имя '$PR_BRANCH'"; return 1; }
+  # title (an explicit --title is a user decision, not a silent override)
+  if [ -n "$arg_t" ]; then t="$arg_t"; else t="$PR_O_TITLE"; fi
+  pr_clean "$t" 200; PR_TITLE="$PR_CLEAN"
+  [ -n "$PR_TITLE" ] || { PR_ERR="title: не задан (нет снимка заказа и аргумента --title)"; return 1; }
+  if pr_has_secret "$PR_TITLE"; then PR_ERR="title: похоже на секрет"; return 1; fi
+  # base
+  if [ -n "$PR_O_BASE" ]; then
+    if [ -n "$arg_b" ] && [ "$arg_b" != "$PR_O_BASE" ]; then
+      pr_clean "$arg_b" 40; t="$PR_CLEAN"; pr_clean "$PR_O_BASE" 40
+      PR_ERR="base: аргумент '$t' расходится со снимком заказа '$PR_CLEAN'"; return 1
+    fi
+    bn="$PR_O_BASE"
+  elif [ -n "$arg_b" ]; then bn="$arg_b"
+  else bn="$(bash "$_PR_HERE/default-branch.sh" "$proj" 2>/dev/null)"; fi
+  PR_BASE_NAME="$bn"
+  pr_base_ref "$proj" "$bn" || return 1
+  # remote and hosting hint from the order
+  PR_URL="$PR_O_URL"
+  if [ -n "$PR_URL" ] && ! pr_url_ok "$PR_URL"; then PR_ERR="repo.url: недопустимая схема или символы"; PR_URL=""; return 1; fi
+  case "$PR_O_HOSTING" in github|bare) PR_HOSTING_HINT="$PR_O_HOSTING" ;; esac
+  if [ -n "$PR_O_DIGEST" ] && [ "$PR_O_DIGEST" != "$PR_DIGEST" ]; then PR_DIGEST_DRIFT=1; fi
+  return 0
+}

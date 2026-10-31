@@ -52,7 +52,7 @@ expect_red() {
 # ---- checks: print the reason to stdout and return 1 on violation -------------------------
 chk_plugin_version() {
   local v; v="$(jq -r .version "$1" 2>/dev/null)"
-  [ "$v" = "2.4.0" ] || { echo "plugin version is '$v', expected 2.4.0"; return 1; }
+  [ "$v" = "2.5.0" ] || { echo "plugin version is '$v', expected 2.5.0"; return 1; }
 }
 
 chk_protocol_tags() {
@@ -133,7 +133,7 @@ chk_snippet_mandate() {
   block="$(sed -n '/SDX:BEGIN/,/SDX:END/p' "$f")"
   n="$(printf '%s\n' "$block" | grep -cF '.mesh/mandate.yaml' || true)"
   [ "$n" = 1 ] || { echo "'.mesh/mandate.yaml' must occur on exactly one line of the SDX block, found $n"; return 1; }
-  if grep -qE '/sdx:pr([^a-z]|$)' "$f"; then echo "/sdx:pr in $f"; return 1; fi  # not /sdx:proto
+  printf '%s\n' "$block" | grep -qE '/sdx:pr([^a-z]|$)' || { echo "no /sdx:pr inside the SDX block of $f"; return 1; }  # not /sdx:proto (FEAT-017 pin)
   [ "$(grep -c 'SDX:BEGIN' "$f")" = 1 ] && [ "$(grep -c 'SDX:END' "$f")" = 1 ] || { echo "SDX:BEGIN/SDX:END markers not exactly once in $f"; return 1; }
   return 0
 }
@@ -238,6 +238,53 @@ chk_archive_pkg() {  # [19] archive.md: two Closeout variants, bridge delegates 
   done
   grep -qF 'git merge --no-ff sdx/<session_id>' "$f" || { echo "no 'git merge --no-ff' in $f"; return 1; }
   grep -qF 'archive-verify.sh" <session_id>' "$f" || { echo "no archive-verify.sh call in $f"; return 1; }
+}
+
+# ---- FEAT-017 (T69): protocol, snippet = MO-INTEROP section 6, ADR-022, devops, surfaces, CONTRIBUTING-MO ----
+chk_protocol_pkg() {  # [21] protocol.md: two Closeout variants (merge / package), bridge for pr|branch lifted, /sdx:pr scripts, journals
+  local f="$1" t
+  for t in 'два варианта' '„пакет“' 'pr-build.sh' 'pr-check.sh' 'pr-publish.sh' 'protocol-export.sh' 'order-import.sh' 'SDX-PR-' 'commitment' 'protocol.yaml' '--from-order' 'К-1)' 'К-17' 'формат A' 'формат B' 'full' 'CHANGE.template.yaml'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  grep -F 'bridge' "$f" | grep -F 'pr' | grep -F '/sdx:pr' | grep -qF 'пакет' || { echo "no bridge line saying pr|branch is delivered as a package by /sdx:pr in $f"; return 1; }
+  for t in 'пользователь собирает вручную' 'до `/sdx:pr`, `FEAT-017`' 'названная временная граница'; do
+    if grep -qF -- "$t" "$f"; then echo "stale temporary-bridge wording ('$t') in $f"; return 1; fi
+  done
+  chk_bridge "$f"
+}
+chk_snippet_interop() {  # [22] the SDX block of the snippet carries the text of section 6 of the vendored MO-INTEROP.md (quote lines joined by a space)
+  local f="$1" sec6 block
+  sec6="$(awk '/^## 6\./{p=1;next} /^## 7\./{p=0} p && /^> /{sub(/^> /,""); printf "%s%s", (n++ ? " " : ""), $0}' "$ROOT/sdx/mo/MO-INTEROP.md")"
+  [ -n "$sec6" ] || { echo "section 6 of MO-INTEROP.md not found"; return 1; }
+  block="$(sed -n '/SDX:BEGIN/,/SDX:END/p' "$f")"
+  printf '%s\n' "$block" | grep -qF -- "$sec6" || { echo "the SDX block of $f does not contain the text of section 6 of MO-INTEROP.md"; return 1; }
+  printf '%s\n' "$block" | grep -qE '/sdx:pr([^a-z]|$)' || { echo "no /sdx:pr in the SDX block of $f"; return 1; }
+}
+chk_adr22() {  # [23] ADR-022 heading + body terms; ADR-021 carries a dated note about lifting the bridge
+  local f="$1" t
+  grep -E '^## ADR-022\.' "$f" | grep -qF 'Пакет изменения' || { echo "no heading '## ADR-022.' naming 'Пакет изменения' in $f"; return 1; }
+  for t in 'CHANGE.template.yaml' 'Closeout' 'feat-017-mo-change-package-20261031'; do
+    adr_section "$f" ADR-022 | grep -qF -- "$t" || { echo "ADR-022 lacks '$t' in $f"; return 1; }
+  done
+  adr_section "$f" ADR-021 | grep -F 'Поправка 2026-10-31' | grep -qF 'feat-017-mo-change-package-20261031' || { echo "no dated amendment (2026-10-31, feat-017) of ADR-021 in $f"; return 1; }
+}
+chk_devops_pkg() {  # [24] devops.md: mandate rules kept + /sdx:pr is the delivery action (not devops), no merges / tags, CHANGE.template.yaml; frontmatter intact
+  local f="$1" t
+  chk_devops_mandate "$f" || return 1
+  for t in '/sdx:pr' 'CHANGE.template.yaml' 'name: devops' 'model: sonnet' 'tools: Read, Write, Edit, Glob, Grep, Bash'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  [ "$(sed -n 1p "$f")" = '---' ] && [ "$(sed -n 6p "$f")" = '---' ] || { echo "frontmatter of $f is not lines 1-6"; return 1; }
+}
+chk_surface_pkg() {  # [25] README x2 and CLAUDE.md name the new surface
+  local f="$1" t
+  for t in 'CHANGE.template.yaml' 'pr-build.sh' 'CONTRIBUTING-MO.md' '2.5.0' '/sdx:pr' 'mesh_endpoint.py' 'devagent_hook.py' 'MO-INTEROP.md'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+}
+chk_contributing() {  # [27] <root>: CONTRIBUTING-MO.md is a template of the plugin, not a vendored file
+  [ -f "$1/sdx/templates/CONTRIBUTING-MO.md" ] || { echo "no sdx/templates/CONTRIBUTING-MO.md in $1"; return 1; }
+  [ ! -e "$1/sdx/mo/CONTRIBUTING-MO.md" ] || { echo "CONTRIBUTING-MO.md sits in sdx/mo/ of $1"; return 1; }
 }
 
 PR_REFUSE='/sdx:pr: нужен режим мандата МО (.mesh/endpoint.yaml и .mesh/mandate.yaml); без него сдача пакетом неприменима — закрывайте сессию через /sdx:archive.'
@@ -425,12 +472,12 @@ done
 expect_red "red: flagless mesh_endpoint.py call" chk_devops_mandate "$TMP/t10b.md"
 
 echo ""
-echo "[11] CLAUDE.md snippet: one sentence on .mesh/mandate.yaml, no /sdx:pr, markers once"
+echo "[11] CLAUDE.md snippet: one sentence on .mesh/mandate.yaml, /sdx:pr named (FEAT-017), markers once"
 expect_ok "snippet" chk_snippet_mandate "$SNIPPET"
 grep -vF '.mesh/mandate.yaml' "$SNIPPET" > "$TMP/t11a.md"
 expect_red "red: snippet without the mandate sentence" chk_snippet_mandate "$TMP/t11a.md"
-{ cat "$SNIPPET"; echo 'см. /sdx:pr'; } > "$TMP/t11b.md"
-expect_red "red: snippet with /sdx:pr" chk_snippet_mandate "$TMP/t11b.md"
+sed 's#/sdx:pr#/sdx:zz#g' "$SNIPPET" > "$TMP/t11b.md"
+expect_red "red: snippet without /sdx:pr" chk_snippet_mandate "$TMP/t11b.md"
 sed 's/<!-- SDX:END/<!-- SDX:END2/' "$SNIPPET" | grep -v 'SDX:END2' > "$TMP/t11c.md"
 expect_red "red: snippet without the SDX:END marker" chk_snippet_mandate "$TMP/t11c.md"
 { cat "$SNIPPET"; } | awk '{print} /\.mesh\/mandate\.yaml/ && !d {print "второй `.mesh/mandate.yaml`"; d=1}' > "$TMP/t11d.md"
@@ -511,9 +558,9 @@ sed 's/третий сужающий источник/источник/g' "$DECI
 expect_red "red: ADR-020 amendment without 'третий сужающий источник'" chk_adr_amendments "$TMP/t16c.md"
 
 echo ""
-echo "[17] .claude-plugin/plugin.json: version 2.4.0"
+echo "[17] .claude-plugin/plugin.json: version 2.5.0"
 expect_ok "plugin.json" chk_plugin_version "$ROOT/.claude-plugin/plugin.json"
-sed 's/"version": "2\.4\.0"/"version": "2.3.1"/' "$ROOT/.claude-plugin/plugin.json" > "$TMP/t17.json"
+sed 's/"version": "2\.5\.0"/"version": "2.4.0"/' "$ROOT/.claude-plugin/plugin.json" > "$TMP/t17.json"
 expect_red "red: plugin.json with the old version" chk_plugin_version "$TMP/t17.json"
 
 echo ""
@@ -610,6 +657,55 @@ done
 
 sed '1a tools: Write' "$STATUS_MD" > "$TMP/t26e.md"
 expect_red "red: status.md declaring write tools" chk_status_pkg "$TMP/t26e.md"
+echo ""
+echo "[21] protocol.md: two Closeout variants, the FEAT-016 bridge for pr|branch lifted, /sdx:pr scripts, journals (REQ-PKG-22, 30, 33)"
+expect_ok "protocol.md" chk_protocol_pkg "$PROTOCOL"
+for t in 'два варианта' '„пакет“' 'pr-build.sh' 'pr-check.sh' 'pr-publish.sh' 'protocol-export.sh' 'order-import.sh' 'SDX-PR-' 'commitment' 'protocol.yaml' '--from-order' 'К-17' 'формат A' 'формат B' 'CHANGE.template.yaml'; do
+  sed "s/$(printf '%s' "$t" | sed 's/[][\.*^$/]/\\&/g')/zz-removed/g" "$PROTOCOL" > "$TMP/t21.md"
+  expect_red "red: protocol.md without '$t'" chk_protocol_pkg "$TMP/t21.md"
+done
+{ cat "$PROTOCOL"; echo 'Пакет `change/<C>-<exec>` пользователь собирает вручную — названная временная граница.'; } > "$TMP/t21b.md"
+expect_red "red: protocol.md with the temporary manual bridge" chk_protocol_pkg "$TMP/t21b.md"
+
+echo ""
+echo "[22] sdx/templates/claude-md-snippet.md = section 6 of the vendored MO-INTEROP.md (REQ-PKG-32)"
+expect_ok "snippet" chk_snippet_interop "$SNIPPET"
+sed 's/сдавай пакет изменения/сдавай всё подряд/' "$SNIPPET" > "$TMP/t22a.md"; expect_red "red: snippet with a changed sentence of section 6" chk_snippet_interop "$TMP/t22a.md"
+sed 's#/sdx:pr#/sdx:zz#g' "$SNIPPET" > "$TMP/t22b.md"; expect_red "red: snippet without /sdx:pr" chk_snippet_interop "$TMP/t22b.md"
+grep -vF 'МО над стендами и над процессом изменений' "$SNIPPET" > "$TMP/t22c.md"; expect_red "red: snippet without the section 6 paragraph" chk_snippet_interop "$TMP/t22c.md"
+
+echo ""
+echo "[23] docs/DECISIONS.md: ADR-022 'Пакет изменения', dated amendment of ADR-021 (REQ-PKG-31)"
+expect_ok "DECISIONS.md" chk_adr22 "$DECISIONS"
+sed 's/^## ADR-022\..*/## ADR-022. Иное/' "$DECISIONS" > "$TMP/t23a.md"; expect_red "red: ADR-022 heading without 'Пакет изменения'" chk_adr22 "$TMP/t23a.md"
+grep -v '^## ADR-022\.' "$DECISIONS" > "$TMP/t23b.md"; expect_red "red: no ADR-022 heading" chk_adr22 "$TMP/t23b.md"
+awk '/^## ADR-021\./{p=1} /^## ADR-022\./{p=0} p && /Поправка 2026-10-31/ {gsub(/feat-017-mo-change-package-20261031/,"zz")} {print}' "$DECISIONS" > "$TMP/t23c.md"; expect_red "red: ADR-021 amendment without the session id" chk_adr22 "$TMP/t23c.md"
+sed 's/CHANGE\.template\.yaml/zz.yaml/g' "$DECISIONS" > "$TMP/t23d.md"; expect_red "red: ADR-022 without CHANGE.template.yaml" chk_adr22 "$TMP/t23d.md"
+
+echo ""
+echo "[24] agents/devops.md: /sdx:pr is the delivery action, no merges / tags, CHANGE.template.yaml, frontmatter intact (REQ-PKG-32, 33)"
+expect_ok "devops.md" chk_devops_pkg "$DEVOPS_MD"
+for t in '/sdx:pr' 'CHANGE\.template\.yaml' 'теги' 'model: sonnet'; do
+  sed "s/$t/zz-removed/g" "$DEVOPS_MD" > "$TMP/t24.md"; expect_red "red: devops.md without '$t'" chk_devops_pkg "$TMP/t24.md"
+done
+
+echo ""
+echo "[25] README.md, README.en.md, CLAUDE.md: CHANGE.template.yaml, pr-build.sh, CONTRIBUTING-MO.md, 2.5.0, /sdx:pr (REQ-PKG-33)"
+for pair in "README.md:$README_RU" "README.en.md:$README_EN" "CLAUDE.md:$ROOT/CLAUDE.md"; do
+  expect_ok "${pair%%:*}" chk_surface_pkg "${pair#*:}"
+  for t in 'CHANGE\.template\.yaml' 'pr-build\.sh' 'CONTRIBUTING-MO\.md' '2\.5\.0'; do
+    sed "s/$t/zz-removed/g" "${pair#*:}" > "$TMP/t25.md"; expect_red "red: ${pair%%:*} without '$t'" chk_surface_pkg "$TMP/t25.md"
+  done
+done
+
+echo ""
+echo "[27] sdx/templates/CONTRIBUTING-MO.md exists and is not a vendored file of sdx/mo/ (REQ-PKG-33)"
+expect_ok "plugin tree" chk_contributing "$ROOT"
+mkdir -p "$TMP/c27a/sdx/templates" "$TMP/c27a/sdx/mo" "$TMP/c27b/sdx/templates" "$TMP/c27b/sdx/mo"
+: > "$TMP/c27a/sdx/mo/CONTRIBUTING-MO.md"; : > "$TMP/c27b/sdx/templates/CONTRIBUTING-MO.md"; : > "$TMP/c27b/sdx/mo/CONTRIBUTING-MO.md"
+expect_red "red: file only in sdx/mo/" chk_contributing "$TMP/c27a"
+expect_red "red: file in both places" chk_contributing "$TMP/c27b"
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 [ "$FAIL_COUNT" -eq 0 ]

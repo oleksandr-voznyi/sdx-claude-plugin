@@ -1124,6 +1124,7 @@ smut MAND-TO     sdx-stage.sh '/# MAND-TO/s|if is_excluded_by_mandate "\$to_targ
 # FEAT-017: a write_stage that keeps only `.stage` loses the optional `commitment` field -> [42] (no anchor in sdx-stage.sh: matched by text)
 smut WRITE-STAGE-COMMITMENT sdx-stage.sh "s|jq --arg s \"\$new\" '\.stage = \$s' \"\$state\"|jq --arg s \"\$new\" '{stage: \$s}' \"\$state\"|" "42"
 smut STRAY-FALSE sdx-stage.sh 's|(no_code: true -> false в|(`no_code: true -> false` в|' "43"
+rm -f "$PWD/false"   # the STRAY-FALSE mutant recreates the stray file by design; never leave it in the checkout
 rm -rf "$MUTROOT"
 fi
 

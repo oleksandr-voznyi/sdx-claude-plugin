@@ -347,6 +347,43 @@ for bad in "--output=x" "-x" "no-such-rev-here" ""; do
 done
 fi
 
+# ---------------------------------------------------------------------------------------------------- [X10]
+if want X10; then
+echo "[X10] portability (BUG-010) of protocol-export.sh; no python, no eval"
+FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path'
+if grep -nE "$FORBID" "$SCRIPT" >/dev/null 2>&1; then fail "[X10] protocol-export.sh portability" "forbidden: $(grep -nE "$FORBID" "$SCRIPT" | head -3)"
+else pass "[X10] protocol-export.sh: no GNU-only / bash4-only constructs"; fi
+cp "$SCRIPT" "$TMP/port-mut.sh"; printf 'ma''pfile -t xs <<<""\n' >> "$TMP/port-mut.sh"
+if ! cmp -s "$SCRIPT" "$TMP/port-mut.sh" && grep -qE "$FORBID" "$TMP/port-mut.sh"; then pass "[X10] red side: the same grep flags a script with a bash4 construct"
+else fail "[X10] red side of the portability grep" "mutant not flagged"; fi
+if grep -nE 'py''thon|\bev''al\b' "$SCRIPT" >/dev/null 2>&1; then fail "[X10] no python, no eval" "found: $(grep -nE 'py''thon|\bev''al\b' "$SCRIPT" | head -2)"; else pass "[X10] protocol-export.sh has no python and no eval"; fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [Mut]
+if want Mut && [ -z "${PROTOCOL_EXPORT_NESTED:-}" ]; then
+echo "[Mut] mutation runs: each mutant (a copy of the script + lib/ in a temp dir) must differ from the original and turn its block red"
+MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
+# mutate <name> <sed expr> <block>: re-enter this script with PROTOCOL_EXPORT_ONLY=<block> against the mutated copy
+mutate() {
+  local name="$1" expr="$2" only="$3" d="$MUTDIR/$1" out first
+  mkdir -p "$d/lib"; cp "$SCRIPT_DIR/protocol-export.sh" "$d/"; cp "$LIB"/*.sh "$d/lib/"
+  sed "$expr" "$SCRIPT_DIR/protocol-export.sh" > "$d/protocol-export.sh"
+  if cmp -s "$SCRIPT_DIR/protocol-export.sh" "$d/protocol-export.sh"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  out="$(PROTOCOL_EXPORT_NESTED=1 PROTOCOL_EXPORT_UNDER_TEST="$d/protocol-export.sh" PROTOCOL_EXPORT_ONLY="$only" bash "${BASH_SOURCE[0]}" 2>&1)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-110)"
+    pass "[Mut] мутант $name → красный (ожидаемо) в [$only]: ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "block [$only] stayed green on the mutant (the check proves nothing)"
+  fi
+}
+mutate PKG-X-FMTB  '/# PKG-X-FMTB/s/триада/нетакоготега/' X2
+mutate PKG-X-EMPTY '/# PKG-X-EMPTY/s/"\\(\$k): \[\]"/""/' X4
+mutate PKG-X-ADR   '/# PKG-X-ADR/s/a = .*) ? 1 : 0/a = 0/' X5
+mutate PKG-X-ID    '/# PKG-X-ID/s/((\.key + 1) . tostring)/"1"/' X6
+mutate PKG-X-REV   '/# PKG-X-REV/s/if \[ -n "\$REVSHA" \]/if false/' X9
+fi
+
 #@@SECTIONS-END@@
 
 echo ""

@@ -239,6 +239,64 @@ oi_accept() {
   oi_flat "$2" "$3"
 }
 
+# ------------------------------------------------------------------------------------------------------------
+# Mailbox: `inbox --json` of the vendored mesh_endpoint.py prints ONE canonical JSON line per accepted envelope
+# (mesh_endpoint.py:155-162). A work order is {kind: "directive", body: {action: "work.order", ...}}; the envelope
+# chain was verified by mesh_endpoint.py, the body is still DATA. Without --inbox-json the script runs
+# mesh_endpoint.py itself (it needs python3 + PyYAML, as the tool does).
+# ------------------------------------------------------------------------------------------------------------
+oi_msg_ok() {   # ^[A-Za-z0-9._:-]{1,80}$
+  case "$1" in ""|*[!A-Za-z0-9._:-]*) return 1 ;; esac
+  [ "${#1}" -le 80 ]
+}
+
+# oi_inbox: OI_INBOX_FILE = a file with the envelope lines
+oi_inbox() {
+  local py="${ORDER_IMPORT_PYTHON:-python3}" mesh="$here/../mo/mesh_endpoint.py"
+  if [ -n "$INBOX" ]; then
+    [ -f "$INBOX" ] && [ -r "$INBOX" ] || refuse "--inbox-json не читается"
+    OI_INBOX_FILE="$INBOX"; return 0
+  fi
+  command -v "$py" >/dev/null 2>&1 || refuse "python3 не найден — ящик не прочитать: передайте --inbox-json <файл> (вывод 'mesh_endpoint.py inbox --json') либо используйте from-file"
+  [ -f "$mesh" ] || refuse "sdx/mo/mesh_endpoint.py не найден рядом со скриптом"
+  oi_tmpdir
+  PYTHONDONTWRITEBYTECODE=1 MESH_ENDPOINT_DIR="$PROJ" "$py" -I -B "$mesh" pull > /dev/null 2> "$OI_TMP/pull.err" \
+    || echo "order-import: pull не удался (читается уже полученное): $(head -n1 "$OI_TMP/pull.err" | tr -d '\000-\037')" >&2
+  PYTHONDONTWRITEBYTECODE=1 MESH_ENDPOINT_DIR="$PROJ" "$py" -I -B "$mesh" inbox --json > "$OI_TMP/inbox.jsonl" 2> "$OI_TMP/inbox.err" \
+    || refuse "ящик не прочитан (нужны python3 и PyYAML): передайте --inbox-json <файл> либо используйте from-file"
+  OI_INBOX_FILE="$OI_TMP/inbox.jsonl"
+}
+
+# oi_orders_jq: select expression shared by from-msg and list (garbage lines are skipped)
+OI_ENV_SEL='fromjson? | select(type == "object" and .kind == "directive" and (.body | type) == "object" and .body.action == "work.order")'
+
+oi_from_msg() {   # <msg_id>
+  local n
+  oi_msg_ok "$1" || refuse "msg_id: недопустимое значение (разрешены A-Za-z0-9._:- до 80 знаков)"
+  oi_inbox
+  oi_tmpdir
+  jq -cR --arg id "$1" "$OI_ENV_SEL | select(.msg_id == \$id) | .body" "$OI_INBOX_FILE" > "$OI_TMP/sel.jsonl" 2>/dev/null
+  n="$(grep -c . "$OI_TMP/sel.jsonl")"
+  [ "$n" -ge 1 ] || refuse "msg_id: директива work.order с msg_id $1 в ящике не найдена"
+  [ "$n" -eq 1 ] || refuse "msg_id: в ящике несколько конвертов с msg_id $1 — выбор неоднозначен"
+  head -n1 "$OI_TMP/sel.jsonl" > "$OI_TMP/doc.json"
+  oi_size_ok "$OI_TMP/doc.json"
+  OI_DOC="$OI_TMP/doc.json"; OI_MODE=json
+  oi_validate
+  oi_flat msg "$1"
+}
+
+oi_list() {
+  local m c t
+  oi_inbox
+  jq -rR "$OI_ENV_SEL | [(.msg_id | tostring), (.body.commitment.id? // \"\" | tostring), (.body.commitment.title? // \"\" | tostring)] | @tsv" "$OI_INBOX_FILE" 2>/dev/null \
+  | while IFS=$'\t' read -r m c t; do
+      oi_msg_ok "$m" || { echo "order-import: конверт с недопустимым msg_id пропущен" >&2; continue; }
+      pr_clean "$c" 64; c="$PR_CLEAN"; pr_clean "$t" 100; t="$PR_CLEAN"
+      printf '%s\t%s\t%s\n' "$m" "$c" "$t"
+    done
+}
+
 usage() {
   echo "использование: order-import.sh from-file <path> | from-msg <msg_id> | from-issue <N> | list | stamp-state --sid <sid> --commitment <C> | unfold <path>  [--proj DIR] [--out FILE] [--inbox-json FILE] [--repo owner/repo]" >&2
   exit 2
@@ -262,6 +320,10 @@ case "$sub" in
     [ -n "$POS" ] || usage
     pr_clean "${POS##*/}" 80
     oi_accept "$POS" file "$PR_CLEAN" ;;
+  from-msg)
+    [ -n "$POS" ] || usage
+    oi_from_msg "$POS" ;;
+  list) oi_list ;;
   unfold)
     [ -n "$POS" ] || usage
     [ -f "$POS" ] || refuse "файл не читается"

@@ -261,6 +261,8 @@ run_oi list --inbox-json "$TMP/inbox-empty.jsonl" --proj "$NOMAND"
 eq "[O3] list without orders: rc 0, nothing on stdout" "$RC:$OUT" "0:"
 run_oi from-msg m-1 --inbox-json "$TMP/no-such-inbox.jsonl" --proj "$NOMAND"
 if [ "$RC" -ne 0 ] && [ -z "$OUT" ]; then pass "[O3] unreadable --inbox-json: refused (rc $RC)"; else fail "[O3] unreadable inbox" "rc=$RC out=[$OUT]"; fi
+ORDER_IMPORT_PYTHON=no-such-python-here run_oi from-msg m-1 --proj "$NOMAND"
+if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q -- '--inbox-json'; then pass "[O3] no python3 and no --inbox-json: rc 1 with the hint --inbox-json / from-file"; else fail "[O3] no python3" "rc=$RC out=[$OUT] err=[$ERR]"; fi
 fi
 
 # ---------------------------------------------------------------------------------------------------- [O4]

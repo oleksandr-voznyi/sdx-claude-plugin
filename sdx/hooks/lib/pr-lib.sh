@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # sdx/hooks/lib/pr-lib.sh — shared library of the change-package pipeline (FEAT-017, /sdx:pr).
-# Sourced, not executed. bash 3.2 (BUG-010): no associative arrays, no mapfile, no arrays at all (lists are
-# newline-separated strings), no ${v,,}, no timeout/%N, no GNU-only sed/cp/stat flags; LC_ALL=C for awk/glob.
+# Sourced, not executed. bash 3.2 (BUG-010): only constructs of the oldest supported bash and POSIX userland —
+# no associative arrays, no array builtins at all (lists are newline-separated strings), no case-conversion
+# expansions, no GNU-only sed/cp/stat flags; LC_ALL=C for awk/glob.
 # No interpreters other than bash/awk/sed/jq/git in this file. Everything read from an order, a mandate, a
 # session log or a git path is DATA: it is validated, cleaned (pr_clean) or quoted before it is shown, and is
 # never executed. Anchors "# PKG-*" are mutation-run labels (see test-mandate-lib.sh).
@@ -65,4 +66,63 @@ pr_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1
   elif command -v shasum >/dev/null 2>&1; then shasum -a 256 | cut -d' ' -f1
   else return 2; fi
+}
+
+# pr_url_ok <url>: whitelist. ssh:// https:// http:// file://, the scp form user@host:path, an absolute local path.
+# Refused: ext:: fd:: transport:: (remote helpers run commands), a leading '-' (option injection), a host that starts
+# with '-', whitespace/control characters, anything else (ftp://, relative paths).
+pr_url_ok() {
+  local LC_ALL=C u="$1" rest auth host user
+  [ -n "$u" ] || return 1
+  case "$u" in -*) return 1 ;; esac
+  case "$u" in *[[:space:]]*|*[[:cntrl:]]*) return 1 ;; esac
+  case "$u" in
+    ssh://*|https://*|http://*|file://*)                      # PKG-URL-WL
+      rest="${u#*://}"; [ -n "$rest" ] || return 1
+      auth="${rest%%/*}"; host="${auth##*@}"
+      case "$host" in -*) return 1 ;; esac
+      return 0 ;;
+    /*) return 0 ;;
+    *://*|*::*) return 1 ;;
+    *@*:*)
+      user="${u%%@*}"; host="${u#*@}"; host="${host%%:*}"
+      [ -n "$user" ] && [ -n "$host" ] && [ -n "${u#*:}" ] || return 1
+      case "$user" in *[!A-Za-z0-9._-]*) return 1 ;; esac
+      case "$host" in *[!A-Za-z0-9._-]*|-*) return 1 ;; esac
+      return 0 ;;
+  esac
+  return 1
+}
+
+# pr_url_show <url> -> PR_URLS: credentials removed. http(s): the whole userinfo (a token may stand alone);
+# ssh://: only "user:pass@" (a bare user is not a secret). The scp form and local paths carry none.
+pr_url_show() {
+  local u="$1" scheme rest auth tail info
+  PR_URLS="$u"
+  case "$u" in
+    http://*|https://*|ssh://*)
+      scheme="${u%%://*}"; rest="${u#*://}"; auth="${rest%%/*}"; tail="${rest#"$auth"}"
+      case "$auth" in
+        *@*)
+          info="${auth%@*}"
+          if [ "$scheme" != ssh ] || [ "${info#*:}" != "$info" ]; then
+            PR_URLS="$scheme://${auth##*@}$tail"
+          fi ;;
+      esac ;;
+  esac
+  return 0
+}
+
+# pr_hosting <url> [hint] -> PR_HOSTING (github | bare). A valid hint from the order wins; otherwise the host
+# github.com (any scheme or the scp form) means github; everything else, local paths included, is bare.
+pr_hosting() {
+  local u="$1" rest auth host
+  case "${2:-}" in github|bare) PR_HOSTING="$2"; return 0 ;; esac
+  PR_HOSTING=bare
+  case "$u" in /*) return 0 ;; esac
+  rest="$u"; case "$u" in *://*) rest="${u#*://}" ;; esac
+  auth="${rest%%/*}"; auth="${auth##*@}"; host="${auth%%:*}"
+  host="$(printf '%s' "$host" | LC_ALL=C tr 'A-Z' 'a-z')"
+  [ "$host" = github.com ] && PR_HOSTING=github
+  return 0
 }

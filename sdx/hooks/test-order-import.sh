@@ -222,6 +222,139 @@ run_oi from-file "$TMP/does-not-exist.yaml" --proj "$NOMAND"
 if [ "$RC" -eq 1 ] && [ -z "$OUT" ]; then pass "[O2] refused (no such file): rc 1"; else fail "[O2] refusal no such file" "rc=$RC out=[$OUT]"; fi
 fi
 
+# a valid order body as JSON; the cases below override single fields
+BASE_JSON='{"action":"work.order","format":1,"commitment":{"id":"C-ACME-001","kind":"change","title":"Feature mod1","requirements":"Implement mod1","due":"2026-12-01","creditor":"acme"},"executor":"ex1","mandate_digest":"123456789012","repo":{"id":"app","url":"ssh://git@git.example.com/srv/app.git","base":"dev"},"deliver":{"branch":"change/C-ACME-001-ex1","delivery":"pr"}}'
+# mkj <out-file> <jq-path> <value>: the base order with one string field replaced
+mkj() { printf '%s' "$BASE_JSON" | jq --arg v "$3" "$2 = \$v" > "$1"; }
+
+# ---------------------------------------------------------------------------------------------------- [O3]
+if want O3; then
+echo "[O3] mailbox envelope: selection by msg_id, list, foreign kinds, malformed msg_id"
+ORD2="$(printf '%s' "$BASE_JSON" | jq -c '.commitment.id = "C-ACME-002" | .commitment.title = "Second order"')"
+{
+  printf '%s\n' "{\"msg_id\":\"m-1\",\"kind\":\"directive\",\"seq\":1,\"body\":$BASE_JSON}" | jq -c .
+  printf '%s\n' '{"msg_id":"m-2","kind":"notice","seq":2,"body":{"event":"scope.write"}}'
+  printf '%s\n' '{"msg_id":"m-3","kind":"directive","seq":3,"body":{"action":"other.thing"}}'
+  printf '%s\n' "{\"msg_id\":\"m-4\",\"kind\":\"directive\",\"seq\":4,\"body\":$ORD2}" | jq -c .
+  printf '%s\n' 'this line is not json'
+  printf '%s\n' "{\"msg_id\":\"m-5\",\"kind\":\"fact\",\"seq\":5,\"body\":$BASE_JSON}" | jq -c .
+} > "$TMP/inbox.jsonl"
+run_oi from-msg m-1 --inbox-json "$TMP/inbox.jsonl" --proj "$NOMAND"
+eq "[O3] m-1: rc 0, the first order" "$RC:$(jv .commitment):$(jv .source):$(jv .source_ref)" "0:C-ACME-001:msg:m-1"
+run_oi from-msg m-4 --inbox-json "$TMP/inbox.jsonl" --proj "$NOMAND"
+eq "[O3] m-4: the second order is selected by msg_id" "$RC:$(jv .commitment):$(jv .title)" "0:C-ACME-002:Second order"
+for bad in m-2 m-3 m-5 m-404; do
+  run_oi from-msg "$bad" --inbox-json "$TMP/inbox.jsonl" --proj "$NOMAND"
+  if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && [ -n "$ERR" ]; then pass "[O3] $bad (not a directive work.order / unknown): rc 1 with a reason"; else fail "[O3] $bad" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+done
+long81="$(head -c 81 /dev/zero | tr '\0' 'a')"
+for bad in "m 1" "../x" "m-1;id" "$long81"; do
+  run_oi from-msg "$bad" --inbox-json "$TMP/inbox.jsonl" --proj "$NOMAND"
+  if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'msg_id'; then pass "[O3] malformed msg_id [${bad:0:12}] refused: rc 1, the reason names msg_id"; else fail "[O3] malformed msg_id [${bad:0:12}]" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+done
+run_oi from-msg --inbox-json "$TMP/inbox.jsonl" --proj "$NOMAND"
+eq "[O3] no msg_id: usage, rc 2" "$RC" "2"
+run_oi list --inbox-json "$TMP/inbox.jsonl" --proj "$NOMAND"
+eq "[O3] list: rc 0, exactly the two orders, msg_id / C / title tab-separated" "$RC:$OUT" "0:m-1"$'\t'"C-ACME-001"$'\t'"Feature mod1"$'\n'"m-4"$'\t'"C-ACME-002"$'\t'"Second order"
+printf '%s\n' '{"msg_id":"m-9","kind":"notice","seq":1,"body":{}}' > "$TMP/inbox-empty.jsonl"
+run_oi list --inbox-json "$TMP/inbox-empty.jsonl" --proj "$NOMAND"
+eq "[O3] list without orders: rc 0, nothing on stdout" "$RC:$OUT" "0:"
+run_oi from-msg m-1 --inbox-json "$TMP/no-such-inbox.jsonl" --proj "$NOMAND"
+if [ "$RC" -ne 0 ] && [ -z "$OUT" ]; then pass "[O3] unreadable --inbox-json: refused (rc $RC)"; else fail "[O3] unreadable inbox" "rc=$RC out=[$OUT]"; fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [O4]
+if want O4; then
+echo "[O4] issue: the first yaml block with 'action: work.order' (gh stub)"
+mkdir -p "$TMP/ghbin"
+cat > "$TMP/ghbin/gh" <<'STUB'
+#!/usr/bin/env bash
+# gh stub: `gh issue view <N> [--repo R] --json body` prints {"body": <contents of $GH_STUB_BODY>}; rc from $GH_STUB_RC
+printf '%s\n' "$*" > "$GH_STUB_LOG"
+[ "${GH_STUB_RC:-0}" -eq 0 ] || { echo "gh: HTTP 404" >&2; exit "$GH_STUB_RC"; }
+[ "$1 $2" = "issue view" ] || exit 1
+jq -Rs '{body: .}' < "$GH_STUB_BODY"
+STUB
+chmod +x "$TMP/ghbin/gh"
+export GH_STUB_LOG="$TMP/gh.log" GH_STUB_BODY="$TMP/issue.txt"
+{
+  printf 'Please take this.\n\n```bash\necho not-an-order\n```\n\n```yaml\n# a sample config, not an order\nname: example\n```\n\n'
+  printf '```yaml\naction: work.order\nformat: 1\ncommitment:\n  id: C-ISSUE-007\n  title: Order from an issue\n  requirements: Do the thing\nexecutor: ex1\nrepo:\n  base: dev\n'
+  printf 'deliver:\n  branch: change/C-ISSUE-007-ex1\n  delivery: pr\n```\n\nThanks.\n'
+} > "$TMP/issue.txt"
+OLDPATH="$PATH"; PATH="$TMP/ghbin:$PATH"
+run_oi from-issue 7 --proj "$NOMAND"
+eq "[O4] issue 7: the order block is taken (not the bash block, not the config block)" "$RC:$(jv .commitment):$(jv .source):$(jv .source_ref)" "0:C-ISSUE-007:issue:#7"
+eq "[O4] gh was called as: issue view 7 --json body" "$(cat "$GH_STUB_LOG")" "issue view 7 --json body"
+run_oi from-issue 12 --repo acme/app --proj "$NOMAND"
+eq "[O4] --repo is passed to gh" "$(cat "$GH_STUB_LOG")" "issue view 12 --repo acme/app --json body"
+printf 'No order here.\n\n```yaml\nname: example\n```\n' > "$TMP/issue.txt"
+run_oi from-issue 8 --proj "$NOMAND"
+if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'work.order'; then pass "[O4] no order block: rc 1, the reason names work.order"; else fail "[O4] no order block" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+GH_STUB_RC=1 run_oi from-issue 9 --proj "$NOMAND"
+if [ "$RC" -eq 1 ] && [ -z "$OUT" ]; then pass "[O4] gh fails: rc 1"; else fail "[O4] gh fails" "rc=$RC out=[$OUT]"; fi
+for bad in "7;id" "abc" "1 2" "0x7" "12345678901"; do
+  run_oi from-issue "$bad" --proj "$NOMAND"
+  if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'issue'; then pass "[O4] malformed issue number [$bad] refused: rc 1"; else fail "[O4] malformed issue number [$bad]" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+done
+for bad in 'a b/c' 'noslash' '-x/y' 'a/b/c'; do
+  run_oi from-issue 7 --repo "$bad" --proj "$NOMAND"
+  if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'repo'; then pass "[O4] malformed --repo [$bad] refused: rc 1"; else fail "[O4] malformed --repo [$bad]" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+done
+eq "[O4] gh was not called for a malformed argument" "$(cat "$GH_STUB_LOG")" "issue view 9 --json body"
+PATH="$OLDPATH"
+ORDER_IMPORT_GH=gh-is-not-installed run_oi from-issue 7 --proj "$NOMAND"
+if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q -- '--from-order'; then pass "[O4] no gh: rc 1 with the hint --from-order <file>"; else fail "[O4] no gh" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+fi
+
+# ---------------------------------------------------------------------------------------------------- [O6]
+if want O6; then
+echo "[O6] hostile identifiers and values: refused or neutralised, no side effects"
+MARK="$TMP/marker"; rm -f "$MARK"
+idcase() {  # <label> <jq-path> <value> <field fragment>
+  mkj "$TMP/h.json" "$2" "$3"
+  run_oi from-file "$TMP/h.json" --proj "$NOMAND"
+  if [ "$RC" -eq 1 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q -- "$4"; then pass "[O6] $1: rc 1, the field is named ($4)"; else fail "[O6] $1" "rc=$RC out=[$OUT] err=[$ERR]"; fi
+}
+idcase "C with a slash" .commitment.id "a/b" commitment.id
+idcase "C = .." .commitment.id ".." commitment.id
+idcase "C with a space" .commitment.id "C 1" commitment.id
+idcase "C with a colon" .commitment.id "x:y" commitment.id
+idcase "C with a leading dash" .commitment.id "-C1" commitment.id
+idcase "C ending with .lock" .commitment.id "C1.lock" commitment.id
+idcase "C with a newline" .commitment.id $'C1\nx' commitment.id
+idcase "executor client-harness:kitgroup" .executor "client-harness:kitgroup" executor
+idcase "executor with a unicode letter" .executor "exé" executor
+idcase "url ext::" .repo.url "ext::sh -c touch $MARK" repo.url
+idcase "url fd::" .repo.url "fd::1" repo.url
+idcase "url option injection" .repo.url "-oProxyCommand=x" repo.url
+idcase "url with a space" .repo.url "https://h/a b.git" repo.url
+idcase "base with a leading dash" .repo.base "-x" repo.base
+idcase "base a..b" .repo.base "a..b" repo.base
+idcase "base with a space" .repo.base "a b" repo.base
+idcase "due not a date" .commitment.due "tomorrow" commitment.due
+idcase "action not work.order" .action "legacy.import" action
+idcase "format 2" .format "2" format
+idcase "secret in requirements" .commitment.requirements "use password: hunter2 for the db" commitment.requirements
+idcase "secret in title" .commitment.title "api_key=abc123" commitment.title
+idcase "empty title" .commitment.title "" commitment.title
+[ ! -e "$MARK" ] && pass "[O6] no marker file was created by any refused value" || fail "[O6] marker" "a refused value had a side effect"
+# values that are accepted but neutralised
+mkj "$TMP/h.json" .commitment.title $'line1\nline2 `touch '"$MARK"'` $(touch '"$MARK"$') \033[31m red\ttab'
+run_oi from-file "$TMP/h.json" --proj "$NOMAND"
+t="$(jv .title)"
+if [ "$RC" -eq 0 ] && [ ! -e "$MARK" ] && [ "$(printf '%s' "$t" | wc -l | tr -d ' ')" = 0 ] && ! printf '%s' "$t" | LC_ALL=C grep -q '[[:cntrl:]]' && printf '%s' "$t" | grep -qF '$(touch'; then
+  pass "[O6] markup in the title: one line, no control characters, shown literally, nothing executed"
+else fail "[O6] markup in the title" "rc=$RC title=[$t] marker=$([ -e "$MARK" ] && echo yes || echo no)"; fi
+big="$(head -c 5000 /dev/zero | tr '\0' 'x')"
+mkj "$TMP/h.json" .commitment.title "$big"
+run_oi from-file "$TMP/h.json" --proj "$NOMAND"
+if [ "$RC" -eq 0 ] && [ "$(jv '.title|length')" -le 200 ] && [ "$(jv '.warnings|length')" -ge 1 ]; then pass "[O6] a 5000-character title is cut to 200 with a warning"; else fail "[O6] long title" "rc=$RC len=$(jv '.title|length') warnings=$(jv '.warnings')"; fi
+mkj "$TMP/h.json" .repo.url "https://user:tok3n@git.example.com/srv/app.git"
+run_oi from-file "$TMP/h.json" --proj "$NOMAND"
+if [ "$RC" -eq 0 ] && [ "$(jv .repo_url)" = "https://git.example.com/srv/app.git" ] && [ "$(jv '.warnings|length')" -ge 1 ] && ! printf '%s' "$OUT" | grep -q tok3n; then pass "[O6] credentials in repo.url are removed from the result, with a warning"; else fail "[O6] url credentials" "rc=$RC out=[$OUT]"; fi
+fi
+
 #@@SECTIONS-END@@
 
 echo ""

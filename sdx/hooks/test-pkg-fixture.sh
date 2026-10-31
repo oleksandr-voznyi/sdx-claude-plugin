@@ -136,34 +136,25 @@ expected_of() {
     no_adr) echo "return adr" ;;
   esac
 }
-# craft_and_audit <oracle-fn> <wc> <kind> -> the oracle's answer on stdout
+# craft_and_audit <wc> <kind> -> the real oracle's answer on stdout (the package is crafted once per kind)
 craft_and_audit() {
-  local fn="$1" w="$2" k="$3" b="change/t-$3"
+  local w="$1" k="$2" b="change/t-$2"
   if [ "$k" = good ]; then pkg_craft_good "$w" "$b" >/dev/null 2>&1; else "pkg_craft_bad_$k" "$w" "$b" >/dev/null 2>&1; fi
   [ "$k" = bad_branch ] && b="${PKG_BRANCH_MADE:-$b}"
-  "$fn" "$w" "$b" 2>/dev/null
-}
-# oracle_table <oracle-fn> -> number of mismatches vs expected_of (echoes details to stderr-free stdout lines "MISMATCH ...")
-oracle_table() {
-  local fn="$1" w="$2" k got exp bad=0
-  for k in good $KINDS; do
-    got="$(craft_and_audit "$fn" "$w" "$k")"; exp="$(expected_of "$k")"
-    if [ "$got" != "$exp" ]; then echo "MISMATCH $k got [$got] expected [$exp]"; bad=$((bad + 1)); fi
-  done
-  echo "BAD $bad"
+  pkg_oracle "$w" "$b" 2>/dev/null
 }
 ORACLE_RC=0
 if have pkg_oracle; then
   pkg_fixture_copy "$TMP/o1" >/dev/null 2>&1
   pkg_oracle "${PKG_WC:-$TMP/o1/wc}" no-such-branch >/dev/null 2>&1; ORACLE_RC=$?
 else ORACLE_RC=1; fi
+ANSWERS="$TMP/answers.txt"; : > "$ANSWERS"
 if [ "$ORACLE_RC" = 77 ]; then
   info "oracle skipped: python3 with PyYAML is absent (F3 comparisons are NOT passed, only skipped)"
 elif have pkg_craft_good && have pkg_oracle; then
-  res="$(oracle_table pkg_oracle "$TMP/o1/wc")"
   for k in good $KINDS; do
-    if printf '%s\n' "$res" | grep -q "^MISMATCH $k "; then fail "oracle: $k" "$(printf '%s\n' "$res" | grep "^MISMATCH $k ")"
-    else pass "oracle: $k -> $(expected_of "$k")"; fi
+    got="$(craft_and_audit "$TMP/o1/wc" "$k")"; printf '%s\t%s\n' "$k" "$got" >> "$ANSWERS"
+    eq "oracle: $k -> $(expected_of "$k")" "$got" "$(expected_of "$k")"
   done
 else
   for k in good $KINDS; do fail "oracle: $k" "pkg_craft_good/pkg_craft_bad_*/pkg_oracle missing"; done
@@ -176,14 +167,22 @@ fi
 
 # ---------------------------------------------------------------------------------------------------- [F4]
 echo "[F4] built-in negatives: a substituted verdict turns the comparison red"
-if [ "$ORACLE_RC" != 77 ] && have pkg_craft_good && have pkg_oracle; then
-  always_approve() { echo approve; }
-  res="$(oracle_table always_approve "$TMP/o1/wc")"
-  bad="$(printf '%s\n' "$res" | sed -n 's/^BAD //p')"
-  if [ -n "$bad" ] && [ "$bad" -ge 10 ]; then pass "an oracle that always says approve mismatches on $bad of 16 packages"; else fail "negative: always-approve oracle" "BAD=[$bad]"; fi
-  never_approve() { echo "reject x"; }
-  res="$(oracle_table never_approve "$TMP/o1/wc")"
-  printf '%s\n' "$res" | grep -q '^MISMATCH good ' && pass "an oracle that never approves mismatches on the good package" || fail "negative: never-approve oracle" "no mismatch on good"
+# mismatches <verdict-substitute>: how many recorded packages disagree with expected_of when the oracle's answer is replaced
+mismatches() {
+  local k got n=0
+  while IFS=$'\t' read -r k got; do
+    [ -n "$k" ] || continue
+    [ "$1" = "-" ] && got="$got" || got="$1"
+    [ "$got" = "$(expected_of "$k")" ] || n=$((n + 1))
+  done < "$ANSWERS"
+  echo "$n"
+}
+if [ "$ORACLE_RC" != 77 ] && [ -s "$ANSWERS" ]; then
+  eq "the recorded real answers agree with the table (0 mismatches)" "$(mismatches -)" "0"
+  bad="$(mismatches approve)"
+  if [ "$bad" -ge 10 ]; then pass "an oracle that always says approve mismatches on $bad of 16 packages"; else fail "negative: always-approve oracle" "BAD=[$bad]"; fi
+  bad="$(mismatches 'reject x')"
+  if [ "$bad" -ge 1 ]; then pass "an oracle that never approves mismatches on $bad packages (the good one included)"; else fail "negative: never-approve oracle" "BAD=[$bad]"; fi
 else
   info "F4 skipped: oracle unavailable"
 fi

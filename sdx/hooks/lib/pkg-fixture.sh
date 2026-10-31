@@ -97,10 +97,12 @@ pkg_fixture_copy() {
 pkg_oracle() {
   local wc="$1" br="$2" target="${3:-dev}" py="${PKG_PYTHON:-python3}"
   command -v "$py" >/dev/null 2>&1 || return 77
-  "$py" -I -B -c 'import yaml' >/dev/null 2>&1 || return 77
   "$py" -I -B - "$wc" "$br" "$target" "$PKG_C" <<'PY'
 import sys, subprocess, fnmatch, hashlib, re, datetime
-import yaml
+try:
+    import yaml
+except ImportError:
+    sys.exit(77)
 wc, ref, target, cid_expected = sys.argv[1:5]
 MANIFEST, FORMAT = "CHANGE.yaml", 1
 REDACT = [
@@ -286,3 +288,16 @@ pkg_craft_bad_extra_commit() { local K_MID_COMMIT=1; _pkg_build "$1" "${2:-}"; }
 pkg_craft_bad_foreign_file() { local K_MANIFEST_EXTRA="docs/extra.md=x"; _pkg_build "$1" "${2:-}"; }
 pkg_craft_bad_bad_archive() { local K_ARCHIVE="0000000000000000000000000000000000000000000000000000000000000000"; _pkg_build "$1" "${2:-}"; }
 pkg_craft_bad_out_of_scope() { local K_HEAD_FILES="src/core/b.js=b=2"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_shared_undeclared() { local K_TOUCHES_SHARED=false; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_session_dir() { local K_HEAD_FILES=".claude/sessions/$PKG_SID/order.yaml=leaked"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_format2() { local K_FORMAT=2; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_manifest_in_head() { local K_MANIFEST_IN_HEAD=1; _pkg_build "$1" "${2:-}"; }
+# audit() recomputes scope_touched itself: the oracle is blind to this defect BY DESIGN (the manifest-vs-diff check is pr-check's own)
+pkg_craft_bad_fake_scope() { local K_SCOPE_TOUCHED="src/mod1/never-touched.js"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_secret_notes() { local K_NOTES="password: hunter2"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_wrong_commitment() { local K_COMMITMENT="C-OTHER-9"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_wrong_executor() { local K_EXECUTOR="ex9"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_wrong_digest() { local K_DIGEST="999999999999"; _pkg_build "$1" "${2:-}"; }
+# the branch argument is ignored: the point is a branch name outside scope.branches (change/*); see PKG_BRANCH_MADE
+pkg_craft_bad_bad_branch() { _pkg_build "$1" "feat/pkg-bad"; }
+pkg_craft_bad_no_adr() { local K_NO_ADR=1; _pkg_build "$1" "${2:-}"; }

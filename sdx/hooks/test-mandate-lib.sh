@@ -651,7 +651,12 @@ if [ -f "$LIB/miniyaml.sh" ]; then
   else pass "[L9] miniyaml.sh has no eval (mandate values are never executed)"; fi
 else fail "[L9] miniyaml.sh has no eval" "file missing"; fi
 PYNAME='py''thon'
-hits="$(grep -nE "$PYNAME" "$LIB"/*.sh "$SCRIPT_DIR/sdx-stage.sh" 2>/dev/null)"
+# lib/pkg-fixture.sh is the one TEST helper in lib/ (FEAT-017): its python oracle is test-only and self-checked by
+# test-pkg-fixture.sh; every other lib file and sdx-stage.sh stays python-free.
+hits=""; for f in "$LIB"/*.sh "$SCRIPT_DIR/sdx-stage.sh"; do
+  case "${f##*/}" in pkg-fixture.sh) continue ;; esac
+  hits="$hits$(grep -nE "$PYNAME" "$f" 2>/dev/null)"
+done
 if [ -z "$hits" ] && [ -f "$LIB/miniyaml.sh" ] && [ -f "$SCRIPT_DIR/sdx-stage.sh" ]; then pass "[L9] no python in lib/*.sh and sdx-stage.sh (REQ-MAND-33)"
 else fail "[L9] no python in lib/*.sh and sdx-stage.sh" "${hits:-lib/miniyaml.sh missing}"; fi
 

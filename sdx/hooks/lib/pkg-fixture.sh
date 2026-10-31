@@ -192,3 +192,97 @@ if not bad:
 out("reject" if any(c[2] == "reject" for c in bad) else "return", [c[0] for c in bad])
 PY
 }
+
+# ---------------------------------------------------------------------------------------------------------------
+# Package factories. Plumbing only (commit-tree, temporary index, update-ref): no checkout, no pr-build.sh — an
+# independent construction of the SAME artefact, so a defect shared by pr-build and its test cannot hide.
+# _pkg_build reads knobs from the caller's locals (bash dynamic scope), every knob optional:
+#   K_HEAD_FILES     "path=content" lines added to the code tree          K_MANIFEST_EXTRA  "path=content" lines added to the manifest commit
+#   K_MID_COMMIT=1   an extra commit between head and the manifest commit  K_MANIFEST_IN_HEAD=1  CHANGE.yaml inside head, no head/archive keys
+#   K_ARCHIVE        archive_sha256 override        K_FORMAT  K_COMMITMENT  K_EXECUTOR  K_DIGEST  K_NOTES  K_TOUCHES_SHARED  K_SCOPE_TOUCHED(lines)
+#   K_NO_ADR=1       adr: []
+# Sets PKG_BRANCH_MADE PKG_BASE PKG_HEAD PKG_TIP. The branch is (re)created with update-ref — the factories build fakes.
+# ---------------------------------------------------------------------------------------------------------------
+
+# _pkg_yaml_list <indent> <newline-separated items> -> stdout: " []" or "\n<indent>- \"item\"..."
+_pkg_yaml_list() {
+  local ind="$1" items="$2" it out=""
+  if [ -z "$items" ]; then printf ' []'; return 0; fi
+  while IFS= read -r it; do [ -n "$it" ] && out="$out"$'\n'"$ind- \"$it\""; done <<< "$items"
+  printf '%s' "$out"
+}
+
+# _pkg_add_files <index-file> <wc> <"path=content" lines>
+_pkg_add_files() {
+  local idx="$1" wc="$2" line p c blob
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    p="${line%%=*}"; c="${line#*=}"
+    blob="$(printf '%s\n' "$c" | git -C "$wc" hash-object -w --stdin)" || return 1
+    GIT_INDEX_FILE="$idx" git -C "$wc" update-index --add --cacheinfo "100644,$blob,$p" || return 1
+  done <<< "$3"
+}
+
+_pkg_build() {
+  local wc="$1" br="${2:-change/$PKG_C-$PKG_EXEC}" base tree0 tree head tip parent mid idx files shared touches docs spec adr asha
+  local zero="0000000000000000000000000000000000000000" manifest mblob mtree
+  idx="$(mktemp -u "${TMPDIR:-/tmp}/pkg-craft-idx.XXXXXX")"
+  base="$(git -C "$wc" rev-parse --verify -q refs/heads/dev)" || return 1
+  GIT_INDEX_FILE="$idx" git -C "$wc" read-tree "refs/heads/sdx/$PKG_SID" || { rm -f "$idx"; return 1; }
+  _pkg_add_files "$idx" "$wc" "${K_HEAD_FILES:-}" || { rm -f "$idx"; return 1; }
+  tree0="$(GIT_INDEX_FILE="$idx" git -C "$wc" write-tree)" || { rm -f "$idx"; return 1; }
+  files="$(git -C "$wc" diff --name-only "$base" "$tree0")"
+  if [ -n "${K_SCOPE_TOUCHED:-}" ]; then touches="$K_SCOPE_TOUCHED"; else touches="$files"; fi
+  case $'\n'"$files"$'\n' in *$'\npackage-lock.json\n'*) shared=true ;; *) shared=false ;; esac
+  [ -z "${K_TOUCHES_SHARED:-}" ] || shared="$K_TOUCHES_SHARED"
+  docs="$(printf '%s\n' "$files" | grep '^docs/' || true)"
+  spec="docs/specs/mod1.md@$(git -C "$wc" log -n1 --format=%h "refs/heads/sdx/$PKG_SID" -- docs/specs/mod1.md 2>/dev/null)"
+  if [ -n "${K_NO_ADR:-}" ]; then adr=""; else adr="docs/DECISIONS.md#ADR-099"; fi
+  # the manifest text (fixed layout; every string double-quoted; independent of pr-build's template-driven renderer)
+  _pkg_manifest_text() {  # <head-or-empty> <archive-or-empty>
+    printf 'change:\n  format: %s\n  commitment: "%s"\n  executor: "%s"\n  mandate_digest: "%s"\n  base: "%s"\n' \
+      "${K_FORMAT:-1}" "${K_COMMITMENT:-$PKG_C}" "${K_EXECUTOR:-$PKG_EXEC}" "${K_DIGEST:-$PKG_DIGEST}" "$base"
+    [ -z "$1" ] || printf '  head: "%s"\n' "$1"
+    [ -z "$2" ] || printf '  archive_sha256: "%s"\n' "$2"
+    printf '  scope_touched:%s\n  touches_shared: %s\n  spec: "%s"\n  verify:\n    tests: "pass"\n    report: "sdx/%s@fixture:.claude/sessions/%s/verification_report.md"\n' \
+      "$(_pkg_yaml_list '    ' "$touches")" "$shared" "$spec" "$PKG_SID" "$PKG_SID"
+    printf '  adr:%s\n  docs:%s\n  history_ref: "executor:sdx/%s"\n  notes: "%s"\n' \
+      "$(_pkg_yaml_list '    ' "$adr")" "$(_pkg_yaml_list '    ' "$docs")" "$PKG_SID" "${K_NOTES:-fixture}"
+  }
+  if [ -n "${K_MANIFEST_IN_HEAD:-}" ]; then
+    mblob="$(_pkg_manifest_text "" "" | git -C "$wc" hash-object -w --stdin)"
+    GIT_INDEX_FILE="$idx" git -C "$wc" update-index --add --cacheinfo "100644,$mblob,CHANGE.yaml"
+    tree="$(GIT_INDEX_FILE="$idx" git -C "$wc" write-tree)"
+    head="$(printf 'fixture: head with manifest\n' | git -C "$wc" commit-tree "$tree" -p "$base")"
+    tip="$head"
+  else
+    head="$(printf 'fixture: head\n' | git -C "$wc" commit-tree "$tree0" -p "$base")" || { rm -f "$idx"; return 1; }
+    asha="${K_ARCHIVE:-$(git -C "$wc" -c tar.umask=0002 archive --format=tar "$head" | _pkg_sha256)}"
+    mblob="$(_pkg_manifest_text "$head" "$asha" | git -C "$wc" hash-object -w --stdin)"
+    rm -f "$idx"
+    GIT_INDEX_FILE="$idx" git -C "$wc" read-tree "$head"
+    GIT_INDEX_FILE="$idx" git -C "$wc" update-index --add --cacheinfo "100644,$mblob,CHANGE.yaml"
+    _pkg_add_files "$idx" "$wc" "${K_MANIFEST_EXTRA:-}"
+    mtree="$(GIT_INDEX_FILE="$idx" git -C "$wc" write-tree)"
+    parent="$head"
+    if [ -n "${K_MID_COMMIT:-}" ]; then parent="$(printf 'fixture: extra\n' | git -C "$wc" commit-tree "$tree0" -p "$head")"; fi
+    tip="$(printf 'fixture: manifest\n' | git -C "$wc" commit-tree "$mtree" -p "$parent")"
+  fi
+  rm -f "$idx"
+  git -C "$wc" update-ref "refs/heads/$br" "$tip" || return 1
+  PKG_BRANCH_MADE="$br"; PKG_BASE="$base"; PKG_HEAD="$head"; PKG_TIP="$tip"
+  return 0
+}
+
+# sha256 of stdin (independent of lib/pr-lib.sh: a shared defect must not hide)
+_pkg_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi
+}
+
+# pkg_craft_good <wc> [branch]: a correct package
+pkg_craft_good() { _pkg_build "$1" "${2:-}"; }
+# one defect each
+pkg_craft_bad_extra_commit() { local K_MID_COMMIT=1; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_foreign_file() { local K_MANIFEST_EXTRA="docs/extra.md=x"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_bad_archive() { local K_ARCHIVE="0000000000000000000000000000000000000000000000000000000000000000"; _pkg_build "$1" "${2:-}"; }
+pkg_craft_bad_out_of_scope() { local K_HEAD_FILES="src/core/b.js=b=2"; _pkg_build "$1" "${2:-}"; }

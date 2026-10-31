@@ -97,6 +97,49 @@ def lst($k; $a):
   + "\n#COUNTS done \(lines($done) | length) decisions \($d | length) (adr \($d | map(select(.adr)) | length)) questions \($d | length) verified \(lines($ver_l) | length) deltas \(lines($dlt) | length)"
 '
 
+# ------------------------------------------------------------------------------------------------------------
+# verified / deltas / done (REQ-PKG-21). The number of verification rounds is NOT exported: the report format has none (К-5).
+# ------------------------------------------------------------------------------------------------------------
+# verification_report.md -> "- " lines of "## Сводка" (marker stripped), "Матрица: OK a, WARN b, FAIL c" counted over the
+# LAST column of the table of "## Матрица…", and the verdict "Итог по области: …" of the SDX-MANDATE-SCOPE block
+PX_VER_AWK='
+function clean(s) { gsub(/[\t\r]/, " ", s); gsub(/^[ \t]+/, "", s); gsub(/[ \t]+$/, "", s); return s }
+{ sub(/\r$/, "") }
+index($0, "SDX-MANDATE-SCOPE:BEGIN") { blk = 1; next }
+index($0, "SDX-MANDATE-SCOPE:END") { blk = 0; next }
+blk && /^[ \t]*-[ \t]+Итог по области:/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); scope = clean(v); next }
+/^## Сводка[ \t]*$/ { sec = "s"; next }
+/^## Матрица/ { sec = "m"; next }
+/^##? / { sec = ""; next }
+sec == "s" && /^[ \t]*-[ \t]+/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); print clean(v); next }
+sec == "m" && /^[ \t]*\|/ {
+  line = $0; gsub(/[ \t]+$/, "", line); n = split(line, c, "|")
+  last = (line ~ /\|$/) ? c[n - 1] : c[n]
+  gsub(/[ \t*`]/, "", last)
+  if (last == "OK") ok++; else if (last == "WARN") warn++; else if (last == "FAIL") fail++
+}
+END { if (ok + warn + fail > 0) print "Матрица: OK " (ok + 0) ", WARN " (warn + 0) ", FAIL " (fail + 0); if (scope != "") print scope }
+'
+# SPEC.md / change_note.md -> "[ADDED|MODIFIED|REMOVED] <REQ id | other id | text>", duplicates dropped, order kept
+PX_DLT_AWK='
+{ sub(/\r$/, "") }
+/^[ \t]*([-*]|#+)?[ \t]*\[(ADDED|MODIFIED|REMOVED)\]/ {
+  line = $0; sub(/^[ \t]*([-*]|#+)?[ \t]*/, "", line)
+  e = index(line, "]"); tag = substr(line, 2, e - 2); rest = substr(line, e + 1)
+  id = ""
+  if (match(rest, /REQ-[A-Za-z0-9]+(-[A-Za-z0-9]+)*/)) id = substr(rest, RSTART, RLENGTH)
+  else if (match(rest, /[A-Z][A-Z0-9]*-[0-9]+/)) id = substr(rest, RSTART, RLENGTH)
+  else { id = rest; sub(/^[ \t*:_-]+/, "", id); gsub(/[\t]/, " ", id) }
+  key = "[" tag "] " id
+  if (!(key in seen)) { seen[key] = 1; print key }
+}
+'
+# PLAN.md -> the text of the checked tasks "- [x] …"
+PX_DONE_AWK='
+{ sub(/\r$/, "") }
+/^[ \t]*[-*][ \t]+\[[xX]\][ \t]+/ { t = $0; sub(/^[ \t]*[-*][ \t]+\[[xX]\][ \t]+/, "", t); gsub(/[\t]/, " ", t); print t }
+'
+
 # px_cat <path relative to the project root>: the file on stdout (at most 1 MiB), rc 1 if absent or unreadable
 px_cat() {
   [ -f "$PROJ/$1" ] && [ -r "$PROJ/$1" ] || return 1
@@ -138,6 +181,24 @@ if TXT="$(px_cat "$SDIR/decisions_log.md")"; then
   DEC_TSV="$(printf '%s\n' "$TXT" | px_decisions_tsv)"
 fi
 DONE_L=""; VER_L=""; DLT_L=""
+if TXT="$(px_cat "$SDIR/verification_report.md")"; then
+  READ_ANY=1; VER_L="$(printf '%s\n' "$TXT" | LC_ALL=C awk "$PX_VER_AWK")"
+fi
+# deltas: SPEC.md, else change_note.md (a folded delta); a SPEC.md without markers gives an empty list, no fallback
+NOTE_TXT=""; HAVE_NOTE=0
+if NOTE_TXT="$(px_cat "$SDIR/change_note.md")"; then READ_ANY=1; HAVE_NOTE=1; fi
+if TXT="$(px_cat "$SDIR/SPEC.md")"; then
+  READ_ANY=1; DLT_L="$(printf '%s\n' "$TXT" | LC_ALL=C awk "$PX_DLT_AWK")"
+elif [ "$HAVE_NOTE" = 1 ]; then
+  DLT_L="$(printf '%s\n' "$NOTE_TXT" | LC_ALL=C awk "$PX_DLT_AWK")"
+fi
+# done: PLAN.md of the session, else the archived plan (Closeout step 3 moved it), else ONE entry for a folded delta
+if TXT="$(px_cat "$SDIR/PLAN.md")" || TXT="$(px_cat "docs/history/plans/$SID.md")"; then
+  READ_ANY=1; DONE_L="$(printf '%s\n' "$TXT" | LC_ALL=C awk "$PX_DONE_AWK")"
+elif [ "$HAVE_NOTE" = 1 ]; then
+  first="$(printf '%s\n' "$NOTE_TXT" | LC_ALL=C awk 'NF { sub(/^[ \t]*#+[ \t]*/, ""); sub(/\r$/, ""); print; exit }')"
+  if [ -n "$first" ]; then DONE_L="change_note.md: $first"; fi
+fi
 
 # ---- rc 1 only when there is neither a readable source nor the session directory ----
 if [ "$READ_ANY" = 0 ] && [ ! -d "$PROJ/$SDIR" ]; then

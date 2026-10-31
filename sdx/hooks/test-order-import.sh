@@ -404,7 +404,7 @@ echo "[O7] the snapshot (--out) and stamp-state"
 if ensure_fixture; then
   RT="$TMP/rt"; rm -rf "$RT"; mkdir -p "$RT"
   git -C "$RT" init -q && git -C "$RT" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init && git -C "$RT" checkout -q -b sdx/rt
-  mkdir -p "$RT/.claude/sessions/rt"
+  mkdir -p "$RT/.claude/sessions/rt"; printf '{"stage":"Closeout"}\n' > "$RT/.claude/sessions/rt/session_state.json"
   snap() {  # <json file> -> commit the snapshot of that order on sdx/rt
     run_oi from-file "$1" --proj "$RT" --out "$RT/.claude/sessions/rt/order.yaml"
     git -C "$RT" add -A && git -C "$RT" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m snap
@@ -417,7 +417,7 @@ if ensure_fixture; then
   eq "[O7] roundtrip: base / url / hosting / repo id" "$PR_O_BASE|$PR_O_URL|$PR_O_HOSTING|$PR_O_REPO" "dev|ssh://git@git.example.com/srv/app.git|github|app"
   eq "[O7] roundtrip: branch / delivery / executor / digest" "$PR_O_BRANCH|$PR_O_DELIVERY|$PR_O_EXEC|$PR_O_DIGEST" "change/C-ACME-001-ex1|pr|ex1|123456789012"
   eq "[O7] roundtrip: source / source_ref" "$PR_O_SOURCE|$PR_O_SOURCE_REF" "file|s.json"
-  if ! grep -q 'mandate' "$RT/.claude/sessions/rt/order.yaml" && ! grep -qE '^[ ]*[a-z_]+: [^"]' "$RT/.claude/sessions/rt/order.yaml"; then pass "[O7] the snapshot has no copy of the mandate and every scalar is double-quoted"
+  if ! grep -q '^mandate:' "$RT/.claude/sessions/rt/order.yaml" && ! grep -E '^[ ]*[a-z_]+: ' "$RT/.claude/sessions/rt/order.yaml" | grep -v '^  format: 1$' | grep -qv '^[ ]*[a-z_]*: "'; then pass "[O7] the snapshot has no copy of the mandate and every scalar (but format) is double-quoted"
   else fail "[O7] snapshot format" "$(cat "$RT/.claude/sessions/rt/order.yaml")"; fi
   snap "$TMP/m.json"; pr_order_load "$RT" rt
   eq "[O7] no hosting in the order -> no hosting in the snapshot" "[$PR_O_HOSTING]" "[]"

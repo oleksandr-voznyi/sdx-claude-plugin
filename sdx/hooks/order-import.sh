@@ -232,11 +232,71 @@ oi_flat() {
       branch:$branch, delivery:$delivery, due:$due, sid_infix:$sid_infix, warnings:($warn | split("\n") | map(select(length > 0)))}'
 }
 
+# oi_mm <field> <order value> <local value>: one MISMATCH line (values cleaned and cut; empty is shown as "-")
+OI_MM=""
+oi_mm() {
+  local a b
+  pr_clean "$2" 64; a="${PR_CLEAN:--}"; pr_clean "$3" 120; b="${PR_CLEAN:--}"
+  OI_MM="$OI_MM${OI_MM:+$'\n'}MISMATCH $1 order=$a local=$b"
+}
+
+# oi_mandate_check (REQ-PKG-23): the order against the LOCAL mandate. The order carries a copy of the mandate and its
+# digest, but the local .mesh/mandate.yaml is the source of truth: a mismatch of the digest, of the executor or of
+# the delivery branch stops the acceptance (rc 3, ALL mismatches are printed at once). An unreadable mandate cannot
+# be compared and stops as well (never read as "no boundary"). Without a mandate in the project nothing is compared:
+# a warning says so (pr-mode of /sdx:pr refuses such a project anyway).
+oi_mandate_check() {
+  local mode ldg lex lbr
+  mode="$(mandate_mode "$PROJ")"
+  if [ "$mode" != on ]; then
+    oi_warn "мандат МО в проекте не включён (нужны .mesh/endpoint.yaml и .mesh/mandate.yaml): заказ не сверен с локальным мандатом"
+    return 0
+  fi
+  if ! mandate_load "$PROJ"; then
+    oi_mm mandate_digest "$O_DIGEST" "(локальный мандат не разобран)"
+  else
+    _my_scalar mandate.digest; ldg="$MY_S"
+    _my_scalar mandate.executor; lex="$MY_S"
+    lbr="change/$O_C-${lex:-$O_EXEC}"
+    [ "$O_DIGEST" = "$ldg" ] || oi_mm mandate_digest "$O_DIGEST" "$ldg"     # PKG-O-DIGEST
+    [ "$O_EXEC" = "$lex" ] || oi_mm executor "$O_EXEC" "$lex"                # PKG-O-EXEC
+    [ "$O_BRANCH" = "$lbr" ] || oi_mm deliver.branch "$O_BRANCH" "$lbr"      # PKG-O-BRANCH
+  fi
+  if [ -n "$OI_MM" ]; then printf '%s\n' "$OI_MM"; exit 3; fi
+  return 0
+}
+
+# oi_snapshot <source> <source-ref>: the order snapshot in OUR format (DESIGN "Схема данных"): every scalar on one
+# line in double quotes (jq tojson), the mandate is NOT copied. Written next to the target and moved into place.
+oi_snapshot() {
+  local dir tmp
+  dir="$(dirname "$OUTF")"
+  [ -d "$dir" ] || { echo "order-import: каталог для --out не существует: $(pr_clean "$dir" 120; printf '%s' "$PR_CLEAN")" >&2; exit 2; }
+  tmp="$(mktemp "$OUTF.XXXXXX")" || { echo "order-import: не удалось создать временный файл рядом с --out." >&2; exit 2; }
+  if ! jq -rn --arg source "$1" --arg ref "$2" --arg c "$O_C" --arg kind "$O_KIND" --arg title "$O_TITLE" --arg reqs "$O_REQS" \
+      --arg due "$O_DUE" --arg cred "$O_CRED" --arg ex "$O_EXEC" --arg dg "$O_DIGEST" --arg rid "$O_RID" --arg url "$O_URL" \
+      --arg base "$O_BASE" --arg host "$O_HOST" --arg br "$O_BRANCH" --arg dl "$O_DELIV" '
+      def q: tojson;
+      "order:\n  format: 1\n  source: \($source | q)\n  source_ref: \($ref | q)\n  commitment:\n    id: \($c | q)\n    kind: \($kind | q)\n    title: \($title | q)\n    requirements: \($reqs | q)\n    due: \($due | q)\n    creditor: \($cred | q)\n  executor: \($ex | q)\n  mandate_digest: \($dg | q)\n  repo:\n    id: \($rid | q)\n    url: \($url | q)\n    base: \($base | q)"
+      + (if $host != "" then "\n    hosting: \($host | q)" else "" end)
+      + "\n  deliver:\n    branch: \($br | q)\n    delivery: \($dl | q)"' > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"; echo "order-import: не удалось сформировать снимок заказа." >&2; exit 2
+  fi
+  mv "$tmp" "$OUTF" || { rm -f "$tmp"; echo "order-import: не удалось записать --out." >&2; exit 2; }
+}
+
+# oi_conclude <source> <source-ref>: the local mandate check, the snapshot (--out), the flat JSON
+oi_conclude() {
+  oi_mandate_check
+  if [ -n "$OUTF" ]; then oi_snapshot "$1" "$2"; fi
+  oi_flat "$1" "$2"
+}
+
 # oi_accept <file> <source> <source-ref>
 oi_accept() {
   oi_read_doc "$1"
   oi_validate
-  oi_flat "$2" "$3"
+  oi_conclude "$2" "$3"
 }
 
 # ------------------------------------------------------------------------------------------------------------
@@ -283,7 +343,7 @@ oi_from_msg() {   # <msg_id>
   oi_size_ok "$OI_TMP/doc.json"
   OI_DOC="$OI_TMP/doc.json"; OI_MODE=json
   oi_validate
-  oi_flat msg "$1"
+  oi_conclude msg "$1"
 }
 
 oi_list() {
@@ -333,7 +393,7 @@ oi_from_issue() {   # <N>
   oi_size_ok "$OI_TMP/block.yaml"
   oi_load_yaml "$OI_TMP/block.yaml"
   oi_validate
-  oi_flat issue "#$1"
+  oi_conclude issue "#$1"
 }
 
 usage() {

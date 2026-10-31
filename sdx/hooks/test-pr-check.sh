@@ -256,31 +256,43 @@ oracle_expected() {
   esac
 }
 CRAFT_LOG="$TMP/craft.log"; : > "$CRAFT_LOG"
+c5_kind() {   # <kind|good|nobranch>: one crafted package in its own fixture copy (the kinds run concurrently)
+  local k="$1" exp ev eids id
+  newfx || return 0
+  case "$k" in
+    good)
+      pkg_craft_good "$WC" "$BR" >/dev/null 2>&1
+      run_check "$WC" --phase post
+      eq "C5 a correct package crafted by plumbing: PASS" "$(verdict_of)" "PASS"
+      oracle_of "$WC" "$BR"
+      printf '%s\t%s\t%s\n' "good" "$(verdict_of)" "$ORACLE" >> "$CRAFT_LOG.$k" ;;
+    nobranch)
+      run_check "$WC" --phase post
+      eq "C5 no package branch: FAIL (rc 1)" "$CRC" "1"
+      expect_line "C5 no package branch" FAIL pkg.ref ;;
+    *)
+      "pkg_craft_bad_$k" "$WC" "$BR" >/dev/null 2>&1
+      run_check "$WC" --phase post
+      exp="$(expected_ids "$k")"; ev="${exp%% *}"; eids="${exp#* }"
+      eq "C5 $k: verdict $ev" "$(verdict_of)" "$ev"
+      for id in $eids; do expect_line "C5 $k" "$ev" "$id"; done
+      oracle_of "$WC" "$BR"
+      printf '%s\t%s\t%s\n' "$k" "$(verdict_of)" "$ORACLE" >> "$CRAFT_LOG.$k" ;;
+  esac
+}
 blk_C5() {
 echo "[C5] post: red sides (packages crafted by plumbing, independent of pr-build.sh)"
-newfx && {
-  for k in $KINDS; do
-    case_on "$k" || continue
-    "pkg_craft_bad_$k" "$WC" "$BR" >/dev/null 2>&1
-    run_check "$WC" --phase post
-    exp="$(expected_ids "$k")"; ev="${exp%% *}"; eids="${exp#* }"
-    eq "C5 $k: verdict $ev" "$(verdict_of)" "$ev"
-    for id in $eids; do expect_line "C5 $k" "$ev" "$id"; done
-    oracle_of "$WC" "$BR"
-    printf '%s\t%s\t%s\n' "$k" "$(verdict_of)" "$ORACLE" >> "$CRAFT_LOG"
-  done
-  # the good crafted package is green for both
-  pkg_craft_good "$WC" "$BR" >/dev/null 2>&1
-  run_check "$WC" --phase post
-  eq "C5 a correct package crafted by plumbing: PASS" "$(verdict_of)" "PASS"
-  oracle_of "$WC" "$BR"
-  printf '%s\t%s\t%s\n' "good" "$(verdict_of)" "$ORACLE" >> "$CRAFT_LOG"
-  # the branch was never built
-  gw branch -q -D "$BR" >/dev/null 2>&1
-  run_check "$WC" --phase post
-  eq "C5 no package branch: FAIL (rc 1)" "$CRC" "1"
-  expect_line "C5 no package branch" FAIL pkg.ref
-}
+local k
+for k in $KINDS good nobranch; do
+  case_on "$k" || continue
+  ( TMP="$TMP/k-$k"; mkdir -p "$TMP"; c5_kind "$k" ) > "$TMP/o-$k.txt" 2>&1 &
+done
+wait
+for k in $KINDS good nobranch; do
+  case_on "$k" || continue
+  cat "$TMP/o-$k.txt"
+  [ ! -f "$CRAFT_LOG.$k" ] || cat "$CRAFT_LOG.$k" >> "$CRAFT_LOG"
+done
   if want C6; then blk_C6; fi
 }
 
@@ -361,6 +373,60 @@ newfx && {   # hostile mandate value: ESC must not reach the output
 }
 }
 
+# ---------------------------------------------------------------------------------------------------- [Port]
+blk_Port() {
+echo "[Port] portability (BUG-010) and forbidden constructs in pr-check.sh"
+FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path|[A-Za-z_]=\(|\[@\]'
+if grep -nE "$FORBID" "$SUT" >/dev/null 2>&1; then fail "pr-check.sh portability" "forbidden: $(grep -nE "$FORBID" "$SUT" | head -3)"; else pass "pr-check.sh has no bash-4-only construct, no arrays, no GNU-only calls"; fi
+sed 's/^here=/mapfile -t x < \/dev\/null; here=/' "$SUT" > "$TMP/port-mut.sh"
+if ! cmp -s "$SUT" "$TMP/port-mut.sh" && grep -qE "$FORBID" "$TMP/port-mut.sh"; then pass "red side: the same grep flags a mutant with a bash-4 construct"; else fail "red side of the portability grep" "mutant not flagged"; fi
+if grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" >/dev/null 2>&1; then fail "pr-check.sh forbidden words" "$(grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" | head -3)"; else pass "no python / eval / checkout / worktree in pr-check.sh"; fi
+}
+
+# ---------------------------------------------------------------------------------------------------- [Mut]
+blk_Mut() {
+[ -z "${PR_CHECK_NESTED:-}" ] || return 0
+echo "[Mut] mutation runs: each mutant (a copy of pr-check.sh + lib/ + mandate-info.sh in a temp dir) must differ from the original and turn its scenario red"
+MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
+OWNED="sdx/hooks/pr-check.sh sdx/hooks/lib sdx/mo"
+ST_BEFORE="$(git -C "$ROOT" status --porcelain -- $OWNED)"
+MUT_NAMES=""
+mk_plugin() {   # <dir>: a copy of the script under test with its lib/ and the proxied mandate-info.sh
+  mkdir -p "$1/hooks" && cp -Rp "$(dirname "$SUT")/lib" "$1/hooks/lib" && cp "$SUT" "$1/hooks/pr-check.sh" && cp "$SCRIPT_DIR/mandate-info.sh" "$1/hooks/mandate-info.sh"
+}
+# mutate <name> <sed expr> <blocks> <cases>: a nested run of this suite against the mutated script (in the background)
+mutate() {
+  local name="$1" expr="$2" only="$3" cases="$4" d="$MUTDIR/$1"
+  mk_plugin "$d" || { fail "[Mut] $name" "cannot copy the script under test"; return; }
+  sed "$expr" "$SUT" > "$d/hooks/pr-check.sh"
+  if cmp -s "$SUT" "$d/hooks/pr-check.sh"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  MUT_NAMES="$MUT_NAMES $name"
+  ( PR_CHECK_NESTED=1 PR_CHECK_ONLY="$only" PR_CHECK_CASES="$cases" PR_CHECK_UNDER_TEST="$d/hooks/pr-check.sh" bash "${BASH_SOURCE[0]}" > "$d/out.txt" 2>&1 ) &
+}
+mutate PKG-C-TREE         's/cid=closeout.tree ;;/cid=closeout.tree; st=OK ;;/' "C2" "tree"
+mutate PKG-C-SESSION      's/cid=closeout.session ;;/cid=closeout.session; st=OK ;;/' "C2" "session"
+mutate PKG-C-BRANCH       '/# PKG-C-BRANCH/s/if \[ -n "\$p" \]; then/if true; then/' "C2" "scopebr"
+mutate PKG-C-EXPIRED      '/# PKG-C-EXPIRED/s/if mandate_expired; then/if false; then/' "C2" "expired"
+mutate PKG-C-SCOPE        '/# PKG-C-SCOPE/s/if \[ -n "\$PR_OUT" \]; then/if false; then/' "C2" "scope"
+mutate PKG-C-DOCS-FINAL   '/# PKG-C-DOCS-FINAL/s/elif \[ -n "\$PR_DOCS_OUTSIDE" \]; then/elif false; then/' "C2" "docsfinal"
+mutate PKG-C-ADR          '/# PKG-C-ADR/s/\*) warn adr.registry "[^"]*" ;;/*) : ;;/' "C3" "adr"
+mutate PKG-C-TESTS        '/# PKG-C-TESTS/s/\[ "\$rc" -ne 0 \]/false/' "C2" "tests"
+mutate PKG-C-TIPCOMMIT    '/# PKG-C-TIPCOMMIT/s/\[ "\$parents" = "\$M_HEAD" \] && //' "C5" "extra_commit"
+mutate PKG-C-ARCHIVE      '/# PKG-C-ARCHIVE/s/\[ -n "\$M_ASHA" \] && \[ "\$M_ASHA" = "\$asha" \]/true/' "C5" "bad_archive"
+mutate PKG-C-SHARED       '/# PKG-C-SHARED/s/\[ -n "\$PR_SHARED" \] && \[ "\$M_SHARED" != true \]/false/' "C5" "shared_undeclared"
+wait
+for name in $MUT_NAMES; do
+  out="$(cat "$MUTDIR/$name/out.txt" 2>/dev/null)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-110)"
+    pass "[Mut] мутант $name → красный (ожидаемо): ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "the distinguishing scenario stayed green on the mutant (the check proves nothing)"
+  fi
+done
+eq "[Mut] the checkout (pr-check.sh, lib/, sdx/mo) is untouched by the mutation runs" "$(git -C "$ROOT" status --porcelain -- $OWNED)" "$ST_BEFORE"
+}
+
 # @@TAIL@@
 # ---- the blocks are independent (each builds its own fixture copy): run them concurrently, print in the declared order ----
 run_blocks() {
@@ -377,7 +443,7 @@ run_blocks() {
     FAIL_COUNT=$((FAIL_COUNT + $(grep -c "^  FAIL: " "$TMP/out-$b.txt")))
   done
 }
-run_blocks C1 C2 C3 C4 C5 C7
+run_blocks C1 C2 C3 C4 C5 C7 Port Mut
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

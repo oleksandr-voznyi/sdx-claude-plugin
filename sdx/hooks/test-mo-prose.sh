@@ -375,6 +375,12 @@ chk_start_order() {  # start.md (FEAT-017): --from-order / --from-issue, step 1�
   printf "%s" "$blk" | grep -qF 'в любом `gate_mode`' || { echo "step 1б lacks в любом gate_mode in $f"; return 1; }
   # verify-1 W4: --from-order in gate_mode: auto is a [директива] stop (AskUserQuestion), like --from-issue
   printf "%s" "$blk" | grep -F -- '--from-order' | grep -F 'gate_mode: auto' | grep -F '[директива]' | grep -qF 'AskUserQuestion' || { echo "step 1б lacks the auto + --from-order [директива] stop in $f"; return 1; }
+  # verify-2 WARN-1: the snapshot is written from the shown and confirmed content, the source is not re-read
+  printf "%s" "$blk" | grep -qF -- '--out "$snapdir/order.yaml"' || { echo "step 1б lacks the first call with --out to a temp snapshot in $f"; return 1; }
+  s6="$(grep -E '^6а\.' "$f")"
+  printf '%s' "$s6" | grep -qF 'не вызывается повторно' || { echo "step 6а lacks 'не вызывается повторно' in $f"; return 1; }
+  printf '%s' "$s6" | grep -qF 'подтверждённый снимок' || { echo "step 6а lacks 'подтверждённый снимок' in $f"; return 1; }
+  printf '%s' "$s6" | grep -qE 'order-import\.sh" from-' && { echo "step 6а re-reads the source in $f"; return 1; }
   for n in '1' '2' '3' '4' '5' '6' '7' '8'; do
     grep -qE "^$n\. " "$f" || { echo "step $n missing in $f"; return 1; }
   done
@@ -688,6 +694,14 @@ for t in '--from-order' '--from-issue' 'stamp-state' 'sid_infix' 'MISMATCH' 'rep
 done
 sed 's/^   - (iii-а) При `gate_mode: auto` приём заказа через `--from-order`/   - (iii-а) При другом режиме приём через `--from-order`/' "$START_MD" > "$TMP/t26f.md"
 expect_red "red: start.md without the auto + --from-order [директива] stop" chk_start_order "$TMP/t26f.md"
+sed '/^6а\./s/не вызывается повторно/вызывается ещё раз/' "$START_MD" > "$TMP/t26g.md"
+expect_red "red: start.md 6а without 'не вызывается повторно'" chk_start_order "$TMP/t26g.md"
+sed '/^6а\./s/подтверждённый снимок/снимок/' "$START_MD" > "$TMP/t26h.md"
+expect_red "red: start.md 6а without 'подтверждённый снимок'" chk_start_order "$TMP/t26h.md"
+{ cat "$START_MD"; echo '6а. повтори `bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/order-import.sh" from-issue 5 --out x`'; } | sed '0,/^6а\./{/^6а\./d}' > "$TMP/t26i.md"
+expect_red "red: start.md 6а re-reading the source" chk_start_order "$TMP/t26i.md"
+sed 's/--out "$snapdir\/order.yaml"//' "$START_MD" > "$TMP/t26j.md"
+expect_red "red: start.md 1б without the first call --out" chk_start_order "$TMP/t26j.md"
 sed 's/^1б\./1x./' "$START_MD" > "$TMP/t26b.md"; expect_red "red: start.md without step 1б" chk_start_order "$TMP/t26b.md"
 sed 's/^3\. /3x. /' "$START_MD" > "$TMP/t26c.md"; expect_red "red: start.md without step 3" chk_start_order "$TMP/t26c.md"
 expect_ok "status.md" chk_status_pkg "$STATUS_MD"

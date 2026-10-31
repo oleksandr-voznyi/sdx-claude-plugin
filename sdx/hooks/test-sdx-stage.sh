@@ -1080,10 +1080,6 @@ else fail "[42] other keys" "changed: $(jq -c . "$sf")"; fi
 cleanup
 fi
 
-# ---- [M41] mutation runs (FEAT-016): copies of sdx-stage.sh + lib/ in a temp dir, anchored by "# MAND-*" tags ----
-if [ -z "${SDX_STAGE_MUT:-}" ]; then
-echo "[M41] mutation runs: each mutant must differ from the original and turn its scenarios red"
-MUTROOT="$(mktemp -d)"
 # ---- [43] (DEBT-046, found 2026-10-31): the no_code refusal of `next --to` must not leave a stray file ----
 # The refusal text used to carry backticks inside double quotes — a command substitution whose
 # `-> false` part is a redirect, silently creating an empty file named 'false' in the cwd.
@@ -1100,6 +1096,10 @@ fi
 rm -f "$PWD/false"
 fi
 
+# ---- [M41] mutation runs (FEAT-016): copies of sdx-stage.sh + lib/ in a temp dir, anchored by "# MAND-*" tags ----
+if [ -z "${SDX_STAGE_MUT:-}" ]; then
+echo "[M41] mutation runs: each mutant must differ from the original and turn its scenarios red"
+MUTROOT="$(mktemp -d)"
 # smut <name> <file> <sed-expr> <scenarios>: <file> is sdx-stage.sh or lib/mandate.sh
 smut() {
   local name="$1" file="$2" expr="$3" only="$4" d="$MUTROOT/$1" out first

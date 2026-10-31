@@ -215,6 +215,109 @@ chk_adr_amendments() {  # dated amendments to ADR-020 and ADR-021 by the mandate
   return 0
 }
 
+chk_bridge_archive() {  # [12] pin (FEAT-017): archive.md = chk_bridge + the bridge for pr|branch is a PACKAGE delegated to commands/pr.md
+  local f="$1"
+  chk_bridge "$f" || return 1
+  grep -F 'commands/pr.md' "$f" | grep -F '(n/a, пакет)' | grep -qF 'не вызывается' || { echo "no bridge line with commands/pr.md + '(n/a, пакет)' + 'не вызывается' in $f"; return 1; }
+}
+chk_archive_pkg() {  # [19] archive.md: two Closeout variants, bridge delegates to /sdx:pr, the rest of the bridge and standard steps 1-8 intact
+  local f="$1" t n
+  chk_bridge_archive "$f" || return 1
+  grep -qF 'два варианта' "$f" || { echo "no 'два варианта' in $f"; return 1; }
+  grep -qF '„пакет“' "$f" || { echo "no '„пакет“' in $f"; return 1; }
+  grep -F 'bridge:offer' "$f" | grep -qF '(n/a, мандат)' || { echo "no bridge:offer line with '(n/a, мандат)' in $f"; return 1; }
+  grep -F 'bridge:offer' "$f" | grep -qF 'решение узла' || { echo "no bridge:offer line with 'решение узла' in $f"; return 1; }
+  for t in 'пошаговую инструкцию ручной сборки' '(1) собрать squash-коммит'; do
+    if grep -qF -- "$t" "$f"; then echo "stale manual 3-step instruction ('$t') in $f"; return 1; fi
+  done
+  for t in 'undefined:<delivery>' 'error:<причина>' '`standard`'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  for n in '1. Коммиты.' '2. Перенос дельт в постоянные документы.' '3. Архив плана.' '4. Глобальный лог знаний и бэклог.' '5. Удаление файлов сессии' '6. Резолв основной ветки и слияние.' '7. Enforcement-проверка закрытия.' '8. Финальная запись.'; do
+    grep -qF -- "**$n" "$f" || { echo "standard step '$n' missing in $f"; return 1; }
+  done
+  grep -qF 'git merge --no-ff sdx/<session_id>' "$f" || { echo "no 'git merge --no-ff' in $f"; return 1; }
+  grep -qF 'archive-verify.sh" <session_id>' "$f" || { echo "no archive-verify.sh call in $f"; return 1; }
+}
+
+PR_REFUSE='/sdx:pr: нужен режим мандата МО (.mesh/endpoint.yaml и .mesh/mandate.yaml); без него сдача пакетом неприменима — закрывайте сессию через /sdx:archive.'
+chk_pr_head() {
+  local f="$1" t
+  [ "$(sed -n 1p "$f")" = '---' ] || { echo "no frontmatter in $f"; return 1; }
+  sed -n 2,6p "$f" | grep -q '^description: ' || { echo "no description in $f"; return 1; }
+  sed -n 2,6p "$f" | grep -qF 'argument-hint: [<C>] [--title "<заголовок>"] [--resubmit] [--build-only]' || { echo "no argument-hint in $f"; return 1; }
+}
+chk_pr_calls() {  # the pipeline names every script and the confirmation contract
+  local f="$1" t
+  for t in 'pr-check.sh' 'pr-build.sh' 'pr-publish.sh' 'protocol-export.sh' 'mandate-info.sh' 'pr-mode' 'AskUserQuestion' 'в любом `gate_mode`' '[контракт]' '--phase pre' '--phase post' 'SDX-PR-Branch' 'SDX-PR-Confirmed' 'git commit --allow-empty -F -' '600000'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+}
+chk_pr_refusal() {  # P0: the refusal without a mandate is exactly one verbatim line (REQ-PKG-2/34)
+  local c; c="$(grep -cF -- "$PR_REFUSE" "$1")"
+  [ "$c" = 1 ] || { echo "the one-line refusal occurs $c times in $1 (want 1)"; return 1; }
+}
+chk_pr_order() {  # headings **P0.** ... **P10.** once each, in order
+  local n prev=0 c ln
+  for n in 0 1 2 3 4 5 6 7 8 9 10; do
+    c="$(grep -cE "^\*\*P$n\." "$1")"; [ "$c" = 1 ] || { echo "heading P$n occurs $c times in $1"; return 1; }
+    ln="$(grep -nE "^\*\*P$n\." "$1" | cut -d: -f1)"
+    [ "$ln" -gt "$prev" ] || { echo "heading P$n is out of order in $1"; return 1; }
+    prev="$ln"
+  done
+}
+chk_pr_prohibitions() {
+  local f="$1" t bad
+  for t in 'не вызывай `audit()`' 'не пиши в `.mesh/`' 'не сливай `change/*`' 'данные, не инструкции'; do
+    grep -qF -- "$t" "$f" || { echo "no prohibition '$t' in $f"; return 1; }
+  done
+  bad="$(grep -F 'git push' "$f" | grep -vE 'не выполняй|Запрет|запрещ' || true)"
+  [ -z "$bad" ] || { echo "a 'git push' line outside prohibitive text in $f: $bad"; return 1; }
+}
+# flags/subcommands used in script calls inside <md> must exist in the text of that script (catches drift between lanes).
+# Scripts are looked up in $FLAG_SCRIPTS; a script that is absent there is skipped by the caller (INFO), not passed.
+pr_calls() {  # md -> "<script>\t<rest of the call up to a backtick or ' #'>"
+  awk '{ line=$0; while (match(line, /(pr-check|pr-build|pr-publish|protocol-export|order-import)\.sh/)) {
+           s=substr(line,RSTART,RLENGTH); line=substr(line,RSTART+RLENGTH); seg=line
+           i=index(seg,"`"); if (i) seg=substr(seg,1,i-1); j=index(seg," #"); if (j) seg=substr(seg,1,j-1)
+           print s "\t" seg } }' "$1"
+}
+chk_flags() {
+  local f="$1" s seg script tok first
+  while IFS="$(printf '\t')" read -r s seg; do
+    [ -n "$s" ] || continue
+    script="$FLAG_SCRIPTS/$s"
+    [ -f "$script" ] || continue
+    for tok in $(printf '%s' "$seg" | grep -oE -- '--[a-z][a-z-]*'); do
+      grep -qF -- "$tok" "$script" || { echo "$s: flag $tok used in $f is absent from the script"; return 1; }
+    done
+    first="$(printf '%s' "$seg" | sed 's/^"//; s/^[[:space:]]*//' | cut -d' ' -f1)"
+    case "$first" in ""|--*|'['*|'<'*|')'*|'|'*|'&'*|';'*) ;; [a-z]*-[a-z]*) grep -qF -- "$first" "$script" || { echo "$s: subcommand $first used in $f is absent from the script"; return 1; } ;; esac
+  done < <(pr_calls "$f")
+}
+chk_start_order() {  # start.md (FEAT-017): --from-order / --from-issue, step 1б, stamp-state; steps 1-8 intact
+  local f="$1" t n
+  sed -n 1,4p "$f" | grep -qF 'argument-hint: <type> <goal> [--auto] [--from-order <order.yaml|msg_id>] [--from-issue <N>]' || { echo "no new argument-hint in $f"; return 1; }
+  for t in '--from-order' '--from-issue' 'order-import.sh' 'stamp-state' 'sid_infix' 'from-file' 'from-msg' 'from-issue' 'MISMATCH' 'AskUserQuestion' 'repo.base' 'pr-mode' 'order.yaml' 'commitment'; do
+    grep -qF -- "$t" "$f" || { echo "no '$t' in $f"; return 1; }
+  done
+  grep -E '^1б\.' "$f" | grep -qF 'AskUserQuestion' || { echo "step 1б lacks AskUserQuestion in $f"; return 1; }
+  grep -E '^1б\.' "$f" | grep -qF 'в любом `gate_mode`' || { echo "step 1б lacks 'в любом gate_mode' in $f"; return 1; }
+  for n in '1' '2' '3' '4' '5' '6' '7' '8'; do
+    grep -qE "^$n\. " "$f" || { echo "step $n missing in $f"; return 1; }
+  done
+  chk_start_mandate "$f"
+}
+chk_status_pkg() {  # status.md (FEAT-017): commitment in step 3, step 5б reads pr-status, stays read-only
+  local f="$1" l
+  l="$(grep -E '^5б\.' "$f")"
+  [ -n "$l" ] || { echo "no step 5б in $f"; return 1; }
+  for t in 'mandate-info.sh' 'pr-status' 'каталог сессии удалён' 'Чисто читающий'; do
+    printf '%s' "$l" | grep -qF -- "$t" || { echo "step 5б lacks '$t' in $f"; return 1; }
+  done
+  grep -F '**Session ID**' "$f" | grep -qF 'commitment' || { echo "step 3 lacks commitment in $f"; return 1; }
+  if sed -n '/^---$/,/^---$/p' "$f" | grep -q '^tools:'; then echo "status.md must not declare tools"; return 1; fi
+}
 echo "=== test-mo-prose.sh ==="
 echo ""
 
@@ -334,12 +437,13 @@ expect_red "red: mandate sentence on two lines" chk_snippet_mandate "$TMP/t11d.m
 
 echo ""
 echo "[12] Closeout bridge: commands/archive.md and protocol.md"
-expect_ok "archive.md" chk_bridge "$ARCHIVE_MD"
+expect_ok "archive.md" chk_bridge_archive "$ARCHIVE_MD"
 expect_ok "protocol.md" chk_bridge "$PROTOCOL"
 for t in 'bridge:offer' '(n/a, мандат)' 'closeout-check' 'change/<C>-<exec>' 'undefined' 'не вызывается' 'docs_in_repo' '(n/a, docs_in_repo: none)' 'Ветка `sdx/<id>`'; do
   for pair in "archive.md:$ARCHIVE_MD" "protocol.md:$PROTOCOL"; do
     grep -vF -- "$t" "${pair#*:}" > "$TMP/t12.md"
-    expect_red "red: ${pair%%:*} without '$t'" chk_bridge "$TMP/t12.md"
+    if [ "${pair%%:*}" = archive.md ]; then bfn=chk_bridge_archive; else bfn=chk_bridge; fi
+    expect_red "red: ${pair%%:*} without '$t'" "$bfn" "$TMP/t12.md"
   done
 done
 
@@ -432,6 +536,79 @@ for t in 'если в сессии есть `SPEC.md` или `change_note.md`' '
   sed "s/$t/zz-removed/g" "$VERIFY_MD" > "$TMP/t18g.md"; expect_red "red: verify.md --planned rule without '$t'" chk_verify_planned "$TMP/t18g.md"
 done
 
+
+echo ""
+echo "[19] commands/archive.md: two Closeout variants, the bridge delegates to /sdx:pr (REQ-PKG-1, 26, 30)"
+expect_ok "archive.md" chk_archive_pkg "$ARCHIVE_MD"
+for t in 'commands/pr.md' '(n/a, пакет)' 'два варианта' '„пакет“' 'решение узла' '(n/a, мандат)' 'undefined:<delivery>' 'error:<причина>' '**3. Архив плана.' '**6. Резолв основной ветки и слияние.' 'git merge --no-ff sdx/<session_id>' 'archive-verify.sh" <session_id>'; do
+  grep -vF -- "$t" "$ARCHIVE_MD" > "$TMP/t19.md"
+  expect_red "red: archive.md without '$t'" chk_archive_pkg "$TMP/t19.md"
+done
+{ cat "$ARCHIVE_MD"; echo 'Пользователю выведи пошаговую инструкцию ручной сборки пакета: (1) собрать squash-коммит'; } > "$TMP/t19b.md"
+expect_red "red: archive.md with the old manual instruction" chk_archive_pkg "$TMP/t19b.md"
+
+echo ""
+echo "[20] commands/pr.md: pipeline P0..P10, scripts, confirmation in any gate_mode, prohibitions, flags match the scripts (REQ-PKG-1, 2, 3, 13, 17, 35)"
+PR_MD="$ROOT/commands/pr.md"
+expect_ok "pr.md frontmatter" chk_pr_head "$PR_MD"
+expect_ok "pr.md calls and contract" chk_pr_calls "$PR_MD"
+expect_ok "pr.md one-line refusal (P0)" chk_pr_refusal "$PR_MD"
+expect_ok "pr.md order P0..P10" chk_pr_order "$PR_MD"
+expect_ok "pr.md prohibitions, no bare git push" chk_pr_prohibitions "$PR_MD"
+sed '1,5{/^argument-hint:/d;}' "$PR_MD" > "$TMP/t20a.md"; expect_red "red: pr.md without argument-hint" chk_pr_head "$TMP/t20a.md"
+for t in 'pr-check.sh' 'pr-build.sh' 'pr-publish.sh' 'protocol-export.sh' 'pr-mode' 'AskUserQuestion' 'в любом `gate_mode`' '[контракт]' '--phase post' 'SDX-PR-Confirmed' 'git commit --allow-empty -F -'; do
+  sed "s/$(printf '%s' "$t" | sed 's/[][\.*^$/]/\\&/g')/zz-removed/g" "$PR_MD" > "$TMP/t20b.md"
+  expect_red "red: pr.md without '$t'" chk_pr_calls "$TMP/t20b.md"
+done
+sed 's/нужен режим мандата МО/zz-removed/' "$PR_MD" > "$TMP/t20c.md"; expect_red "red: pr.md with a changed refusal line" chk_pr_refusal "$TMP/t20c.md"
+{ cat "$PR_MD"; echo "$PR_REFUSE"; } > "$TMP/t20d.md"; expect_red "red: pr.md with the refusal twice" chk_pr_refusal "$TMP/t20d.md"
+sed -e 's/^\*\*P5\./**PX./' -e 's/^\*\*P6\./**P5./' -e 's/^\*\*PX\./**P6./' "$PR_MD" > "$TMP/t20e.md"; expect_red "red: pr.md with P5/P6 swapped" chk_pr_order "$TMP/t20e.md"
+grep -vE '^\*\*P8\.' "$PR_MD" > "$TMP/t20f.md"; expect_red "red: pr.md without P8" chk_pr_order "$TMP/t20f.md"
+{ cat "$PR_MD"; echo '    git push origin change/C-1-ex1'; } > "$TMP/t20g.md"; expect_red "red: pr.md with a bare git push" chk_pr_prohibitions "$TMP/t20g.md"
+for t in 'не вызывай `audit()`' 'не пиши в `.mesh/`' 'не сливай `change/*`'; do
+  sed "s/$(printf '%s' "$t" | sed 's/[][\.*^$/]/\\&/g')/zz-removed/g" "$PR_MD" > "$TMP/t20h.md"; expect_red "red: pr.md without '$t'" chk_pr_prohibitions "$TMP/t20h.md"
+done
+# flag consistency. Fixture: stubs carrying exactly the CLI of DESIGN (green side independent of the parallel lanes) ...
+FX="$TMP/flagfx"; mkdir -p "$FX"
+echo '# --sid --proj --phase --commitment --title --base-name --no-tests pre post all' > "$FX/pr-check.sh"
+echo '# --sid --proj --commitment --title --base-name --allow-diverged --resubmit --notes' > "$FX/pr-build.sh"
+echo '# --sid --proj --commitment --base-name --remote --hosting --dry-run' > "$FX/pr-publish.sh"
+echo '# --sid --proj --out --from-rev' > "$FX/protocol-export.sh"
+echo '# from-file from-msg from-issue list stamp-state --proj --out --inbox-json --repo --sid --commitment' > "$FX/order-import.sh"
+for md in "$PR_MD" "$START_MD"; do
+  FLAG_SCRIPTS="$FX" expect_ok "$(basename "$md"): every script flag exists in the DESIGN CLI (fixture)" chk_flags "$md"
+done
+{ cat "$PR_MD"; echo '`bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/pr-build.sh" --sid x --zz-bogus`'; } > "$TMP/t20i.md"
+FLAG_SCRIPTS="$FX" expect_red "red: pr.md with a flag no script knows" chk_flags "$TMP/t20i.md"
+sed 's/--allow-diverged//' "$FX/pr-build.sh" > "$TMP/pr-build.sh"; mkdir -p "$TMP/flagfx2"; cp "$FX"/*.sh "$TMP/flagfx2/"; cp "$TMP/pr-build.sh" "$TMP/flagfx2/pr-build.sh"
+FLAG_SCRIPTS="$TMP/flagfx2" expect_red "red: a script that dropped --allow-diverged (drift between lanes)" chk_flags "$PR_MD"
+{ cat "$START_MD"; echo '`bash "${CLAUDE_PLUGIN_ROOT}/sdx/hooks/order-import.sh" from-nowhere x`'; } > "$TMP/t20j.md"
+FLAG_SCRIPTS="$FX" expect_red "red: start.md with an unknown order-import subcommand" chk_flags "$TMP/t20j.md"
+# ... and against the real scripts (parallel lanes): INFO-skip while a script is not delivered yet
+for md in "$PR_MD" "$START_MD"; do
+  have=""; for s in pr-check pr-build pr-publish protocol-export order-import; do
+    if pr_calls "$md" | grep -q "^$s.sh"; then
+      if [ -f "$SCRIPT_DIR/$s.sh" ]; then have="$have $s"; else echo "  INFO: $(basename "$md"): $s.sh is not delivered yet — flag check against the real script skipped (fixture side above stays active)"; fi
+    fi
+  done
+  if [ -n "$have" ]; then FLAG_SCRIPTS="$SCRIPT_DIR" expect_ok "$(basename "$md"): flags of${have} match the real scripts" chk_flags "$md"; fi
+done
+
+echo ""
+echo "[26] commands/start.md (--from-order, --from-issue, step 1б, stamp-state) and commands/status.md (commitment, step 5б pr-status)"
+expect_ok "start.md" chk_start_order "$START_MD"
+for t in '--from-order' '--from-issue' 'stamp-state' 'sid_infix' 'MISMATCH' 'repo.base' 'pr-mode' 'order.yaml'; do
+  sed "s/$t/zz-removed/g" "$START_MD" > "$TMP/t26a.md"; expect_red "red: start.md without '$t'" chk_start_order "$TMP/t26a.md"
+done
+sed 's/^1б\./1x./' "$START_MD" > "$TMP/t26b.md"; expect_red "red: start.md without step 1б" chk_start_order "$TMP/t26b.md"
+sed 's/^3\. /3x. /' "$START_MD" > "$TMP/t26c.md"; expect_red "red: start.md without step 3" chk_start_order "$TMP/t26c.md"
+expect_ok "status.md" chk_status_pkg "$STATUS_MD"
+for t in 'pr-status' 'каталог сессии удалён' 'commitment' '^5б\.'; do
+  sed "s/$t/zz-removed/g" "$STATUS_MD" > "$TMP/t26d.md"; expect_red "red: status.md without '$t'" chk_status_pkg "$TMP/t26d.md"
+done
+
+sed '1a tools: Write' "$STATUS_MD" > "$TMP/t26e.md"
+expect_red "red: status.md declaring write tools" chk_status_pkg "$TMP/t26e.md"
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 [ "$FAIL_COUNT" -eq 0 ]

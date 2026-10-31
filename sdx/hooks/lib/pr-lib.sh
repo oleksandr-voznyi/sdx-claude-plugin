@@ -126,3 +126,74 @@ pr_hosting() {
   [ "$host" = github.com ] && PR_HOSTING=github
   return 0
 }
+
+# ===================================================================================================
+# Session history (D-5): after Closeout step 5 the session directory is gone from the working tree and from
+# the tip of sdx/<sid>; its files are read from the last commit that still had it.
+# ===================================================================================================
+
+# _pr_sid_ok <sid>: closed alphabet, no leading '.', no '..' (a sid reaches git paths and ref names)
+_pr_sid_ok() {
+  case "$1" in ""|.*|*..*|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  return 0
+}
+
+# pr_session_rev <proj> <sid> -> PR_SESS_REV: tip of sdx/<sid> if the session directory is still there, else the
+# parent of the commit that removed session_state.json. rc 1 (PR_ERR) when the directory never existed.
+pr_session_rev() {
+  local proj="$1" sid="$2" ref tip del path
+  PR_SESS_REV=""; PR_ERR=""
+  _pr_sid_ok "$sid" || { PR_ERR="session: недопустимый идентификатор сессии"; return 1; }
+  ref="refs/heads/sdx/$sid"
+  tip="$(git -C "$proj" rev-parse --verify -q "$ref^{commit}" 2>/dev/null)" || { PR_ERR="session: нет ветки sdx/$sid"; return 1; }
+  path=".claude/sessions/$sid/session_state.json"
+  if git -C "$proj" cat-file -e "$tip:$path" 2>/dev/null; then
+    PR_SESS_REV="$tip"; return 0
+  fi
+  del="$(git -C "$proj" log -n1 --format=%H --diff-filter=D "$ref" -- "$path" 2>/dev/null)"   # PKG-SESSREV
+  [ -n "$del" ] || { PR_ERR="session: каталог сессии не найден в истории sdx/$sid"; return 1; }
+  PR_SESS_REV="$(git -C "$proj" rev-parse --verify -q "$del^" 2>/dev/null)" || { PR_SESS_REV=""; PR_ERR="session: у коммита удаления нет родителя"; return 1; }
+  return 0
+}
+
+# pr_sess_cat <proj> <sid> <name>: a (flat-named) file of the session at PR_SESS_REV, on stdout. The revision is
+# recomputed on every call (the branch moves between pipeline steps). rc 1 if the session or the file is absent.
+pr_sess_cat() {
+  local proj="$1" sid="$2" name="$3"
+  case "$name" in ""|*/*|.*) PR_ERR="session: недопустимое имя файла"; return 1 ;; esac
+  pr_session_rev "$proj" "$sid" || return 1
+  git -C "$proj" cat-file -e "$PR_SESS_REV:.claude/sessions/$sid/$name" 2>/dev/null || { PR_ERR="session: файла $name нет в сессии"; return 1; }
+  git -C "$proj" show "$PR_SESS_REV:.claude/sessions/$sid/$name" 2>/dev/null
+}
+
+# pr_order_load <proj> <sid>: the order snapshot (order.yaml in OUR format, written by order-import.sh) ->
+# PR_O_COMMIT PR_O_TITLE PR_O_REQS PR_O_DUE PR_O_BASE PR_O_URL PR_O_HOSTING PR_O_BRANCH PR_O_DELIVERY PR_O_EXEC PR_O_DIGEST
+# PR_O_REPO PR_O_SOURCE PR_O_SOURCE_REF. rc 0 loaded | 1 no snapshot (all empty) | 2 unreadable (PR_ERR).
+# The caller's loaded document (MY_NORM, e.g. the mandate) is preserved.
+pr_order_load() {
+  local proj="$1" sid="$2" tmp saved rc
+  PR_O_COMMIT=""; PR_O_TITLE=""; PR_O_REQS=""; PR_O_DUE=""; PR_O_BASE=""; PR_O_URL=""; PR_O_HOSTING=""
+  PR_O_BRANCH=""; PR_O_DELIVERY=""; PR_O_EXEC=""; PR_O_DIGEST=""; PR_O_REPO=""; PR_O_SOURCE=""; PR_O_SOURCE_REF=""
+  tmp="$(mktemp "${TMPDIR:-/tmp}/sdx-pr-order.XXXXXX")" || { PR_ERR="order: не удалось создать временный файл"; return 2; }
+  if ! pr_sess_cat "$proj" "$sid" order.yaml > "$tmp" 2>/dev/null; then rm -f "$tmp"; PR_ERR=""; return 1; fi
+  saved="$MY_NORM"
+  my_load "$tmp"; rc=$?
+  rm -f "$tmp"
+  if [ "$rc" -ne 0 ]; then MY_NORM="$saved"; PR_ERR="order.yaml: $MY_ERR"; return 2; fi
+  _my_scalar order.commitment.id; PR_O_COMMIT="$MY_S"
+  _my_scalar order.commitment.title; PR_O_TITLE="$MY_S"
+  _my_scalar order.commitment.requirements; PR_O_REQS="$MY_S"
+  _my_scalar order.commitment.due; PR_O_DUE="$MY_S"
+  _my_scalar order.repo.base; PR_O_BASE="$MY_S"
+  _my_scalar order.repo.url; PR_O_URL="$MY_S"
+  _my_scalar order.repo.hosting; PR_O_HOSTING="$MY_S"
+  _my_scalar order.repo.id; PR_O_REPO="$MY_S"
+  _my_scalar order.deliver.branch; PR_O_BRANCH="$MY_S"
+  _my_scalar order.deliver.delivery; PR_O_DELIVERY="$MY_S"
+  _my_scalar order.executor; PR_O_EXEC="$MY_S"
+  _my_scalar order.mandate_digest; PR_O_DIGEST="$MY_S"
+  _my_scalar order.source; PR_O_SOURCE="$MY_S"
+  _my_scalar order.source_ref; PR_O_SOURCE_REF="$MY_S"
+  MY_NORM="$saved"
+  return 0
+}

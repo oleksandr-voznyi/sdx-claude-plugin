@@ -98,7 +98,7 @@ dev_advance() {   # <wc> <file> <line>
 }
 
 # ---------------------------------------------------------------------------------------------------- [C1]
-if want C1; then
+blk_C1() {
 echo "[C1] pre: green"
 newfx && {
   run_check "$WC" --phase pre
@@ -111,10 +111,10 @@ newfx && {
   eq "C1 every line has a known status prefix" "$(printf '%s\n' "$COUT" | grep -cvE '^(OK|FAIL|WARN|NOTE) [a-z.-]+: |^PR-CHECK ')" "0"
   eq "C1 the check wrote nothing (status clean, no new refs)" "$(gw status --porcelain)$(gw for-each-ref --format='%(refname)' 'refs/heads/change/*')" ""
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [C2]
-if want C2; then
+blk_C2() {
 echo "[C2] pre: blocks"
 blocks() {   # <case> <label> <FAIL id> : after the scenario was prepared in $WC
   local cs="$1" label="$2" id="$3"; shift 3
@@ -154,10 +154,10 @@ case_on url && newfx && {
   eq "C2 url: nothing was executed (no MARK file)" "$(ls "$WC/MARK" "$PWD/MARK" 2>/dev/null | wc -l | tr -d ' ')" "0"
 }
 case_on digest && newfx && { mand_edit "/^  digest: /d"; blocks digest "no digest in the mandate" mandate.digest; }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [C3]
-if want C3; then
+blk_C3() {
 echo "[C3] pre: confirmation needed"
 warns() {   # <label> <WARN id>...
   local label="$1"; shift
@@ -186,7 +186,7 @@ case_on none && newfx && {
   eq "C3 docs_in_repo none: rc 0 although the registry is untouched" "$CRC" "0"
   eq "C3 docs_in_repo none: no adr.registry WARN" "$(printf '%s\n' "$COUT" | grep -c '^WARN adr.registry')" "0"
 }
-fi
+}
 
 # build_pkg <wc>: a package from pr-build.sh (the green side of `post`)
 build_pkg() {
@@ -202,7 +202,7 @@ verdict_of() {   # the verdict of the last run: PASS | WARN | FAIL
 }
 
 # ---------------------------------------------------------------------------------------------------- [C4]
-if want C4; then
+blk_C4() {
 echo "[C4] post: green on a package from pr-build.sh"
 newfx && {
   build_pkg "$WC"
@@ -217,7 +217,7 @@ newfx && {
   oracle_of "$WC" "$BR"
   if [ "$ORACLE" != SKIP ]; then eq "C4 the oracle (audit()) says approve" "$ORACLE" "approve"; fi
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [C5]
 KINDS="extra_commit foreign_file bad_archive out_of_scope shared_undeclared session_dir format2 manifest_in_head fake_scope secret_notes wrong_commitment wrong_executor wrong_digest no_adr"
@@ -256,7 +256,7 @@ oracle_expected() {
   esac
 }
 CRAFT_LOG="$TMP/craft.log"; : > "$CRAFT_LOG"
-if want C5 || want C6; then
+blk_C5() {
 echo "[C5] post: red sides (packages crafted by plumbing, independent of pr-build.sh)"
 newfx && {
   for k in $KINDS; do
@@ -281,10 +281,11 @@ newfx && {
   eq "C5 no package branch: FAIL (rc 1)" "$CRC" "1"
   expect_line "C5 no package branch" FAIL pkg.ref
 }
-fi
+  if want C6; then blk_C6; fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [C6]
-if want C6; then
+blk_C6() {
 echo "[C6] parity with the oracle: oracle != approve <=> pr-check post != PASS"
 parity_mismatches() {   # [substitute oracle verdict]: how many logged packages break the equivalence
   local k v o n=0
@@ -313,10 +314,10 @@ elif [ -s "$CRAFT_LOG" ]; then
 else
   fail "C6 the craft log is empty" "C5 did not run (PR_CHECK_ONLY must include C5 with C6)"
 fi
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [C7]
-if want C7; then
+blk_C7() {
 echo "[C7] all = pre then post; --no-tests; hostile values"
 newfx && {   # nothing built yet: pre is green, post cannot find the package
   run_check "$WC" --phase all
@@ -358,9 +359,26 @@ newfx && {   # hostile mandate value: ESC must not reach the output
   eq "C7 no ESC byte in the output" "$(printf '%s' "$COUT$CERR" | LC_ALL=C grep -c "$esc")" "0"
   eq "C7 every output line is a status line (no injected line)" "$(printf '%s\n' "$COUT" | grep -cvE '^(OK|FAIL|WARN|NOTE) [a-z.-]+: |^PR-CHECK ')" "0"
 }
-fi
+}
 
 # @@TAIL@@
+# ---- the blocks are independent (each builds its own fixture copy): run them concurrently, print in the declared order ----
+run_blocks() {
+  local b
+  for b in "$@"; do
+    case $b in C5) want C5 || want C6 || continue ;; *) want "$b" || continue ;; esac
+    ( TMP="$TMP/blk-$b"; mkdir -p "$TMP"; "blk_$b" ) > "$TMP/out-$b.txt" 2>&1 &
+  done
+  wait
+  for b in "$@"; do
+    case $b in C5) want C5 || want C6 || continue ;; *) want "$b" || continue ;; esac
+    cat "$TMP/out-$b.txt"
+    PASS_COUNT=$((PASS_COUNT + $(grep -c "^  PASS: " "$TMP/out-$b.txt")))
+    FAIL_COUNT=$((FAIL_COUNT + $(grep -c "^  FAIL: " "$TMP/out-$b.txt")))
+  done
+}
+run_blocks C1 C2 C3 C4 C5 C7
+
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 [ "$FAIL_COUNT" -eq 0 ]

@@ -40,7 +40,16 @@ git -C "$proj" rev-parse --git-dir >/dev/null 2>&1 || { echo "pr-check: $proj н
 proj="$(cd "$proj" && pwd)"
 
 nfail=0; nwarn=0
-emit() { pr_clean "$3" 300; printf '%s %s: %s\n' "$1" "$2" "$PR_CLEAN"; }
+# emit <STATUS> <id> <text>: the text is DATA-adjacent (it quotes mandate, order and manifest values): a text with control characters or
+# Unicode line separators goes through pr_clean; a clean one (the common case) is printed as is — no fork per line
+emit() {
+  local LC_ALL=C t="$3"
+  case "$t" in
+    *[[:cntrl:]]*|*$'\342\200\250'*|*$'\342\200\251'*|*$'\302\205'*) pr_clean "$t" 300; t="$PR_CLEAN" ;;
+    *) [ ${#t} -le 300 ] || { pr_clean "$t" 300; t="$PR_CLEAN"; } ;;
+  esac
+  printf '%s %s: %s\n' "$1" "$2" "$t"
+}
 ok() { emit OK "$1" "$2"; }
 note() { emit NOTE "$1" "$2"; }
 fail() { emit FAIL "$1" "$2"; nfail=$((nfail + 1)); }
@@ -247,7 +256,7 @@ pre_tests() {
 # the built package (post): reads refs/heads/<branch>, its CHANGE.yaml, and judges the package by the same formal checks
 # as audit() of the node
 phase_post() {
-  local tip mtmp man_text parents changed asha mb mb2 f
+  local tip mtmp man_text parents changed asha mb mb2 f bad
   tip="$(git -C "$proj" rev-parse --verify -q "refs/heads/$PR_BRANCH^{commit}" 2>/dev/null)"
   if [ -z "$tip" ]; then fail pkg.ref "ветка $PR_BRANCH не собрана (сначала pr-build)"; return 0; fi
   [ "$phase" != post ] || check_mandate   # `post` alone repeats these: the branch and the term may have changed since the confirmations
@@ -290,7 +299,47 @@ phase_post() {
   else
     fail manifest.identity "commitment/executor/mandate_digest манифеста ('$M_C'/'$M_EXEC'/'$M_DIGEST') не совпадают с заказом и мандатом ('$PR_C'/'$PR_EXEC'/'$PR_DIGEST')"
   fi
-  # @@POST-CONTENT@@
+  # the identity of the delivery: recomputed from head, as the node does (DEV:391-394)
+  asha="$(git -C "$proj" -c tar.umask=0002 archive --format=tar "$M_HEAD" 2>/dev/null | pr_sha256)"
+  if [ -n "$M_ASHA" ] && [ "$M_ASHA" = "$asha" ]; then ok manifest.archive "archive_sha256 совпадает с пересчётом от head"   # PKG-C-ARCHIVE
+  else fail manifest.archive "archive_sha256 манифеста ('${M_ASHA:-—}') не совпадает с пересчётом от head ('${asha:-—}')"; fi
+  # the declared list of touched files against the real diff merge-base(head, base)..head; touches_shared against shared_paths
+  mb="$(git -C "$proj" merge-base "$M_HEAD" "$PR_BASE_SHA" 2>/dev/null)"
+  if [ -z "$mb" ]; then fail manifest.scope "у head и $PR_BASE_NAME нет общего предка"
+  elif ! pr_files "$proj" "$mb" "$M_HEAD"; then fail manifest.scope "$PR_ERR"
+  else
+    if [ "$(printf '%s\n' "$M_SCOPE" | LC_ALL=C sort -u | grep .)" = "$(printf '%s\n' "$PR_FILES" | LC_ALL=C sort -u | grep .)" ]; then
+      ok manifest.scope "scope_touched совпадает с диффом base..head"
+    else
+      fail manifest.scope "scope_touched манифеста не совпадает с фактическим диффом base..head (в манифесте $(printf '%s\n' "$M_SCOPE" | grep -c .), в диффе $(printf '%s\n' "$PR_FILES" | grep -c .))"
+    fi
+    pr_scope_eval
+    if [ -n "$PR_SHARED" ] && [ "$M_SHARED" != true ]; then   # PKG-C-SHARED
+      _flist "$PR_SHARED"; fail manifest.shared "пакет правит shared_paths ($FLIST), а touches_shared в манифесте не true"
+    elif [ -z "$PR_SHARED" ] && [ "$M_SHARED" = true ]; then note manifest.shared "touches_shared: true, хотя shared_paths пакет не задевает"
+    else ok manifest.shared "touches_shared согласован с shared_paths"; fi
+    if [ "$PR_DOCS_MODE" = none ]; then
+      note manifest.adr "docs_in_repo: none — adr не требуется"
+    else
+      bad=""
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        case $'\n'"$PR_FILES"$'\n' in *$'\n'"${f%%#*}"$'\n'*) ;; *) bad="$bad ${f%%#*}" ;; esac
+      done <<< "$M_ADR"
+      if [ -z "$M_ADR" ]; then warn manifest.adr "adr пуст при docs_in_repo: final — запись в реестр решений обязательна (REQ-PKG-26)"
+      elif [ -n "$bad" ]; then warn manifest.adr "файл реестра из adr не изменён в пакете:$bad"
+      else ok manifest.adr "adr указывает на изменённый в пакете реестр"; fi
+    fi
+  fi
+  if pr_has_secret "$man_text"; then fail manifest.secret "в тексте CHANGE.yaml есть то, что похоже на секрет"; else ok manifest.secret "секретов в манифесте не найдено"; fi
+  # the package itself: base..tip without the manifest
+  mb2="$(git -C "$proj" merge-base "$tip" "$PR_BASE_SHA" 2>/dev/null)"
+  if [ -z "$mb2" ] || ! pr_files "$proj" "$mb2" "$tip"; then fail pkg.nonempty "${PR_ERR:-у пакета и $PR_BASE_NAME нет общего предка}"; return 0; fi
+  PR_FILES="$(printf '%s\n' "$PR_FILES" | grep -vx 'CHANGE.yaml')"
+  if [ -n "$PR_FILES" ]; then ok pkg.nonempty "файлов в пакете: $(printf '%s\n' "$PR_FILES" | grep -c .)"; else fail pkg.nonempty "пакет без изменений кода"; fi
+  pr_scope_eval
+  if [ -n "$PR_SESSF" ]; then _flist "$PR_SESSF"; fail pkg.session "в пакете каталог сессии: $FLIST"; else ok pkg.session "каталога сессии в пакете нет"; fi
+  if [ -n "$PR_OUT" ]; then _flist "$PR_OUT"; fail pkg.scope "в пакете файлы вне области мандата: $FLIST"; else ok pkg.scope "все файлы пакета в области мандата"; fi
 }
 
 case "$phase" in

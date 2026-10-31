@@ -111,7 +111,7 @@ oracle_expect() {   # <label> <wc> <branch> <expected>
 }
 
 # ---------------------------------------------------------------------------------------------------- [B7]
-if want B7; then
+blk_B7() {
 echo "[B7] refusals"
 b7on() { [ -z "${PR_BUILD_B7:-}" ] && return 0; case " $PR_BUILD_B7 " in *" $1 "*) return 0 ;; esac; return 1; }   # PR_BUILD_B7="chg empty": only these cases (mutation runs)
 refuse() {   # <label> <expected rc> <expected stderr fragment> [args]
@@ -158,10 +158,10 @@ b7on ident && newfx && {
 }
 b7on usage1 && newfx && { BOUT="$(bash "$SUT" --proj "$WC" 2>&1)"; BRC=$?; eq "B7 no --sid: rc 2 (usage)" "$BRC" "2"; }
 b7on usage2 && newfx && { BOUT="$(bash "$SUT" --sid s1 --proj "$WC" --bogus 2>&1)"; BRC=$?; eq "B7 unknown flag: rc 2 (usage)" "$BRC" "2"; }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B9]
-if want B9; then
+blk_B9() {
 echo "[B9] diverged base"
 newfx && {
   dev_advance "$WC" src/core/b.js "b=2"
@@ -183,10 +183,10 @@ newfx && {
   has "B9 conflict message tells to merge dev into the session branch" "$BERR" "слейте"
   eq "B9 nothing created on a conflict" "$(gw for-each-ref --format='%(refname)' 'refs/heads/change/*')" ""
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B8a]
-if want B8a; then
+blk_B8a() {
 echo "[B8a] re-submission before the manifest"
 BR=change/C-ACME-001-ex1
 newfx && {
@@ -206,7 +206,7 @@ newfx && {
   run_build "$WC" --resubmit; eq "B8a non-package change/* with the flag: rc 1" "$BRC" "1"
   eq "B8a the foreign branch is untouched" "$(gw rev-parse "refs/heads/$BR")" "$(gw rev-parse refs/heads/dev)"
 }
-fi
+}
 
 # manifest helpers: mf_load <wc> <tip> loads CHANGE.yaml of the tip with miniyaml; mf <key> prints a scalar, mfl <key> a list
 mf_load() { git -C "$1" show "$2:CHANGE.yaml" > "$TMP/m.yaml" 2>/dev/null; my_load "$TMP/m.yaml"; }
@@ -216,7 +216,7 @@ REG_ADR="docs/DECISIONS.md#ADR-099"
 BR=change/C-ACME-001-ex1
 
 # ---------------------------------------------------------------------------------------------------- [B1]
-if want B1; then
+blk_B1() {
 echo "[B1] golden path"
 newfx && {
   run_build "$WC"
@@ -239,10 +239,10 @@ newfx && {
   oracle_of "$WC" change/damaged
   if [ "$ORACLE" = SKIP ]; then :; elif [ "$ORACLE" != approve ]; then pass "B1 negative: the oracle rejects a damaged package ($ORACLE)"; else fail "B1 negative" "the oracle approved a damaged package"; fi
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B2]
-if want B2; then
+blk_B2() {
 echo "[B2] plumbing invariants"
 newfx && {
   snap() { { gw symbolic-ref HEAD; gw status --porcelain; gw ls-files -s; gw rev-parse refs/heads/sdx/s1 refs/heads/dev; gw for-each-ref --format='%(refname)' refs/heads refs/tags; } 2>&1; }
@@ -258,10 +258,10 @@ newfx && {
   eq "B2 the new ref is the only addition" "$(gw for-each-ref --format='%(refname)' refs/heads | grep -c "^refs/heads/change/")" "1"
   eq "B2 no stray temporary index left in TMPDIR by the run" "$(ls "${TMPDIR:-/tmp}"/sdx-pr-idx.* 2>/dev/null | wc -l | tr -d ' ')" "0"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B3]
-if want B3; then
+blk_B3() {
 echo "[B3] archive_sha256"
 newfx && {
   run_build "$WC"
@@ -273,10 +273,10 @@ newfx && {
   eq "B3 = the same sum recomputed in an INDEPENDENT clone" "$(git -C "$TMP/clone3" archive --format=tar "$head" 2>/dev/null | _pkg_sha256)" "$asha"
   eq "B3 != the sum over the tip (the manifest commit is not part of the identity)" "$([ "$(gw archive --format=tar "$(jv .tip)" | _pkg_sha256)" != "$asha" ] && echo differs)" "differs"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B4]
-if want B4; then
+blk_B4() {
 echo "[B4] scope_touched (generated files included) and touches_shared"
 newfx && {
   run_build "$WC"
@@ -293,10 +293,10 @@ newfx && {
   eq "B4 touches_shared false when no shared path is touched" "$(mf touches_shared)" "false"
   eq "B4 ... the lock file is still listed in scope_touched" "$(mfl scope_touched | grep -c '^package-lock.json$')" "1"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B5]
-if want B5; then
+blk_B5() {
 echo "[B5] adr, spec, verify, docs"
 newfx && {
   run_build "$WC"
@@ -345,10 +345,10 @@ newfx && {   # no verification report at all
   mf_load "$WC" "$(jv .tip)"; _my_scalar change.verify.tests; t="$MY_S"; _my_scalar change.verify.report
   eq "B5 no report -> verify.tests unknown, verify.report empty" "$t/$MY_S" "unknown/"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B11]
-if want B11; then
+blk_B11() {
 echo "[B11] the package does not carry the session"
 newfx && {
   run_build "$WC"
@@ -357,7 +357,7 @@ newfx && {
   eq "B11 no protocol.yaml anywhere in the tip tree" "$(printf '%s\n' "$lst" | grep -cE '(^|/)protocol\.yaml$')" "0"
   eq "B11 tip tree has CHANGE.yaml at the root" "$(printf '%s\n' "$lst" | grep -cx 'CHANGE.yaml')" "1"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B6]
 yaml_json() {   # <file> -> JSON of yaml.safe_load on stdout; rc 77 without python3/PyYAML (the oracle)
@@ -369,7 +369,7 @@ except ImportError:
     sys.exit(77)
 print(json.dumps(yaml.safe_load(open(sys.argv[1], encoding="utf-8")), ensure_ascii=False))' "$1"
 }
-if want B6; then
+blk_B6() {
 echo "[B6] escaping: hostile values survive the round trip through miniyaml and yaml.safe_load"
 HOSTILE_NOTES=$'Say "hi" \\ back: colon # hash \'q\' {} - dash [x] Привет\nsecond line'
 HOSTILE_PATH="src/mod1/q\"b\\c: d #e 'f' {g} - h Привет.js"
@@ -394,14 +394,14 @@ newfx && {
     eq "B6 yaml.safe_load: format is the number 1" "$(jq -r '.change.format' "$TMP/hostile.json")" "1"
   fi
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B10]
 mk_plugin() {   # <dir>: a copy of the script under test with its lib/ and the vendored template -> SUTX
   mkdir -p "$1/hooks" "$1/mo" && cp -Rp "$(dirname "$SUT")/lib" "$1/hooks/lib" && cp "$SUT" "$1/hooks/pr-build.sh" \
     && cp "$ROOT/sdx/mo/CHANGE.template.yaml" "$1/mo/CHANGE.template.yaml"
 }
-if want B10; then
+blk_B10() {
 echo "[B10] template-driven generation"
 tpl_keys() { grep -E '^  [a-z0-9_]+:' "$1" | sed 's/^  \([a-z0-9_]*\):.*/\1/' | tr '\n' ' '; }
 newfx && {
@@ -426,10 +426,10 @@ newfx && {
   eq "B10 ... the manifest has no adr key" "$(gw show "$(jv .tip):CHANGE.yaml" 2>/dev/null | grep -c '^  adr:')" "0"
   eq "B10 ... and keeps the other keys" "$(gw show "$(jv .tip):CHANGE.yaml" 2>/dev/null | grep -c '^  docs:')" "1"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B12]
-if want B12; then
+blk_B12() {
 echo "[B12] the manifest commit sits on head"
 newfx && {
   run_build "$WC"
@@ -440,10 +440,10 @@ newfx && {
   eq "B12 its subject" "$(gw log -n1 --format=%s "$tip")" "SDX: CHANGE.yaml (C-ACME-001)"
   eq "B12 the manifest names the head" "$(mf_load "$WC" "$tip"; mf head)" "$head"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [B8]
-if want B8; then
+blk_B8() {
 echo "[B8] race on the package ref (compare-and-swap)"
 mk_shim() {   # <dir> <wc> <target-sha>: a fake git that creates the ref behind pr-build's back at the manifest commit
   mkdir -p "$1"
@@ -467,21 +467,22 @@ newfx && {
   eq "B8 re-submission raced: rc 1" "$BRC" "1"
   eq "B8 ... the ref keeps the foreign value" "$(gw rev-parse "refs/heads/$BR")" "$dev"
 }
-fi
+}
 
 # ---------------------------------------------------------------------------------------------------- [Port]
-if want Port; then
+blk_Port() {
 echo "[Port] portability (BUG-010) and the absence of forbidden constructs in pr-build.sh"
 FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path|[A-Za-z_]=\(|\[@\]'
 if grep -nE "$FORBID" "$SUT" >/dev/null 2>&1; then fail "pr-build.sh portability" "forbidden: $(grep -nE "$FORBID" "$SUT" | head -3)"; else pass "pr-build.sh has no bash-4-only construct, no arrays, no GNU-only calls"; fi
 sed 's/^here=/mapfile -t x < \/dev\/null; here=/' "$SUT" > "$TMP/port-mut.sh"
 if ! cmp -s "$SUT" "$TMP/port-mut.sh" && grep -qE "$FORBID" "$TMP/port-mut.sh"; then pass "red side: the same grep flags a mutant with a bash-4 construct"; else fail "red side of the portability grep" "mutant not flagged"; fi
 if grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" >/dev/null 2>&1; then fail "pr-build.sh forbidden words" "$(grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" | head -3)"; else pass "no python / eval / checkout / worktree in pr-build.sh"; fi
-fi
+}
 
 # @@TAIL@@
 # ---------------------------------------------------------------------------------------------------- [Mut]
-if [ -z "${PR_BUILD_NESTED:-}" ] && want Mut; then
+blk_Mut() {
+[ -z "${PR_BUILD_NESTED:-}" ] || return 0
 echo "[Mut] mutation runs: each mutant (a copy of pr-build.sh + lib/ + the template in a temp dir) must differ from the original and turn its block red"
 MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
 OWNED="sdx/hooks/pr-build.sh sdx/hooks/lib sdx/mo"
@@ -518,7 +519,24 @@ for name in $MUT_NAMES; do
   fi
 done
 eq "[Mut] the checkout (pr-build.sh, lib/, sdx/mo) is untouched by the mutation runs" "$(git -C "$ROOT" status --porcelain -- $OWNED)" "$ST_BEFORE"
-fi
+}
+
+# ---- the blocks are independent (each builds its own fixture copy): run them concurrently, print in the declared order ----
+run_blocks() {
+  local b
+  for b in "$@"; do
+    want "$b" || continue
+    ( TMP="$TMP/blk-$b"; mkdir -p "$TMP"; "blk_$b" ) > "$TMP/out-$b.txt" 2>&1 &
+  done
+  wait
+  for b in "$@"; do
+    want "$b" || continue
+    cat "$TMP/out-$b.txt"
+    PASS_COUNT=$((PASS_COUNT + $(grep -c "^  PASS: " "$TMP/out-$b.txt")))
+    FAIL_COUNT=$((FAIL_COUNT + $(grep -c "^  FAIL: " "$TMP/out-$b.txt")))
+  done
+}
+run_blocks B7 B9 B8a B1 B2 B3 B4 B5 B6 B10 B12 B8 B11 Port Mut
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

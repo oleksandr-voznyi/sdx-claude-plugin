@@ -263,3 +263,32 @@ pr_scope_eval() {
   done <<< "$PR_FILES"
   return 0
 }
+
+# pr_registry <proj> <base> <head>: the decision registry touched by the change; reads $PR_FILES (changed paths).
+#   PR_REG_STATE  one | none | ambiguous      PR_REG_PATH  the file (state one)      PR_REG_CAND  candidates (ambiguous)
+#   PR_REG_ANCHORS  "<file>#<TOKEN>" per heading added by the diff, TOKEN = first [A-Z]+-[0-9]+ of the heading
+# docs/DECISIONS.md has priority; otherwise exactly one changed docs/**/{DECISIONS,decisions}*.md (default of Q-7).
+pr_registry() {
+  local LC_ALL=C proj="$1" base="$2" head="$3" f b n=0 cand="" reg="" h tok a
+  PR_REG_PATH=""; PR_REG_STATE=none; PR_REG_ANCHORS=""; PR_REG_CAND=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if [ "$f" = docs/DECISIONS.md ]; then reg="$f"; continue; fi
+    case "$f" in
+      docs/*) b="${f##*/}"
+              case "$b" in DECISIONS*.md|decisions*.md) n=$((n + 1)); cand="$cand${cand:+$'\n'}$f" ;; esac ;;
+    esac
+  done <<< "$PR_FILES"
+  if [ -n "$reg" ]; then PR_REG_STATE=one; PR_REG_PATH="$reg"
+  elif [ "$n" -eq 1 ]; then PR_REG_STATE=one; PR_REG_PATH="$cand"
+  elif [ "$n" -gt 1 ]; then PR_REG_STATE=ambiguous; PR_REG_CAND="$cand"; fi
+  [ "$PR_REG_STATE" = one ] || return 0
+  while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    tok="$(printf '%s\n' "$h" | grep -oE '[A-Z]+-[0-9]+' | head -n1)"
+    [ -n "$tok" ] || continue
+    a="$PR_REG_PATH#$tok"
+    case $'\n'"$PR_REG_ANCHORS"$'\n' in *$'\n'"$a"$'\n'*) ;; *) PR_REG_ANCHORS="$PR_REG_ANCHORS${PR_REG_ANCHORS:+$'\n'}$a" ;; esac
+  done <<< "$(git -C "$proj" diff -U0 --no-renames "$base" "$head" -- "$PR_REG_PATH" 2>/dev/null | grep '^+#')"
+  return 0
+}

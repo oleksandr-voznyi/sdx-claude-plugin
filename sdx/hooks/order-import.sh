@@ -14,7 +14,7 @@
 # set -e is deliberately not used: every failure is handled where it happens.
 set -uo pipefail
 
-here="${BASH_SOURCE[0]%/*}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v jq >/dev/null 2>&1 || { echo "order-import: jq не найден — приём заказа невозможен (fail-closed)." >&2; exit 2; }
 # shellcheck disable=SC1091
 . "$here/lib/pr-lib.sh"
@@ -154,20 +154,89 @@ oi_read_doc() {
   fi
 }
 
-# oi_accept <file> <source> <source-ref>: parse + print the flat JSON (validation is added in the next stages)
+OI_WARN=""
+oi_warn() { OI_WARN="$OI_WARN${OI_WARN:+$'\n'}$1"; }
+
+# oi_clean_field <label> <path> <max> [list-ok]: O_V = the cleaned value; a warning when it was cut
+oi_clean_field() {
+  local full
+  oi_need_scalar "$2" "${4:-}"
+  pr_clean "$OI_V" 100000; full="$PR_CLEAN"
+  pr_clean "$OI_V" "$3"; O_V="$PR_CLEAN"
+  [ "$full" = "$O_V" ] || oi_warn "$1: усечено до $3 знаков"
+  O_FULL="$full"
+}
+
+# oi_validate: the checks of the DESIGN order, on the loaded document -> O_* variables (rc: exit 1 with the field named)
+oi_validate() {
+  local v
+  oi_need_scalar action;  [ "$OI_V" = work.order ] || refuse "action: ожидается work.order"
+  oi_need_scalar format;  [ "$OI_V" = 1 ] || refuse "format: ожидается 1"
+  # identifiers: a closed alphabet, the field is named (REQ-PKG-10)
+  oi_need_scalar commitment.id; O_C="$OI_V"
+  pr_valid_id "$O_C" || { _pr_id_err commitment.id "$O_C"; refuse "$PR_ERR"; }           # PKG-O-ID
+  oi_need_scalar executor; O_EXEC="$OI_V"
+  pr_valid_id "$O_EXEC" || { _pr_id_err executor "$O_EXEC"; refuse "$PR_ERR"; }
+  # free text: one line, no control characters, cut; a secret is refused
+  oi_clean_field title commitment.title 200; O_TITLE="$O_V"; v="$O_FULL"
+  [ -n "$O_TITLE" ] || refuse "commitment.title: не задан"
+  pr_has_secret "$v" && refuse "commitment.title: похоже на секрет"
+  oi_clean_field requirements commitment.requirements 4000 list-ok; O_REQS="$O_V"
+  pr_has_secret "$O_FULL" && refuse "commitment.requirements: похоже на секрет"
+  # due
+  oi_need_scalar commitment.due; v="$OI_V"; O_DUE=""
+  if [ -n "$v" ]; then
+    case "${v:0:10}" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) O_DUE="${v:0:10}" ;;
+      *) pr_clean "$v" 24; refuse "commitment.due: ожидается дата ГГГГ-ММ-ДД, получено '$PR_CLEAN'" ;;
+    esac
+  fi
+  oi_clean_field kind commitment.kind 64; O_KIND="$O_V"
+  oi_clean_field creditor commitment.creditor 120; O_CRED="$O_V"
+  # repository
+  oi_clean_field repo.id repo.id 64; O_RID="$O_V"
+  oi_need_scalar repo.base; O_BASE="$OI_V"
+  if [ -n "$O_BASE" ]; then
+    case "$O_BASE" in -*|*[[:space:]]*|*[[:cntrl:]]*|*'@{'*|*\\*) pr_clean "$O_BASE" 40; refuse "repo.base: недопустимое имя ветки '$PR_CLEAN'" ;; esac
+    git check-ref-format "refs/heads/$O_BASE" 2>/dev/null || { pr_clean "$O_BASE" 40; refuse "repo.base: недопустимое имя ветки '$PR_CLEAN'"; }
+  fi
+  oi_need_scalar repo.url; O_URL="$OI_V"
+  if [ -n "$O_URL" ]; then
+    pr_url_ok "$O_URL" || refuse "repo.url: недопустимая схема или символы (разрешены ssh, https, http, file, scp-вид, абсолютный путь)"
+    pr_url_show "$O_URL"
+    if [ "$PR_URLS" != "$O_URL" ]; then oi_warn "repo.url: учётные данные удалены из адреса"; O_URL="$PR_URLS"; fi
+  fi
+  oi_need_scalar repo.hosting; O_HOST=""
+  case "$OI_V" in
+    github|bare) O_HOST="$OI_V" ;;
+    "") ;;
+    *) pr_clean "$OI_V" 24; oi_warn "repo.hosting: значение '$PR_CLEAN' не распознано, игнорируется" ;;
+  esac
+  # delivery
+  oi_need_scalar deliver.branch; pr_clean "$OI_V" 120; O_BRANCH="$PR_CLEAN"
+  oi_need_scalar deliver.delivery; O_DELIV="$OI_V"
+  case "$O_DELIV" in
+    ""|[a-z]*) case "$O_DELIV" in *[!a-z._-]*) pr_clean "$O_DELIV" 24; refuse "deliver.delivery: недопустимое значение '$PR_CLEAN'" ;; esac ;;
+    *) pr_clean "$O_DELIV" 24; refuse "deliver.delivery: недопустимое значение '$PR_CLEAN'" ;;
+  esac
+  oi_need_scalar mandate_digest; pr_clean "$OI_V" 64; O_DIGEST="$PR_CLEAN"
+  O_INFIX="${O_C:0:40}"
+}
+
+# oi_flat <source> <source-ref>: the flat JSON of the DESIGN on stdout
+oi_flat() {
+  jq -n --arg source "$1" --arg source_ref "$2" --arg commitment "$O_C" --arg title "$O_TITLE" --arg executor "$O_EXEC" \
+    --arg repo_base "$O_BASE" --arg repo_url "$O_URL" --arg branch "$O_BRANCH" --arg delivery "$O_DELIV" --arg due "$O_DUE" \
+    --arg sid_infix "$O_INFIX" --arg warn "$OI_WARN" \
+    '{source:$source, source_ref:$source_ref, commitment:$commitment, title:$title, executor:$executor, repo_base:$repo_base, repo_url:$repo_url,
+      branch:$branch, delivery:$delivery, due:$due, sid_infix:$sid_infix, warnings:($warn | split("\n") | map(select(length > 0)))}'
+}
+
+# oi_accept <file> <source> <source-ref>
 oi_accept() {
   oi_read_doc "$1"
-  oi_need_scalar commitment.id; local c="$OI_V"
-  oi_need_scalar commitment.title; local t="$OI_V"
-  oi_need_scalar executor; local ex="$OI_V"
-  oi_need_scalar repo.base; local rb="$OI_V"
-  oi_need_scalar repo.url; local ru="$OI_V"
-  oi_need_scalar deliver.branch; local br="$OI_V"
-  oi_need_scalar deliver.delivery; local dl="$OI_V"
-  oi_need_scalar commitment.due; local due="$OI_V"
-  jq -n --arg source "$2" --arg source_ref "$3" --arg commitment "$c" --arg title "$t" --arg executor "$ex" \
-    --arg repo_base "$rb" --arg repo_url "$ru" --arg branch "$br" --arg delivery "$dl" --arg due "$due" \
-    '{source:$source, source_ref:$source_ref, commitment:$commitment, title:$title, executor:$executor, repo_base:$repo_base, repo_url:$repo_url, branch:$branch, delivery:$delivery, due:$due}'
+  oi_validate
+  oi_flat "$2" "$3"
 }
 
 usage() {

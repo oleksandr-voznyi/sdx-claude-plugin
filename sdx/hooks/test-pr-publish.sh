@@ -16,7 +16,7 @@
 #  [P7] credentials of https://u:p@host/x.git never reach stdout / stderr / JSON (--dry-run)
 #  [Port] portability of pr-publish.sh (BUG-010), no force/all/mirror/tags/+refspec; red side
 #  [Mut] mutation runs (copies of pr-publish.sh + lib/ + prod-guard.sh in a temp dir, anchors "# PKG-P-*")
-# Env: PR_PUBLISH_ONLY="P1 P3" selects blocks; PR_PUBLISH_UNDER_TEST=<script> (mutants); PR_PUBLISH_NESTED=1 (no mutation section).
+# Env: PR_PUBLISH_ONLY="P1 P3" selects blocks; PR_PUBLISH_CASES="b ff" selects cases within a block (mutation runs); PR_PUBLISH_UNDER_TEST=<script> (mutants); PR_PUBLISH_NESTED=1 (no mutation section).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,6 +31,7 @@ pass() { echo "  PASS: $1"; PASS_COUNT=$((PASS_COUNT + 1)); }
 fail() { echo "  FAIL: $1 — $2"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 info() { echo "  INFO: $1"; }
 want() { [ -z "${PR_PUBLISH_ONLY:-}" ] && return 0; case " $PR_PUBLISH_ONLY " in *" $1 "*) return 0 ;; esac; return 1; }
+case_on() { [ -z "${PR_PUBLISH_CASES:-}" ] && return 0; case " $PR_PUBLISH_CASES " in *" $1 "*) return 0 ;; esac; return 1; }
 eq() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "got [$2] expected [$3]"; fi; }
 has() { case "$2" in *"$3"*) pass "$1" ;; *) fail "$1" "[$3] not in [$2]" ;; esac; }
 hasnt() { case "$2" in *"$3"*) fail "$1" "[$3] found in [$2]" ;; *) pass "$1" ;; esac; }
@@ -126,7 +127,7 @@ newfx && {
 # ---------------------------------------------------------------------------------------------------- [P3]
 blk_P3() {
 echo "[P3] fast-forward only; idempotence"
-newfx && {   # a foreign commit already sits on the remote branch
+case_on ff && newfx && {   # a foreign commit already sits on the remote branch
   build_pkg "$WC" || return 0
   foreign="$(printf 'foreign\n' | gw commit-tree "refs/heads/dev^{tree}")"
   git -C "$WC" push -q "$REM" "$foreign:refs/heads/$BR" >/dev/null 2>&1
@@ -135,7 +136,7 @@ newfx && {   # a foreign commit already sits on the remote branch
   has "P3 ... our own message (not git's)" "$PERR" "не предок"
   eq "P3 the foreign commit is intact" "$(git -C "$REM" rev-parse "refs/heads/$BR")" "$foreign"
 }
-newfx && {   # repeat of an already pushed package; then a fast-forward continuation (re-submission)
+case_on rest && newfx && {   # repeat of an already pushed package; then a fast-forward continuation (re-submission)
   build_pkg "$WC" || return 0; first="$TIP"
   run_pub "$WC"; eq "P3 first push rc 0" "$PRC" "0"
   run_pub "$WC"
@@ -193,7 +194,7 @@ refuse() {   # <label> <stderr fragment> [args]: rc 1, the fragment, nothing pus
   eq "P6 $label: nothing was pushed" "$(remote_refs "$REM")" "refs/heads/dev"
   eq "P6 $label: no marker file" "$(ls "$WC/MARK" 2>/dev/null | wc -l | tr -d ' ')" "0"
 }
-newfx && {
+case_on urls && newfx && {
   build_pkg "$WC" || return 0
   refuse "ext:: remote helper" "недопустимый remote/URL" --remote "ext::sh -c 'touch $WC/MARK'"
   refuse "-oProxyCommand" "недопустимый remote/URL" --remote "-oProxyCommand=touch $WC/MARK"
@@ -202,19 +203,19 @@ newfx && {
   refuse "unknown remote name" "недопустимый remote/URL" --remote "no-such-remote"
   refuse "an invalid commitment on the command line" "commitment:" --commitment "x/../sdx"
 }
-newfx && {   # no repo.url in the order and no remote origin
+case_on nourl && newfx && {   # no repo.url in the order and no remote origin
   git -C "$WC" show refs/heads/sdx/s1~1:.claude/sessions/s1/order.yaml | sed '/^    url: /d' > "$TMP/order-nourl.yaml"
   fx_set_order "$WC" "$TMP/order-nourl.yaml"
   gw remote remove origin
   build_pkg "$WC" || return 0
   refuse "no repo.url and no remote" "недопустимый remote/URL"
 }
-newfx && {   # prod-guard.conf with a push pattern
+case_on prod && newfx && {   # prod-guard.conf with a push pattern
   build_pkg "$WC" || return 0
   mkdir -p "$WC/.claude/sdx"; printf 'git push\n' > "$WC/.claude/sdx/prod-guard.conf"
   refuse "prod-guard.conf blocks git push" "prod-guard"
 }
-newfx && {   # defence in depth: a branch outside change/* (the library is patched to compute it)
+case_on branch && newfx && {   # defence in depth: a branch outside change/* (the library is patched to compute it)
   mkdir -p "$TMP/patched/hooks" && cp -Rp "$SCRIPT_DIR/lib" "$TMP/patched/hooks/lib" && cp "$SUT" "$TMP/patched/hooks/pr-publish.sh" && cp "$SCRIPT_DIR/prod-guard.sh" "$TMP/patched/hooks/prod-guard.sh"
   git -C "$WC" show refs/heads/sdx/s1~1:.claude/sessions/s1/order.yaml | sed '/^  deliver:/,$d' > "$TMP/order-nodel.yaml"
   fx_set_order "$WC" "$TMP/order-nodel.yaml"
@@ -275,7 +276,7 @@ nogh_path() {
 }
 blk_P5() {
 echo "[P5] pull request through the gh CLI (a stub in PATH) and the degradation"
-GHD="$TMP/ghbin"; gh_stub "$GHD"; export GH_LOG="$TMP/gh.log" GH_BODY="$TMP/gh.body"
+GHD="$TMP/ghbin"; gh_stub "$GHD"
 github_fx() {   # -> WC with a github order, a package, and a push-through rule github.com -> the local bare remote
   newfx || return 1
   order_with "$WC" 's|^    url: .*|    url: "https://github.com/o/r.git"|'
@@ -283,7 +284,8 @@ github_fx() {   # -> WC with a github order, a package, and a push-through rule 
   build_pkg "$WC" || return 1
   : > "$GH_LOG"; rm -f "$GH_BODY"
 }
-github_fx && {   # (a) gh present and authenticated: list, then create
+p5_a() {
+  github_fx && {   # (a) gh present and authenticated: list, then create
   PATH="$GHD:$PATH" GH_LIST_OUT='[]' run_pub "$WC"
   eq "P5a rc 0" "$PRC" "0"
   eq "P5a push done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
@@ -303,8 +305,10 @@ github_fx && {   # (a) gh present and authenticated: list, then create
   has "P5a body: touches_shared line" "$body" "слияние такого пакета — решение человека"
   has "P5a body: history_ref" "$body" "executor:sdx/s1"
   eq "P5a body has no secret-looking text" "$(printf '%s' "$body" | grep -Eic '(password|passwd|pwd|secret|token|api[_-]?key|client[_-]?secret)"?[[:space:]]*[:=]')" "0"
+  }
 }
-github_fx && {   # (b) no gh at all
+p5_b() {
+  github_fx && {   # (b) no gh at all
   nogh_path "$TMP/nogh"
   eq "P5b the sandbox PATH really has no gh" "$(PATH="$TMP/nogh" command -v gh | wc -l | tr -d ' ')" "0"
   PATH="$TMP/nogh" run_pub "$WC"
@@ -316,44 +320,114 @@ github_fx && {   # (b) no gh at all
   has "P5b one-line instruction: open the PR manually" "$inst" "Откройте PR вручную"
   has "P5b ... names the branch, the base and the repository" "$inst" "$BR → dev в https://github.com/o/r.git"
   eq "P5b ... exactly one line" "$(printf '%s\n' "$inst" | grep -c .)" "1"
+  }
 }
-github_fx && {   # (c) gh is there, but not authenticated
+p5_c() {
+  github_fx && {   # (c) gh is there, but not authenticated
   PATH="$GHD:$PATH" GH_AUTH_RC=1 run_pub "$WC"
   eq "P5c rc 0" "$PRC" "0"
   eq "P5c degraded gh-unauthenticated" "$(jv .degraded)" "gh-unauthenticated"
   eq "P5c only the authentication was asked" "$(cat "$GH_LOG")" "[auth][status]"
   eq "P5c the push was done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
+  }
 }
-github_fx && {   # (d) a PR for the branch already exists
+p5_d() {
+  github_fx && {   # (d) a PR for the branch already exists
   PATH="$GHD:$PATH" GH_LIST_OUT='[{"url":"https://github.com/o/r/pull/3"}]' run_pub "$WC"
   eq "P5d rc 0" "$PRC" "0"
   eq "P5d the existing PR is returned, not created" "$(jv '.pr.url+" "+(.pr.created|tostring)')" "https://github.com/o/r/pull/3 false"
   eq "P5d gh pr create was not called" "$(grep -c '^\[pr\]\[create\]' "$GH_LOG")" "0"
   eq "P5d no degradation" "$(jv '.degraded|tostring')" "null"
+  }
 }
-github_fx && {   # (e) gh fails: list, then create
+p5_e() {
+  github_fx && {   # (e) gh fails: list, then create
   PATH="$GHD:$PATH" GH_LIST_RC=1 run_pub "$WC"
   eq "P5e gh pr list fails: rc 0, gh-failed" "$PRC/$(jv .degraded)" "0/gh-failed"
   PATH="$GHD:$PATH" GH_CREATE_RC=1 run_pub "$WC"
   eq "P5e gh pr create fails: rc 0, gh-failed" "$PRC/$(jv .degraded)" "0/gh-failed"
   has "P5e ... with the instruction" "$(jv .instruction)" "Откройте PR вручную"
   eq "P5e ... and the push is done" "$(git -C "$REM" rev-parse "refs/heads/$BR" 2>/dev/null)" "$TIP"
+  }
 }
-github_fx && {   # (f) a secret in the PR body: refused BEFORE the push
+p5_f() {
+  github_fx && {   # (f) a secret in the PR body: refused BEFORE the push
   pkg_craft_bad_secret_notes "$WC" "$BR" >/dev/null 2>&1
   PATH="$GHD:$PATH" run_pub "$WC"
   eq "P5f secret in the manifest notes -> rc 1" "$PRC" "1"
   has "P5f ... the reason is named" "$PERR" "секрет"
   eq "P5f ... nothing was pushed" "$(remote_refs "$REM")" "refs/heads/dev"
   eq "P5f ... and gh was not called" "$(grep -c . "$GH_LOG")" "0"
+  }
 }
-github_fx && {   # (g) delivery: branch -> the branch only, gh is not touched
+p5_g() {
+  github_fx && {   # (g) delivery: branch -> the branch only, gh is not touched
   sed 's/^  delivery: .*/  delivery: branch/' "$WC/.mesh/mandate.yaml" > "$WC/.mesh/m.new" && mv "$WC/.mesh/m.new" "$WC/.mesh/mandate.yaml"
   PATH="$GHD:$PATH" run_pub "$WC"
   eq "P5g delivery branch: rc 0, pushed" "$PRC/$(jv .pushed)" "0/true"
   eq "P5g gh was not called" "$(grep -c . "$GH_LOG")" "0"
   eq "P5g no PR, no degradation, no instruction" "$(jv '(.pr|tostring)+(.degraded|tostring)+(.instruction|tostring)')" "nullnullnull"
+  }
 }
+for x in a b c d e f g; do
+  case_on "$x" || continue
+  ( TMP="$TMP/p5-$x"; mkdir -p "$TMP"; export GH_LOG="$TMP/gh.log" GH_BODY="$TMP/gh.body"; "p5_$x" ) > "$TMP/o-p5-$x.txt" 2>&1 &
+done
+wait
+for x in a b c d e f g; do case_on "$x" || continue; cat "$TMP/o-p5-$x.txt"; done
+}
+
+# ---------------------------------------------------------------------------------------------------- [Port]
+blk_Port() {
+echo "[Port] portability (BUG-010), no force/all/mirror/tags/+refspec in pr-publish.sh"
+FORBID='tim''eout|map''file|declare -''A|[$]\{[a-zA-Z_]+,,\}|%''N|readlink -''f|real''path|[A-Za-z_]=\(|\[@\]'
+if grep -nE "$FORBID" "$SUT" >/dev/null 2>&1; then fail "pr-publish.sh portability" "forbidden: $(grep -nE "$FORBID" "$SUT" | head -3)"; else pass "pr-publish.sh has no bash-4-only construct, no arrays, no GNU-only calls"; fi
+sed 's/^here=/mapfile -t x < \/dev\/null; here=/' "$SUT" > "$TMP/port-mut.sh"
+if ! cmp -s "$SUT" "$TMP/port-mut.sh" && grep -qE "$FORBID" "$TMP/port-mut.sh"; then pass "red side: the same grep flags a mutant with a bash-4 construct"; else fail "red side of the portability grep" "mutant not flagged"; fi
+PUSHBAD='--force|--all|--mirror|--tags|\+refs|--delete|--prune'
+code_hits="$(grep -nE -- "$PUSHBAD" "$SUT" | grep -vE '^[0-9]+:[[:space:]]*#')"
+if [ -z "$code_hits" ]; then pass "no force / all / mirror / tags / +refspec outside comments"; else fail "forbidden push flags in code" "$code_hits"; fi
+sed 's/--no-follow-tags/--no-follow-tags --force/' "$SUT" > "$TMP/force-mut.sh"
+if ! cmp -s "$SUT" "$TMP/force-mut.sh" && [ -n "$(grep -nE -- "$PUSHBAD" "$TMP/force-mut.sh" | grep -vE '^[0-9]+:[[:space:]]*#')" ]; then pass "red side: the same grep flags a mutant with --force"; else fail "red side of the force grep" "mutant not flagged"; fi
+if grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" >/dev/null 2>&1; then fail "pr-publish.sh forbidden words" "$(grep -nE 'py''thon|(^|[^_[:alnum:]])ev''al([^_[:alnum:]]|$)|check''out|work''tree' "$SUT" | head -3)"; else pass "no python / eval / checkout / worktree in pr-publish.sh"; fi
+}
+
+# ---------------------------------------------------------------------------------------------------- [Mut]
+blk_Mut() {
+[ -z "${PR_PUBLISH_NESTED:-}" ] || return 0
+echo "[Mut] mutation runs: each mutant (a copy of pr-publish.sh + lib/ + prod-guard.sh in a temp dir) must differ from the original and turn its block red"
+MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"
+OWNED="sdx/hooks/pr-publish.sh sdx/hooks/lib sdx/hooks/prod-guard.sh"
+ST_BEFORE="$(git -C "$ROOT" status --porcelain -- $OWNED)"
+MUT_NAMES=""
+mk_plugin() {   # <dir>: a copy of the script under test with its lib/ and prod-guard.sh
+  mkdir -p "$1/hooks" && cp -Rp "$(dirname "$SUT")/lib" "$1/hooks/lib" && cp "$SUT" "$1/hooks/pr-publish.sh" && cp "$SCRIPT_DIR/prod-guard.sh" "$1/hooks/prod-guard.sh"
+}
+mutate() {   # <name> <sed expr> <blocks> [cases]
+  local name="$1" expr="$2" only="$3" cases="${4:-}" d="$MUTDIR/$1"
+  mk_plugin "$d" || { fail "[Mut] $name" "cannot copy the script under test"; return; }
+  sed "$expr" "$SUT" > "$d/hooks/pr-publish.sh"
+  if cmp -s "$SUT" "$d/hooks/pr-publish.sh"; then fail "[Mut] $name" "mutant is identical to the original (anchor missing?)"; return; fi
+  MUT_NAMES="$MUT_NAMES $name"
+  ( PR_PUBLISH_NESTED=1 PR_PUBLISH_ONLY="$only" PR_PUBLISH_CASES="$cases" PR_PUBLISH_UNDER_TEST="$d/hooks/pr-publish.sh" bash "${BASH_SOURCE[0]}" > "$d/out.txt" 2>&1 ) &
+}
+mutate PKG-P-REFSPEC   's|^spec="refs/heads/\$PR_BRANCH:refs/heads/\$PR_BRANCH"|spec="+refs/heads/*:refs/heads/*"|' "P1"
+mutate PKG-P-NOFOLLOW  '/# PKG-P-NOFOLLOW/s/-c push.followTags=false -c push.default=nothing push --porcelain --no-follow-tags/push --porcelain/' "P2"
+mutate PKG-P-FF        '/# PKG-P-FF/s/die 1 "[^"]*"/true/' "P3" "ff"
+mutate PKG-P-GH        '/# PKG-P-GH/s/degraded="\$1";/die 1 "gh: $1";/' "P5" "b"
+mutate PKG-P-URLWL     '/# PKG-P-URLWL/s/pr_url_ok "\$remote" ||/true ||/' "P6" "urls"
+mutate PKG-P-PRODGUARD '/# PKG-P-PRODGUARD/s/die 1 "[^"]*"/true/' "P6" "prod"
+wait
+for name in $MUT_NAMES; do
+  out="$(cat "$MUTDIR/$name/out.txt" 2>/dev/null)"
+  if printf '%s\n' "$out" | grep -q 'FAIL:'; then
+    first="$(printf '%s\n' "$out" | grep -m1 'FAIL:' | cut -c1-110)"
+    pass "[Mut] мутант $name → красный (ожидаемо): ${first#  FAIL: }"
+  else
+    fail "[Mut] $name" "the distinguishing block stayed green on the mutant (the check proves nothing)"
+  fi
+done
+eq "[Mut] the checkout (pr-publish.sh, lib/, prod-guard.sh) is untouched by the mutation runs" "$(git -C "$ROOT" status --porcelain -- $OWNED)" "$ST_BEFORE"
 }
 
 # @@TAIL@@
@@ -372,7 +446,7 @@ run_blocks() {
     FAIL_COUNT=$((FAIL_COUNT + $(grep -c "^  FAIL: " "$TMP/out-$b.txt")))
   done
 }
-run_blocks P1 P2 P3 P4 P5 P6 P7
+run_blocks P1 P2 P3 P4 P5 P6 P7 Port Mut
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

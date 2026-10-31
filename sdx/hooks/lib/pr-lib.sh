@@ -13,7 +13,7 @@
 #
 #   --- pure ---
 #   pr_valid_id <s>             rc 0 iff ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$, no "..", not ending in "." or ".lock"
-#   pr_clean <s> [max=200]      PR_CLEAN: tab/newline -> space, other C0/DEL/U+2028/U+2029/U+0085 removed, trimmed, cut
+#   pr_clean <s> [max=200]      PR_CLEAN: tab/newline/C1 (U+0080..U+009F)/U+2028/U+2029 -> space, other C0/DEL removed, trimmed, cut
 #   pr_has_secret <s>           rc 0 iff the text looks like "<secret-word> [:=]" (mirror of REDACT[0], mesh_endpoint.py)
 #   pr_sha256                   stdin -> hex digest on stdout (sha256sum | shasum -a 256; neither -> rc 2)
 #   pr_url_ok <url>             rc 0 iff the URL is on the whitelist of schemes (ssh/https/http/file, scp form, absolute path)

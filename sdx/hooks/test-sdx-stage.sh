@@ -1095,6 +1095,7 @@ else
   fail "[43] no_code refusal side effect" "ec=$ec stray=$([ -e "$TMPPROJ/false" ] && echo yes || echo no) backticks=$(printf '%s' "$out" | grep -c '[`]')"
 fi
 rm -f "$TMPPROJ/false"
+cleanup
 fi
 
 # ---- [M41] mutation runs (FEAT-016): copies of sdx-stage.sh + lib/ in a temp dir, anchored by "# MAND-*" tags ----

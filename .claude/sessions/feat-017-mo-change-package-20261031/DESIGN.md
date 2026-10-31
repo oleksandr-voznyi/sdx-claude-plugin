@@ -62,7 +62,7 @@ status: draft (Technical Design, сессия `feat-017-mo-change-package-202610
 
 ```
 pr_valid_id <str>           # rc 0 ⇔ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$, без "..", не оканчивается "." и ".lock"      # PKG-ID
-pr_clean <str> [max=200]    # PR_CLEAN: перевод строки/табуляция -> пробел, остальные C0/DEL/U+2028/2029/0085 вырезаны, trim, усечение
+pr_clean <str> [max=200]    # PR_CLEAN: перевод строки/табуляция -> пробел, остальные C0/DEL/U+2028/2029/0085 вырезаны, trim, усечение (контракт переопределён поправкой круга 1: C1 U+0080…U+009F и U+2028/2029 → пробел, прочие C0/DEL вырезаны)
 pr_has_secret <str>         # rc 0 ⇔ совпал ERE зеркала REDACT[0] из sdx/mo/mesh_endpoint.py:35:                       # PKG-SECRET
                             #   (password|passwd|pwd|secret|token|api[_-]?key|client[_-]?secret)"?[[:space:]]*[:=]   (grep -Eiq)
 pr_sha256                   # stdin -> hex; sha256sum | shasum -a 256 (как test-mo-inventory.sh); нет утилит -> rc 2

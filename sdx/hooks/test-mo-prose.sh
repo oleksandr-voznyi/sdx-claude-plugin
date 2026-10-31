@@ -285,6 +285,8 @@ chk_surface_pkg() {  # [25] README x2 and CLAUDE.md name the new surface
 chk_contributing() {  # [27] <root>: CONTRIBUTING-MO.md is a template of the plugin, not a vendored file
   [ -f "$1/sdx/templates/CONTRIBUTING-MO.md" ] || { echo "no sdx/templates/CONTRIBUTING-MO.md in $1"; return 1; }
   [ ! -e "$1/sdx/mo/CONTRIBUTING-MO.md" ] || { echo "CONTRIBUTING-MO.md sits in sdx/mo/ of $1"; return 1; }
+  grep -qF 'у нового `head` два родителя' "$1/sdx/templates/CONTRIBUTING-MO.md" || { echo "CONTRIBUTING-MO.md lacks the two-parent resubmit rule in $1"; return 1; }
+  grep -qF 'merge-коммит, а не squash' "$1/sdx/templates/CONTRIBUTING-MO.md" || { echo "CONTRIBUTING-MO.md lacks the merge-commit note in $1"; return 1; }
 }
 
 PR_REFUSE='/sdx:pr: нужен режим мандата МО (.mesh/endpoint.yaml и .mesh/mandate.yaml); без него сдача пакетом неприменима — закрывайте сессию через /sdx:archive.'
@@ -759,6 +761,10 @@ mkdir -p "$TMP/c27a/sdx/templates" "$TMP/c27a/sdx/mo" "$TMP/c27b/sdx/templates" 
 : > "$TMP/c27a/sdx/mo/CONTRIBUTING-MO.md"; : > "$TMP/c27b/sdx/templates/CONTRIBUTING-MO.md"; : > "$TMP/c27b/sdx/mo/CONTRIBUTING-MO.md"
 expect_red "red: file only in sdx/mo/" chk_contributing "$TMP/c27a"
 expect_red "red: file in both places" chk_contributing "$TMP/c27b"
+mkdir -p "$TMP/c27c/sdx/templates"; sed 's/у нового `head` два родителя/у нового head один родитель/' "$ROOT/sdx/templates/CONTRIBUTING-MO.md" > "$TMP/c27c/sdx/templates/CONTRIBUTING-MO.md"
+expect_red "red: CONTRIBUTING-MO.md without the two-parent resubmit rule" chk_contributing "$TMP/c27c"
+mkdir -p "$TMP/c27d/sdx/templates"; sed 's/merge-коммит, а не squash/squash/' "$ROOT/sdx/templates/CONTRIBUTING-MO.md" > "$TMP/c27d/sdx/templates/CONTRIBUTING-MO.md"
+expect_red "red: CONTRIBUTING-MO.md without the merge-commit note" chk_contributing "$TMP/c27d"
 
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"

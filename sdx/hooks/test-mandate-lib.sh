@@ -846,6 +846,213 @@ else
 fi
 fi
 
+# ============================================================== [L11] lib/pr-lib.sh: git-dependent functions on a mini repository
+if want L11; then
+echo "[L11] pr-lib on a mini repository: session history, order snapshot, base, files, scope, registry, resolve"
+L11_OK=0
+if [ -f "$LIB/pr-lib.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$LIB/pr-lib.sh" && L11_OK=1
+fi
+l11_have() { [ "$L11_OK" = 1 ] && declare -F "$1" >/dev/null 2>&1; }
+# hermetic git: no user/system config leaks in (diff.renames, core.quotepath, hooks...), fixed identity
+printf '[user]\n\tname = t\n\temail = t@t\n[init]\n\tdefaultBranch = dev\n[core]\n\thooksPath = /dev/null\n[commit]\n\tgpgsign = false\n' > "$TMP/gitcfg11"
+export GIT_CONFIG_GLOBAL="$TMP/gitcfg11" GIT_CONFIG_NOSYSTEM=1
+mkdir -p "$TMP/g11"
+R="$TMP/g11/repo"
+MANDATE11=$'mandate:\n  repo: app\n  stages:\n  - spec\n  - design\n  - execute\n  - verify\n  scope:\n    paths:\n    - src/mod1/**\n    shared_paths:\n    - package-lock.json\n    docs_paths:\n    - docs/**\n    branches:\n    - change/*\n  delivery: pr\n  history: executor\n  docs_in_repo: final\n  valid_until: \'2099-01-01\'\n  on_write: deny\n  executor: ex1\n  digest: \'123456789012\'\n  format: 1\n'
+ORDER11=$'order:\n  format: 1\n  source: "msg"\n  source_ref: "m-1"\n  commitment:\n    id: "C-ACME-001"\n    kind: "change"\n    title: "Feature mod1"\n    requirements: "Do it"\n    due: "2026-12-01"\n    creditor: "acme"\n  executor: "ex1"\n  mandate_digest: "123456789012"\n  repo:\n    id: "app"\n    url: "ssh://dobro/srv/app.git"\n    base: "dev"\n    hosting: "github"\n  deliver:\n    branch: "change/C-ACME-001-ex1"\n    delivery: "pr"\n'
+(
+  set -e
+  git init -q "$R"; cd "$R"
+  mkdir -p docs src/mod1 src/core
+  printf 'r\n' > README.md; printf '# Decisions\n\n## ADR-001. Base\n' > docs/DECISIONS.md; printf 'a=1\n' > src/mod1/a.js; printf '{}\n' > package-lock.json
+  git add -A; git commit -q -m base
+  git checkout -q -b sdx/s2; mkdir -p .claude/sessions/s2; printf '{"stage":"Closeout"}\n' > .claude/sessions/s2/session_state.json
+  git add -A; git commit -q -m "s2 session only"
+  git checkout -q dev; git checkout -q -b sdx/s1
+  mkdir -p .claude/sessions/s1
+  printf '{"stage":"Closeout"}\n' > .claude/sessions/s1/session_state.json
+  printf '%s' "$ORDER11" > .claude/sessions/s1/order.yaml
+  printf 'Итог: PASS\n' > .claude/sessions/s1/verification_report.md
+  git add -A; git commit -q -m "s1 session"
+  printf 'a=2\n' >> src/mod1/a.js; printf 'x\n' >> package-lock.json; printf '\n## ADR-099. New decision\n' >> docs/DECISIONS.md
+  mkdir -p docs/specs; printf 'spec\n' > docs/specs/mod1.md; printf 'спека\n' > "docs/спека.md"; printf 'b=1\n' > src/core/b.js
+  git add -A; git commit -q -m "s1 code"
+  git rm -r -q .claude/sessions/s1; git commit -q -m "s1 close"
+  git init -q --bare "$TMP/g11/remote.git"; git remote add origin "$TMP/g11/remote.git"; git push -q origin dev
+  git fetch -q origin
+  mkdir -p .mesh; printf '%s' "$MANDATE11" > .mesh/mandate.yaml; printf 'endpoint:\n  on_write: notice\n' > .mesh/endpoint.yaml
+) >/dev/null 2>&1
+L11_BUILT=0; [ -n "$(git -C "$R" rev-parse --verify -q refs/heads/sdx/s1 2>/dev/null)" ] && L11_BUILT=1
+[ "$L11_BUILT" = 1 ] && pass "[L11] mini repository built" || fail "[L11] mini repository" "fixture build failed"
+l11eq() {  # <label> <got> <expected>
+  if [ "$2" = "$3" ]; then pass "[L11] $1"; else fail "[L11] $1" "got [$2] expected [$3]"; fi
+}
+l11rc() {  # <label> <got-rc> <expected-rc>
+  if [ "$2" = "$3" ]; then pass "[L11] $1"; else fail "[L11] $1" "rc=$2 expected $3"; fi
+}
+SHA_S1_PRE="$(git -C "$R" rev-parse --verify -q 'refs/heads/sdx/s1~1' 2>/dev/null)"   # last commit that still has the session directory
+SHA_S2="$(git -C "$R" rev-parse --verify -q refs/heads/sdx/s2 2>/dev/null)"
+SHA_DEV="$(git -C "$R" rev-parse --verify -q refs/heads/dev 2>/dev/null)"
+
+# ---- pr_session_rev / pr_sess_cat
+if l11_have pr_session_rev; then
+  pr_session_rev "$R" s1; rc=$?; l11rc "session_rev s1 (directory removed at tip) rc" "$rc" 0
+  l11eq "session_rev s1 -> parent of the removing commit" "$PR_SESS_REV" "$SHA_S1_PRE"   # PKG-SESSREV
+  pr_session_rev "$R" s2; rc=$?; l11rc "session_rev s2 (directory at the tip) rc" "$rc" 0
+  l11eq "session_rev s2 -> tip" "$PR_SESS_REV" "$SHA_S2"
+  pr_session_rev "$R" nosuch; rc=$?; l11rc "session_rev for an unknown session rc" "$rc" 1
+  pr_session_rev "$R" "../x"; rc=$?; l11rc "session_rev refuses a hostile sid" "$rc" 1
+else for t in "s1 rc" "s1 value" "s2 rc" "s2 value" "unknown" "hostile"; do fail "[L11] session_rev $t" "pr_session_rev missing"; done; fi
+if l11_have pr_sess_cat; then
+  out="$(pr_sess_cat "$R" s1 verification_report.md)"; rc=$?
+  l11rc "sess_cat existing file rc" "$rc" 0; l11eq "sess_cat existing file content" "$out" "Итог: PASS"
+  pr_sess_cat "$R" s1 nope.md >/dev/null 2>&1; rc=$?; l11rc "sess_cat missing file rc" "$rc" 1
+  pr_sess_cat "$R" s1 "../x" >/dev/null 2>&1; rc=$?; l11rc "sess_cat refuses a path-like name" "$rc" 1
+else for t in "existing rc" "existing content" "missing" "path-like"; do fail "[L11] sess_cat $t" "pr_sess_cat missing"; done; fi
+
+# ---- pr_order_load
+if l11_have pr_order_load; then
+  pr_order_load "$R" s1; rc=$?
+  l11rc "order_load s1 rc" "$rc" 0
+  l11eq "order_load COMMIT" "${PR_O_COMMIT:-}" "C-ACME-001"
+  l11eq "order_load TITLE" "${PR_O_TITLE:-}" "Feature mod1"
+  l11eq "order_load BASE" "${PR_O_BASE:-}" "dev"
+  l11eq "order_load URL" "${PR_O_URL:-}" "ssh://dobro/srv/app.git"
+  l11eq "order_load HOSTING" "${PR_O_HOSTING:-}" "github"
+  l11eq "order_load BRANCH" "${PR_O_BRANCH:-}" "change/C-ACME-001-ex1"
+  l11eq "order_load EXEC" "${PR_O_EXEC:-}" "ex1"
+  l11eq "order_load DIGEST" "${PR_O_DIGEST:-}" "123456789012"
+  l11eq "order_load DELIVERY" "${PR_O_DELIVERY:-}" "pr"
+  pr_order_load "$R" s2; rc=$?
+  l11rc "order_load without a snapshot rc (1 = none)" "$rc" 1
+  l11eq "order_load without a snapshot leaves PR_O_* empty" "${PR_O_COMMIT:-}${PR_O_EXEC:-}${PR_O_URL:-}" ""
+  mandate_load "$R"; pr_order_load "$R" s1 >/dev/null 2>&1; _my_scalar mandate.executor
+  l11eq "order_load does not clobber the loaded mandate (MY_NORM)" "$MY_S" "ex1"
+else for t in rc COMMIT TITLE BASE URL HOSTING BRANCH EXEC DIGEST DELIVERY none-rc none-empty no-clobber; do fail "[L11] order_load $t" "pr_order_load missing"; done; fi
+
+# ---- pr_base_ref
+if l11_have pr_base_ref; then
+  pr_base_ref "$R" dev; rc=$?
+  l11rc "base_ref dev rc" "$rc" 0
+  l11eq "base_ref prefers the local branch" "$PR_BASE_REF" "refs/heads/dev"
+  l11eq "base_ref sha" "$PR_BASE_SHA" "$SHA_DEV"
+  l11eq "base_ref no drift when local == remote-tracking" "$PR_BASE_DRIFT" "0"
+  pr_base_ref "$R" nosuch >/dev/null 2>&1; rc=$?; l11rc "base_ref: no such branch rc" "$rc" 1
+  l11eq "base_ref: error names the field" "${PR_ERR%%:*}" "base"
+  pr_base_ref "$R" "bad..name" >/dev/null 2>&1; rc=$?; l11rc "base_ref: invalid ref name rc" "$rc" 1
+  rm -rf "$TMP/g11/r2"; cp -a "$R" "$TMP/g11/r2"
+  git -C "$TMP/g11/r2" branch -q -f dev refs/heads/sdx/s1   # local dev ahead of origin/dev
+  pr_base_ref "$TMP/g11/r2" dev; rc=$?
+  l11rc "base_ref drift rc" "$rc" 0
+  l11eq "base_ref reports drift between local and remote-tracking" "$PR_BASE_DRIFT" "1"
+  l11eq "base_ref drift still prefers the local branch" "$PR_BASE_REF" "refs/heads/dev"
+  git -C "$TMP/g11/r2" checkout -q sdx/s1; git -C "$TMP/g11/r2" branch -q -D dev
+  pr_base_ref "$TMP/g11/r2" dev; rc=$?
+  l11rc "base_ref remote-tracking only rc" "$rc" 0
+  l11eq "base_ref falls back to the remote-tracking branch" "$PR_BASE_REF" "refs/remotes/origin/dev"
+  l11eq "base_ref remote-tracking sha" "$PR_BASE_SHA" "$SHA_DEV"
+else for t in rc local sha drift-none nosuch err-field invalid drift-rc drift-flag drift-local rt-rc rt-ref rt-sha; do fail "[L11] base_ref $t" "pr_base_ref missing"; done; fi
+
+# ---- pr_files
+if l11_have pr_files; then
+  pr_files "$R" dev refs/heads/sdx/s1; rc=$?
+  l11rc "files rc" "$rc" 0
+  l11eq "files: names without quoting, session directory absent, sorted" "$PR_FILES" $'docs/DECISIONS.md\ndocs/specs/mod1.md\ndocs/спека.md\npackage-lock.json\nsrc/core/b.js\nsrc/mod1/a.js'
+  pr_files "$R" dev dev; rc=$?; l11rc "files: empty diff rc" "$rc" 0; l11eq "files: empty diff -> empty" "$PR_FILES" ""
+  rm -rf "$TMP/g11/r3"; cp -a "$R" "$TMP/g11/r3"
+  ( cd "$TMP/g11/r3" && git checkout -q -b nl dev && printf 'x' > "$(printf 'a\nb')" && git add -A && git commit -q -m nl ) >/dev/null 2>&1
+  pr_files "$TMP/g11/r3" dev nl >/dev/null 2>&1; rc=$?
+  l11rc "files: a newline in a path -> rc 1" "$rc" 1
+  case "${PR_ERR:-}" in files:*) pass "[L11] files: PR_ERR names the field" ;; *) fail "[L11] files: PR_ERR names the field" "got [${PR_ERR:-}]" ;; esac
+  pr_files "$R" dev nosuchrev >/dev/null 2>&1; rc=$?; l11rc "files: unknown revision -> rc 1" "$rc" 1
+else for t in rc names empty-rc empty newline err-field badrev; do fail "[L11] files $t" "pr_files missing"; done; fi
+
+# ---- pr_scope_eval (mandate: paths src/mod1/**, shared package-lock.json, docs docs/**)
+if l11_have pr_scope_eval; then
+  mandate_load "$R"
+  PR_FILES=$'docs/DECISIONS.md\ndocs/specs/mod1.md\ndocs/спека.md\npackage-lock.json\nsrc/core/b.js\nsrc/mod1/a.js\n.claude/sessions/s1/order.yaml\noutside/x'
+  pr_scope_eval
+  l11eq "scope_eval OUT = outside every area" "$PR_OUT" $'src/core/b.js\n.claude/sessions/s1/order.yaml\noutside/x'
+  l11eq "scope_eval SHARED" "$PR_SHARED" "package-lock.json"
+  l11eq "scope_eval DOCSF" "$PR_DOCSF" $'docs/DECISIONS.md\ndocs/specs/mod1.md\ndocs/спека.md'
+  l11eq "scope_eval SESSF" "$PR_SESSF" ".claude/sessions/s1/order.yaml"
+  l11eq "scope_eval DOCS_OUTSIDE empty when docs/** is covered" "$PR_DOCS_OUTSIDE" ""
+  P2="$(mproj l11narrow "${MANDATE11/docs\/\*\*/docs/specs/**}")"; mandate_load "$P2"; pr_scope_eval
+  l11eq "scope_eval DOCS_OUTSIDE = docs/ paths outside docs_paths" "$PR_DOCS_OUTSIDE" $'docs/DECISIONS.md\ndocs/спека.md'
+  P3="$(mproj l11nopaths "$(printf '%s\n' "$MANDATE11" | grep -v -e 'src/mod1' -e '^    paths:$')")"; mandate_load "$P3"; pr_scope_eval
+  l11eq "scope_eval: empty paths -> no OUT (no restriction)" "$PR_OUT" ""
+  PR_FILES=""; mandate_load "$R"; pr_scope_eval
+  l11eq "scope_eval: empty file list -> all empty" "$PR_OUT$PR_SHARED$PR_DOCSF$PR_SESSF$PR_DOCS_OUTSIDE" ""
+else for t in OUT SHARED DOCSF SESSF DOCS_OUTSIDE narrow nopaths empty; do fail "[L11] scope_eval $t" "pr_scope_eval missing"; done; fi
+
+# ---- pr_registry
+if l11_have pr_registry; then
+  PR_FILES=$'docs/DECISIONS.md\nsrc/mod1/a.js'
+  pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: docs/DECISIONS.md changed -> one" "$PR_REG_STATE" "one"
+  l11eq "registry path" "$PR_REG_PATH" "docs/DECISIONS.md"
+  l11eq "registry anchor from the added heading" "$PR_REG_ANCHORS" "docs/DECISIONS.md#ADR-099"
+  PR_FILES="src/mod1/a.js"; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: not changed -> none" "$PR_REG_STATE" "none"
+  l11eq "registry: none -> empty path and anchors" "$PR_REG_PATH$PR_REG_ANCHORS" ""
+  PR_FILES=$'docs/a/decisions-1.md\ndocs/b/DECISIONS-2.md'; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: two mask candidates -> ambiguous" "$PR_REG_STATE" "ambiguous"
+  PR_FILES=$'docs/a/decisions-1.md\nsrc/x'; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: one mask candidate -> one" "$PR_REG_STATE" "one"
+  l11eq "registry: mask candidate path" "$PR_REG_PATH" "docs/a/decisions-1.md"
+  PR_FILES=$'docs/DECISIONS.md\ndocs/a/decisions-1.md'; pr_registry "$R" dev refs/heads/sdx/s1
+  l11eq "registry: docs/DECISIONS.md has priority over the mask" "$PR_REG_PATH" "docs/DECISIONS.md"
+else for t in one path anchor none none-empty ambiguous mask-one mask-path priority; do fail "[L11] registry $t" "pr_registry missing"; done; fi
+
+# ---- pr_resolve
+if l11_have pr_resolve; then
+  pr_resolve "$R" s1; rc=$?
+  l11rc "resolve from the order snapshot rc" "$rc" 0
+  l11eq "resolve PR_C" "${PR_C:-}" "C-ACME-001"
+  l11eq "resolve PR_EXEC (from the mandate)" "${PR_EXEC:-}" "ex1"
+  l11eq "resolve PR_BRANCH" "${PR_BRANCH:-}" "change/C-ACME-001-ex1"
+  l11eq "resolve PR_TITLE" "${PR_TITLE:-}" "Feature mod1"
+  l11eq "resolve PR_BASE_NAME" "${PR_BASE_NAME:-}" "dev"
+  l11eq "resolve PR_BASE_REF" "${PR_BASE_REF:-}" "refs/heads/dev"
+  l11eq "resolve PR_BASE_SHA" "${PR_BASE_SHA:-}" "$SHA_DEV"
+  l11eq "resolve PR_URL" "${PR_URL:-}" "ssh://dobro/srv/app.git"
+  l11eq "resolve PR_HOSTING_HINT" "${PR_HOSTING_HINT:-}" "github"
+  l11eq "resolve PR_DELIVERY" "${PR_DELIVERY:-}" "pr"
+  l11eq "resolve PR_DOCS_MODE" "${PR_DOCS_MODE:-}" "final"
+  l11eq "resolve PR_DIGEST" "${PR_DIGEST:-}" "123456789012"
+  pr_resolve "$R" s1 --commitment C-ACME-001 --title "Own title" >/dev/null 2>&1; rc=$?
+  l11rc "resolve: argument equal to the snapshot rc" "$rc" 0
+  l11eq "resolve: an explicit --title is not a silent override" "${PR_TITLE:-}" "Own title"
+  pr_resolve "$R" s1 --commitment C-OTHER-9 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: argument differs from a non-empty snapshot -> rc 1" "$rc" 1
+  case "${PR_ERR:-}" in commitment:*) pass "[L11] resolve: PR_ERR names the field (commitment)" ;; *) fail "[L11] resolve: PR_ERR names the field" "got [${PR_ERR:-}]" ;; esac
+  pr_resolve "$R" s1 --base-name main >/dev/null 2>&1; rc=$?; l11rc "resolve: --base-name differs from the snapshot -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment C-X-1 --title "T" >/dev/null 2>&1; rc=$?
+  l11rc "resolve without a snapshot, arguments given rc" "$rc" 0
+  l11eq "resolve without a snapshot: PR_C from the argument" "${PR_C:-}" "C-X-1"
+  l11eq "resolve without a snapshot: base from default-branch.sh" "${PR_BASE_NAME:-}" "dev"
+  l11eq "resolve without a snapshot: no URL, no hint" "${PR_URL:-}${PR_HOSTING_HINT:-}" ""
+  pr_resolve "$R" s2 --title "T" >/dev/null 2>&1; rc=$?; l11rc "resolve: no commitment anywhere -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment "a b" --title T >/dev/null 2>&1; rc=$?; l11rc "resolve: invalid commitment id -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment C-X-1 >/dev/null 2>&1; rc=$?; l11rc "resolve: no title anywhere -> rc 1" "$rc" 1
+  pr_resolve "$R" s2 --commitment C-X-1 --title "password: hunter2" >/dev/null 2>&1; rc=$?; l11rc "resolve: a secret in the title -> rc 1" "$rc" 1
+  rm -rf "$TMP/g11/r4"; cp -a "$R" "$TMP/g11/r4"; printf '%s' "${MANDATE11/executor: ex1/executor: client-harness:kitgroup}" > "$TMP/g11/r4/.mesh/mandate.yaml"
+  pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: executor comes only from the mandate and must be valid -> rc 1" "$rc" 1
+  case "${PR_ERR:-}" in executor:*) pass "[L11] resolve: PR_ERR names the field (executor)" ;; *) fail "[L11] resolve: PR_ERR names the field (executor)" "got [${PR_ERR:-}]" ;; esac
+  printf '%s' "${MANDATE11/docs_in_repo: final/docs_in_repo: none}" > "$TMP/g11/r4/.mesh/mandate.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1
+  l11eq "resolve: docs_in_repo none" "${PR_DOCS_MODE:-}" "none"
+  printf '%s' "$MANDATE11" | grep -v 'docs_in_repo' > "$TMP/g11/r4/.mesh/mandate.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1
+  l11eq "resolve: docs_in_repo unset -> final (node default)" "${PR_DOCS_MODE:-}" "final"
+  printf '%s' "${MANDATE11/executor: ex1/executor: other}" > "$TMP/g11/r4/.mesh/mandate.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: the snapshot's executor differs from the mandate's -> rc 1" "$rc" 1
+  rm -f "$TMP/g11/r4/.mesh/endpoint.yaml"; pr_resolve "$TMP/g11/r4" s1 >/dev/null 2>&1; rc=$?
+  l11rc "resolve: no mandate mode (no endpoint.yaml) -> rc 1" "$rc" 1
+else for t in rc C EXEC BRANCH TITLE BASE_NAME BASE_REF BASE_SHA URL HINT DELIVERY DOCS DIGEST arg-ok title-override arg-differs err-field base-differs noorder-rc noorder-C noorder-base noorder-url nocommit badid notitle secret execbad exec-field docs-none docs-unset snap-exec nomode; do fail "[L11] resolve $t" "pr_resolve missing"; done; fi
+fi
+
 if want Mut; then
 echo "[Mut] mutation runs: each mutant (a copy of lib/ in a temp dir) must differ from the original and turn its sections red"
 MUTDIR="$TMP/mut"; mkdir -p "$MUTDIR"

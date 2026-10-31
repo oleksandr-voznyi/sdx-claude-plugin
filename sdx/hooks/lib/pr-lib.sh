@@ -197,3 +197,69 @@ pr_order_load() {
   MY_NORM="$saved"
   return 0
 }
+
+# ===================================================================================================
+# Base branch, changed files, scope
+# ===================================================================================================
+
+# pr_base_ref <proj> <name> -> PR_BASE_REF, PR_BASE_SHA, PR_BASE_DRIFT (1 iff the local and the remote-tracking
+# branch both exist and differ), PR_BASE_REMOTE_SHA. The local branch wins (the session is cut from it); origin is
+# tried first among remotes. No fetch here: the network belongs to pr-publish only. rc 1 + PR_ERR "base: ...".
+pr_base_ref() {
+  local proj="$1" name="$2" lsha rsha="" rref="" r x
+  PR_BASE_REF=""; PR_BASE_SHA=""; PR_BASE_DRIFT=0; PR_BASE_REMOTE_SHA=""; PR_ERR=""
+  case "$name" in ""|-*) PR_ERR="base: недопустимое имя ветки"; return 1 ;; esac
+  git check-ref-format "refs/heads/$name" 2>/dev/null || { PR_ERR="base: недопустимое имя ветки"; return 1; }
+  lsha="$(git -C "$proj" rev-parse --verify -q "refs/heads/$name^{commit}" 2>/dev/null)"
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    if x="$(git -C "$proj" rev-parse --verify -q "refs/remotes/$r/$name^{commit}" 2>/dev/null)"; then rsha="$x"; rref="refs/remotes/$r/$name"; break; fi
+  done <<< "$(printf 'origin\n'; git -C "$proj" remote 2>/dev/null | grep -vx origin)"
+  if [ -n "$lsha" ]; then
+    PR_BASE_REF="refs/heads/$name"; PR_BASE_SHA="$lsha"
+    if [ -n "$rsha" ]; then PR_BASE_REMOTE_SHA="$rsha"; [ "$rsha" = "$lsha" ] || PR_BASE_DRIFT=1; fi
+  elif [ -n "$rsha" ]; then
+    PR_BASE_REF="$rref"; PR_BASE_SHA="$rsha"; PR_BASE_REMOTE_SHA="$rsha"
+  else
+    PR_ERR="base: ветка $name не найдена (ни локальной, ни remote-tracking)"; return 1
+  fi
+  return 0
+}
+
+# pr_files <proj> <a> <b> -> PR_FILES: paths changed between two revisions, one per line. Read with -z (no quoting of
+# non-ASCII names); renames are not detected (both paths are listed, deterministic regardless of diff.renames).
+# A control character in a path is refused: the manifest cannot carry it (rc 1, PR_ERR "files: ...").
+pr_files() {
+  local LC_ALL=C proj="$1" a="$2" b="$3" raw chk
+  PR_FILES=""; PR_ERR=""
+  git -C "$proj" rev-parse --verify -q "$a^{commit}" >/dev/null 2>&1 && git -C "$proj" rev-parse --verify -q "$b^{commit}" >/dev/null 2>&1 \
+    || { PR_ERR="files: неизвестная ревизия"; return 1; }
+  raw="$(git -C "$proj" -c core.quotepath=off diff --no-renames --name-only -z "$a" "$b" -- 2>/dev/null | tr '\0' '\001')"
+  _my_rep "$raw" $'\001' ""; chk="$MY_REP"
+  case "$chk" in *[[:cntrl:]]*) PR_ERR="files: путь с управляющим символом (в манифест не попадает)"; return 1 ;; esac   # PKG-PATH-CTRL
+  _my_rep "$raw" $'\001' $'\n'; PR_FILES="${MY_REP%$'\n'}"
+  return 0
+}
+
+# pr_scope_eval: input $PR_FILES + the last mandate_load; mirrors the scope part of audit() of the node (DEV:383-390):
+#   PR_OUT          outside paths U shared_paths U docs_paths (only when scope.paths is non-empty: empty = no restriction)
+#   PR_SHARED       matches shared_paths (the manifest must declare touches_shared)
+#   PR_DOCSF        matches docs_paths (the "docs" list of the manifest)
+#   PR_SESSF        under .claude/sessions/ (a leak of the session directory into the change)
+#   PR_DOCS_OUTSIDE under docs/ but not covered by docs_paths (docs_in_repo: final, REQ-PKG-27)
+pr_scope_eval() {
+  local f
+  PR_OUT=""; PR_SHARED=""; PR_DOCSF=""; PR_SESSF=""; PR_DOCS_OUTSIDE=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in .claude/sessions/*) PR_SESSF="$PR_SESSF${PR_SESSF:+$'\n'}$f" ;; esac
+    if [ -n "$MANDATE_PATHS" ] && ! mandate_in_union "$f"; then PR_OUT="$PR_OUT${PR_OUT:+$'\n'}$f"; fi
+    if [ -n "$MANDATE_SHARED" ] && mandate_match_list "$f" "$MANDATE_SHARED"; then PR_SHARED="$PR_SHARED${PR_SHARED:+$'\n'}$f"; fi
+    if mandate_match_list "$f" "$MANDATE_DOCS"; then
+      PR_DOCSF="$PR_DOCSF${PR_DOCSF:+$'\n'}$f"
+    else
+      case "$f" in docs/*) PR_DOCS_OUTSIDE="$PR_DOCS_OUTSIDE${PR_DOCS_OUTSIDE:+$'\n'}$f" ;; esac
+    fi
+  done <<< "$PR_FILES"
+  return 0
+}
